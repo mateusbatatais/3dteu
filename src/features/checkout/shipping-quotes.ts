@@ -1,17 +1,15 @@
 import { getProductBySlug } from "@/features/catalog/queries";
+import {
+  DEFAULT_PACKAGE_HEIGHT_CM,
+  DEFAULT_PACKAGE_LENGTH_CM,
+  DEFAULT_PACKAGE_WEIGHT_GRAMS,
+  DEFAULT_PACKAGE_WIDTH_CM,
+} from "@/features/shipping/constants";
 import { getStoreSettings } from "@/features/shipping/queries";
 import { superfreteProvider } from "@/features/shipping/superfrete";
 import type { ShippingPackageItem, ShippingQuote } from "@/features/shipping/types";
 
 import type { CartItem } from "./types";
-
-// Fallback usado quando o produto ainda não tem peso/dimensão cadastrados
-// no admin (campos novos, produtos antigos ficam null) — caixa pequena
-// genérica, só pra cotação não quebrar até o admin preencher os valores reais.
-const DEFAULT_PACKAGE_WEIGHT_GRAMS = 300;
-const DEFAULT_PACKAGE_HEIGHT_CM = 4;
-const DEFAULT_PACKAGE_WIDTH_CM = 12;
-const DEFAULT_PACKAGE_LENGTH_CM = 16;
 
 export interface ResolvedShippingQuotes {
   quotes: ShippingQuote[];

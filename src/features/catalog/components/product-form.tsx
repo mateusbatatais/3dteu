@@ -34,6 +34,10 @@ interface ProductFormProps {
     categoryId: string | null;
     basePriceCents: number;
     status: "draft" | "published";
+    weightGrams: number | null;
+    heightCm: number | null;
+    widthCm: number | null;
+    lengthCm: number | null;
   };
 }
 
@@ -58,6 +62,10 @@ export function ProductForm({ categories, product }: ProductFormProps) {
           categoryId: product.categoryId ?? "",
           basePriceReais: product.basePriceCents / 100,
           status: product.status,
+          weightGrams: product.weightGrams ?? 0,
+          heightCm: product.heightCm ?? 0,
+          widthCm: product.widthCm ?? 0,
+          lengthCm: product.lengthCm ?? 0,
         }
       : {
           name: "",
@@ -66,6 +74,10 @@ export function ProductForm({ categories, product }: ProductFormProps) {
           categoryId: "",
           basePriceReais: 0,
           status: "draft",
+          weightGrams: 0,
+          heightCm: 0,
+          widthCm: 0,
+          lengthCm: 0,
         },
   });
 
@@ -133,6 +145,37 @@ export function ProductForm({ categories, product }: ProductFormProps) {
         <Label htmlFor="basePriceReais">Preço base (R$)</Label>
         <Input id="basePriceReais" type="number" step="0.01" min="0" {...register("basePriceReais")} />
         {errors.basePriceReais ? <p className="text-sm text-destructive">{errors.basePriceReais.message}</p> : null}
+      </div>
+
+      <div>
+        <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Peso e dimensões da embalagem
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Opcional — usado para calcular o frete. Sem esses valores, a cotação usa um fallback de caixa pequena.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="weightGrams">Peso (g)</Label>
+            <Input id="weightGrams" type="number" min="1" {...register("weightGrams")} />
+            {errors.weightGrams ? <p className="text-sm text-destructive">{errors.weightGrams.message}</p> : null}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="heightCm">Altura (cm)</Label>
+            <Input id="heightCm" type="number" min="1" {...register("heightCm")} />
+            {errors.heightCm ? <p className="text-sm text-destructive">{errors.heightCm.message}</p> : null}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="widthCm">Largura (cm)</Label>
+            <Input id="widthCm" type="number" min="1" {...register("widthCm")} />
+            {errors.widthCm ? <p className="text-sm text-destructive">{errors.widthCm.message}</p> : null}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="lengthCm">Comprimento (cm)</Label>
+            <Input id="lengthCm" type="number" min="1" {...register("lengthCm")} />
+            {errors.lengthCm ? <p className="text-sm text-destructive">{errors.lengthCm.message}</p> : null}
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">

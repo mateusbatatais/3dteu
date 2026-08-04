@@ -437,9 +437,32 @@ via ViaCEP real, validação de formulário) — a cotação de frete de verdade
 o envio do pedido continuam sem poder ser testados nesta sessão por falta de
 banco de dados e de token da Superfrete.
 
+**Etapa 3 (configurações da loja + emissão de etiqueta) — feita**:
+`/admin/configuracoes` (novo item no menu lateral) edita o endereço de
+remetente (`storeSettings`, upsert por `updateStoreSettings`). `ProductForm`
+ganhou 4 campos opcionais (peso/altura/largura/comprimento) — vazio grava
+`null` e a cotação usa o fallback de caixa pequena. `purchaseShippingLabel`
+(`src/features/shipping/actions.ts`) monta o payload (remetente =
+storeSettings, destinatário = endereço do pedido, peso/dimensão = produtos
+atuais dos itens) e chama `superfreteProvider.purchaseLabel` — sequência de
+3 chamadas (carrinho → pagamento → gerar etiqueta) montada a partir da
+documentação pública, **não testada contra a API real** (mesmo aviso da
+rodada 2). Botão "Comprar etiqueta com Superfrete" em `/admin/pedidos/[id]`
+só aparece se ainda não existe uma linha em `shipments` pro pedido, e pede
+confirmação nativa do navegador antes de chamar a action — o clique é a
+autorização humana explícita antes do gasto real de saldo.
+
+**Testado nesta etapa** (sem banco real — mesma limitação de sempre neste
+ambiente): `StoreSettingsForm` e os novos campos de dimensão do `ProductForm`
+são componentes client puros (só recebem props), então deu pra montar os
+dois numa página temporária e confirmar visualmente via Playwright que
+renderizam e populam corretamente com dados mockados — sem erros de console.
+`/admin/configuracoes` de verdade (a Server Component que busca
+`storeSettings` no banco) **não pôde ser testada** nesta sessão: como não há
+`DATABASE_URL` configurada localmente, ela (e qualquer outra página do admin
+que toque o banco, isso já era esperado) retorna 500 neste ambiente de dev.
+
 **Ainda não iniciado (dentro desta rodada):**
-- Etapa 3: Superfrete — `/admin/configuracoes` (remetente) + emissão de
-  etiqueta de verdade
 - Etapa 4: upload de imagens/gifs de produto + SEO avançado (metadata
   dinâmica, sitemap, robots, JSON-LD, OG image)
 - Etapa 5: polimento visual do admin (estado ativo no menu, dashboard com

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, Palette, ShoppingBag } from "lucide-react";
+import { LayoutDashboard, Package, Palette, Settings, ShoppingBag } from "lucide-react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/admin/produtos", label: "Produtos", icon: Package },
   { href: "/admin/materiais", label: "Materiais", icon: Palette },
   { href: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag },
+  { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ] as const;
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {

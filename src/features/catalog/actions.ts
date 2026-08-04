@@ -41,6 +41,10 @@ function toRow(values: ProductFormValues) {
     categoryId: values.categoryId || null,
     basePriceCents: Math.round(values.basePriceReais * 100),
     status: values.status,
+    weightGrams: values.weightGrams || null,
+    heightCm: values.heightCm || null,
+    widthCm: values.widthCm || null,
+    lengthCm: values.lengthCm || null,
   };
 }
 

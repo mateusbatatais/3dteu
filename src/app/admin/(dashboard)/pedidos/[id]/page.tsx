@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { updateOrderStatus } from "@/features/orders/actions";
 import { getOrderByIdForAdmin } from "@/features/orders/queries";
 import { ORDER_STATUS_LABELS } from "@/features/orders/types";
+import { PurchaseLabelButton } from "@/features/shipping/components/purchase-label-button";
 import type { ShippingAddress } from "@/features/shipping/types";
 import { formatPriceCents } from "@/lib/format";
 
@@ -39,6 +40,32 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
             {shippingAddress.complement ? ` - ${shippingAddress.complement}` : ""} · {shippingAddress.neighborhood} ·{" "}
             {shippingAddress.city}/{shippingAddress.state} · CEP {shippingAddress.zipCode}
           </p>
+        ) : null}
+
+        {order.deliveryMethod === "superfrete" ? (
+          <div className="mt-3 border-t pt-3">
+            {order.shipment ? (
+              <div className="text-sm text-muted-foreground">
+                <p>
+                  Etiqueta comprada{" "}
+                  {order.shipment.purchasedAt ? `em ${order.shipment.purchasedAt.toLocaleString("pt-BR")}` : ""}
+                </p>
+                {order.shipment.trackingCode ? <p>Rastreio: {order.shipment.trackingCode}</p> : null}
+                {order.shipment.labelUrl ? (
+                  <a
+                    href={order.shipment.labelUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline-offset-2 hover:underline"
+                  >
+                    Ver etiqueta
+                  </a>
+                ) : null}
+              </div>
+            ) : (
+              <PurchaseLabelButton orderId={order.id} />
+            )}
+          </div>
         ) : null}
       </div>
 

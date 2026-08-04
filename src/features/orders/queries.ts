@@ -25,6 +25,7 @@ export async function getOrderByIdForAdmin(id: string) {
     with: {
       items: true,
       payments: { orderBy: [desc(payments.createdAt)] },
+      shipment: true,
     },
   });
 }
