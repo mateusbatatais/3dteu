@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { addProductPart, deleteProductPart, setPartMaterials } from "@/features/catalog/actions";
 
 import { MeshUploadForm } from "./mesh-upload-form";
+import { ProductViewer3D } from "./product-viewer-3d";
 
 interface PartRow {
   id: string;
@@ -84,7 +85,29 @@ export function ProductPartsManager({
                 </form>
               )}
 
-              <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
+              <div className="mt-4 flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-start">
+                <div className="w-full max-w-40 shrink-0">
+                  <ProductViewer3D
+                    parts={[{ id: part.id, meshUrl: part.meshFileUrl, color: "#a1a1aa", colorSecondary: null }]}
+                    interactive={false}
+                  />
+                </div>
+                <div className="flex-1">
+                  <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
+                  {part.meshFileUrl ? (
+                    <a
+                      href={part.meshFileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 block break-all text-xs text-muted-foreground underline-offset-2 hover:underline"
+                    >
+                      Ver arquivo enviado
+                    </a>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">Nenhum arquivo enviado ainda.</p>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}

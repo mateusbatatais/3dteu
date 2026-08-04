@@ -146,27 +146,36 @@ export async function uploadPartMesh(
     return { error: "Só arquivos .stl são aceitos." };
   }
 
-  const storage = createStorageClient();
-  const path = `${partId}-${Date.now()}.stl`;
+  // Qualquer erro aqui (env var faltando, bucket inexistente, etc.) precisa
+  // virar uma mensagem no formulário — nunca deixar escapar sem tratamento,
+  // porque isso derruba a página inteira com o erro genérico do Next
+  // ("This page couldn't load"), sem indicar o que realmente aconteceu.
+  try {
+    const storage = createStorageClient();
+    const path = `${partId}-${Date.now()}.stl`;
 
-  const { error: uploadError } = await storage.storage.from(MODELS_BUCKET).upload(path, file, {
-    contentType: "model/stl",
-  });
-  if (uploadError) {
-    return { error: `Falha ao enviar o arquivo: ${uploadError.message}` };
+    const { error: uploadError } = await storage.storage.from(MODELS_BUCKET).upload(path, file, {
+      contentType: "model/stl",
+    });
+    if (uploadError) {
+      return { error: `Falha ao enviar o arquivo: ${uploadError.message}` };
+    }
+
+    const {
+      data: { publicUrl },
+    } = storage.storage.from(MODELS_BUCKET).getPublicUrl(path);
+
+    await db
+      .update(productParts)
+      .set({ meshFileUrl: publicUrl, stlFileUrl: publicUrl })
+      .where(eq(productParts.id, partId));
+
+    await revalidateProductPages(productId);
+    return {};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido.";
+    return { error: `Falha ao enviar o arquivo: ${message}` };
   }
-
-  const {
-    data: { publicUrl },
-  } = storage.storage.from(MODELS_BUCKET).getPublicUrl(path);
-
-  await db
-    .update(productParts)
-    .set({ meshFileUrl: publicUrl, stlFileUrl: publicUrl })
-    .where(eq(productParts.id, partId));
-
-  await revalidateProductPages(productId);
-  return {};
 }
 
 export async function setPartMaterials(productId: string, partId: string, formData: FormData) {

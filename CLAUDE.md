@@ -163,6 +163,35 @@ do produto (só um ícone genérico). Duas causas reais, corrigidas:
   tentar de novo e reportar se aparece alguma mensagem de erro no formulário.
 - **Catálogo sem preview**: implementado — `/produtos` agora desenha uma
   miniatura 3D de verdade (mesmo `ProductViewer3D`, sem `OrbitControls`) pra
+  cada produto que já tem STL, com fallback pro ícone genérico.
+
+Rodada seguinte a essa: usuário confirmou "na verdade parece que não salva o
+stl" — **achei a causa raiz de verdade**, reproduzida localmente: **Server
+Actions do Next.js limitam o corpo da requisição a 1MB por padrão**, e um
+`.stl` real passa disso com folga. O upload travava a página inteira com o
+mesmo erro genérico "This page couldn't load" que apareceu antes pro
+`DATABASE_URL`. Corrigido em `next.config.ts`
+(`experimental.serverActions.bodySizeLimit: "50mb"`) — **testei de verdade**:
+gerei um arquivo de 2MB, submeti via Playwright contra o `uploadPartMesh`
+real, e confirmei que ele passa da barreira de tamanho e chega no código
+(o erro que aparece depois é só a falta de credencial do Supabase nesta
+máquina, esperado). Também:
+- Envolvi `uploadPartMesh` inteiro num try/catch — antes, qualquer erro
+  inesperado (não só o de tamanho) derrubava a página inteira em vez de
+  mostrar uma mensagem no formulário. Esse padrão (nunca deixar uma Server
+  Action lançar sem tratamento pro cliente) vale a pena revisar nas outras
+  actions também se aparecer o mesmo tipo de sintoma.
+- Adicionei uma prévia 3D de verdade **dentro do editor de partes no
+  admin** (`ProductPartsManager`), miniatura pequena ao lado do botão de
+  upload, mais um link "Ver arquivo enviado" com a URL direta — resolve o
+  "não sei mais qual STL subiu": antes só existia um texto
+  "Malha 3D cadastrada ✓" sem nenhuma confirmação visual real.
+
+**Ainda não confirmado**: se isso resolve o caso relatado end-to-end contra
+o Supabase de produção (só testei localmente sem credenciais reais, o que
+prova que a barreira de tamanho foi removida mas não prova que o upload
+completo — Storage + banco — funciona de ponta a ponta). Também não
+confirmado se o bucket `models` já foi criado (`scripts/storage-setup.sql`).
   cada produto que já tem STL cadastrado, com fallback pro ícone genérico
   só quando nenhuma parte tem malha ainda.
 
