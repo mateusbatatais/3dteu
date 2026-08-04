@@ -1,7 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/server/db/client";
-import { categories, productParts, products, sizeOptions } from "@/server/db/schema";
+import { categories, filamentOptions, productParts, products, sizeOptions } from "@/server/db/schema";
 
 import type { Product } from "./types";
 
@@ -26,6 +26,25 @@ export async function getProductByIdForAdmin(id: string) {
 
 export async function getCategories() {
   return db.query.categories.findMany({ orderBy: [asc(categories.name)] });
+}
+
+/** Catálogo global de materiais/filamentos, usado no admin e na atribuição por parte. */
+export async function getAllFilamentOptions() {
+  return db.query.filamentOptions.findMany({ orderBy: [asc(filamentOptions.name)] });
+}
+
+/** Produto com partes (+ materiais atribuídos) e tamanhos, para a tela de edição do admin. */
+export async function getProductWithConfigForAdmin(id: string) {
+  return db.query.products.findFirst({
+    where: eq(products.id, id),
+    with: {
+      parts: {
+        orderBy: [asc(productParts.sortOrder)],
+        with: { materialOptions: true },
+      },
+      sizeOptions: { orderBy: [asc(sizeOptions.sortOrder)] },
+    },
+  });
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | null> {

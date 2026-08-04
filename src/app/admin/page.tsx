@@ -11,7 +11,15 @@ export default function AdminDashboardPage() {
           <Card className="transition-colors hover:bg-muted/50">
             <CardHeader>
               <CardTitle>Produtos</CardTitle>
-              <CardDescription>Cadastrar e editar o catálogo.</CardDescription>
+              <CardDescription>Cadastrar e editar o catálogo, tamanhos e partes.</CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+        <Link href="/admin/materiais">
+          <Card className="transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>Materiais</CardTitle>
+              <CardDescription>Catálogo global de filamentos e cores.</CardDescription>
             </CardHeader>
           </Card>
         </Link>
