@@ -49,15 +49,23 @@ pensada pra isso).
   `middleware()`). Sem `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` configuradas, o
   proxy deixa passar sem checar sessão (só loga um warning) em vez de quebrar
   o app inteiro.
-- Preview 3D: react-three-fiber + drei + `three-stdlib` (`STLLoader`). O STL
-  é carregado **direto no navegador, sem conversão pra GLB** — decisão
-  deliberada pra simplificar (GLB era over-engineering; STL já é geometria
-  pura, dá pra tingir o material sem precisar clonar/percorrer uma cena).
-  Upload de STL é feito no admin (ver "Upload de arquivo 3D" abaixo). Enquanto
-  uma parte não tem `meshFileUrl`, o viewer (`product-viewer-3d.tsx`) desenha
-  uma peça placeholder colorida em vez de quebrar. `ProductViewer3D` aceita
-  `interactive={false}` (sem `OrbitControls`) — é o que a listagem
-  (`/produtos`) usa pra desenhar uma miniatura 3D real de cada produto em vez
+- Preview 3D: react-three-fiber + drei + `three-stdlib` (`STLLoader`,
+  `OBJLoader`, `ThreeMFLoader` — os 3 formatos aceitos no upload). Os
+  arquivos são carregados **direto no navegador, sem conversão pra GLB**
+  (decisão deliberada pra simplificar). STL retorna geometria pura (tinge
+  direto); OBJ/3MF retornam um `Group` (clona + percorre a árvore pra
+  aplicar a cor escolhida em cada malha — função `retint()`). **Todo
+  carregamento fica dentro de um Error Boundary** (`MeshErrorBoundary` em
+  `product-viewer-3d.tsx`): um arquivo corrompido ou malformado cai pro
+  placeholder daquela parte específica, em vez de derrubar a visualização
+  inteira (Suspense sozinho só cobre o estado de carregando, não erro — sem
+  o Error Boundary, uma falha de parse sobe até a raiz da árvore do R3F e
+  some com todas as partes, não só a que falhou; reproduzi isso com um 3MF
+  inválido antes de adicionar a blindagem). Enquanto uma parte não tem
+  `meshFileUrl`, o viewer (`product-viewer-3d.tsx`) desenha uma peça
+  placeholder colorida. `ProductViewer3D` aceita `interactive={false}` (sem
+  `OrbitControls`) — é o que a listagem (`/produtos`) usa pra desenhar uma
+  miniatura 3D real de cada produto em vez
   de um ícone genérico; a query `getPublishedProductsForCatalog` traz a
   primeira parte+material de cada produto só pra isso.
 - **Toda mutação de produto (preço/status, tamanhos, partes, materiais por
@@ -235,6 +243,21 @@ Resposta nessa sessão:
   mostrado assim que selecionado. Também reordenei: upload agora vem antes
   da seção de materiais, não depois — é a primeira coisa que aparece dentro
   do card da parte.
+
+Rodada 8: usuário pediu suporte a **.obj e .3mf**, além do .stl. Implementado
+de ponta a ponta: `ALLOWED_MESH_EXTENSIONS` (`storage-constants.ts`),
+`createMeshUploadUrl` agora recebe a extensão real em vez de fixar `.stl`,
+`MeshUploadForm` valida contra a lista e envia com o content-type certo, e
+`ProductViewer3D` escolhe o loader certo por extensão. **Testei os 3
+formatos de verdade**: gerei um STL e um OBJ válidos à mão e um 3MF (que
+acabou saindo inválido — o formato exige uma estrutura de ZIP+XML mais
+chata de montar à mão do que vale a pena pra um teste rápido) — STL e OBJ
+renderizaram corretamente via Playwright; o 3MF inválido revelou o bug do
+Error Boundary acima (ver descrição da blindagem), que só foi adicionada
+por causa desse teste. Não teria achado esse problema sem tentar quebrar
+de propósito. Ainda não testado um .3mf real exportado de um fatiador de
+verdade — o código usa o mesmo padrão comprovado do OBJ, mas vale conferir
+na primeira vez que o usuário testar com um arquivo de verdade.
 
 **Ainda não confirmado**: se o usuário reduziu/converteu o arquivo pra
 caber no limite, ou se optou por upgrade do Supabase. Também não

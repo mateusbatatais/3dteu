@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createStorageClient, MODELS_BUCKET } from "@/lib/supabase/storage";
+import { ALLOWED_MESH_EXTENSIONS, type MeshExtension } from "@/lib/supabase/storage-constants";
 import { db } from "@/server/db/client";
 import { productPartMaterialOptions, productParts, products, sizeOptions } from "@/server/db/schema";
 
@@ -144,10 +145,15 @@ export interface CreateMeshUploadUrlResult {
   token?: string;
 }
 
-export async function createMeshUploadUrl(partId: string): Promise<CreateMeshUploadUrlResult> {
+export async function createMeshUploadUrl(partId: string, extension: string): Promise<CreateMeshUploadUrlResult> {
+  const normalizedExt = extension.toLowerCase().replace(/^\./, "");
+  if (!(ALLOWED_MESH_EXTENSIONS as readonly string[]).includes(normalizedExt)) {
+    return { error: `Formato .${normalizedExt} não suportado. Use .stl, .obj ou .3mf.` };
+  }
+
   try {
     const storage = createStorageClient();
-    const path = `${partId}-${Date.now()}.stl`;
+    const path = `${partId}-${Date.now()}.${normalizedExt as MeshExtension}`;
 
     const { data, error } = await storage.storage.from(MODELS_BUCKET).createSignedUploadUrl(path);
     if (error || !data) {

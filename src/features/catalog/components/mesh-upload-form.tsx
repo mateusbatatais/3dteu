@@ -4,9 +4,15 @@ import { useId, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { MAX_MESH_FILE_SIZE_BYTES, MODELS_BUCKET } from "@/lib/supabase/storage-constants";
+import { getMeshExtension, MAX_MESH_FILE_SIZE_BYTES, MODELS_BUCKET } from "@/lib/supabase/storage-constants";
 
 import { confirmPartMesh, createMeshUploadUrl } from "../actions";
+
+const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+  stl: "model/stl",
+  obj: "model/obj",
+  "3mf": "model/3mf",
+};
 
 function formatMegabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
@@ -37,11 +43,18 @@ export function MeshUploadForm({
       return;
     }
 
+    if (!getMeshExtension(selected.name)) {
+      setError("Formato não suportado. Use .stl, .obj ou .3mf.");
+      setFile(null);
+      event.target.value = "";
+      return;
+    }
+
     // Checa o tamanho já na hora de escolher o arquivo — não faz sentido
     // esperar o upload pra descobrir que passa do teto do Supabase.
     if (selected.size > MAX_MESH_FILE_SIZE_BYTES) {
       setError(
-        `Esse arquivo tem ${formatMegabytes(selected.size)}, e o máximo é ${formatMegabytes(MAX_MESH_FILE_SIZE_BYTES)} (teto do plano gratuito do Supabase). Reduza a malha (menos triângulos) ou exporte como STL binário antes de enviar.`,
+        `Esse arquivo tem ${formatMegabytes(selected.size)}, e o máximo é ${formatMegabytes(MAX_MESH_FILE_SIZE_BYTES)} (teto do plano gratuito do Supabase). Reduza a malha (menos triângulos) ou exporte em binário antes de enviar.`,
       );
       setFile(null);
       event.target.value = "";
@@ -56,18 +69,15 @@ export function MeshUploadForm({
     setError(null);
     setSuccess(false);
 
-    if (!file) {
-      setError("Escolha um arquivo .stl primeiro.");
-      return;
-    }
-    if (!file.name.toLowerCase().endsWith(".stl")) {
-      setError("Só arquivos .stl são aceitos.");
+    const extension = file ? getMeshExtension(file.name) : null;
+    if (!file || !extension) {
+      setError("Escolha um arquivo .stl, .obj ou .3mf primeiro.");
       return;
     }
 
     startTransition(async () => {
       // 1) Pede uma URL de upload assinada — não passa o arquivo pelo servidor.
-      const prepared = await createMeshUploadUrl(partId);
+      const prepared = await createMeshUploadUrl(partId, extension);
       if (prepared.error || !prepared.path || !prepared.token) {
         setError(prepared.error ?? "Falha ao preparar o upload.");
         return;
@@ -77,7 +87,9 @@ export function MeshUploadForm({
       const supabase = createClient();
       const { error: uploadError } = await supabase.storage
         .from(MODELS_BUCKET)
-        .uploadToSignedUrl(prepared.path, prepared.token, file, { contentType: "model/stl" });
+        .uploadToSignedUrl(prepared.path, prepared.token, file, {
+          contentType: CONTENT_TYPE_BY_EXTENSION[extension],
+        });
       if (uploadError) {
         setError(`Falha ao enviar o arquivo: ${uploadError.message}`);
         return;
@@ -102,12 +114,13 @@ export function MeshUploadForm({
     >
       <div className="flex items-center justify-between">
         <label htmlFor={inputId} className="text-sm font-medium">
-          {hasMesh ? "Substituir arquivo .stl" : "Enviar arquivo .stl"}
+          {hasMesh ? "Substituir arquivo 3D" : "Enviar arquivo 3D"}
         </label>
         <span className="text-xs text-muted-foreground">Máximo {formatMegabytes(MAX_MESH_FILE_SIZE_BYTES)}</span>
       </div>
 
-      <input id={inputId} type="file" accept=".stl" onChange={handleFileChange} className="text-sm" />
+      <input id={inputId} type="file" accept=".stl,.obj,.3mf" onChange={handleFileChange} className="text-sm" />
+      <p className="text-xs text-muted-foreground">Formatos aceitos: STL, OBJ ou 3MF.</p>
 
       {file ? (
         <p className="text-xs text-muted-foreground">

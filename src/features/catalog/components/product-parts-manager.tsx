@@ -71,7 +71,7 @@ export function ProductPartsManager({
                   ) : null}
                 </div>
                 <div className="flex-1">
-                  <h3 className={SECTION_LABEL_CLASS}>Arquivo 3D (STL)</h3>
+                  <h3 className={SECTION_LABEL_CLASS}>Arquivo 3D</h3>
                   <div className="mt-2">
                     <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
                   </div>
