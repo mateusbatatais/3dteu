@@ -192,12 +192,32 @@ em vez de só corrigir no escuro:
    - `ProductPartsManager` ganhou uma prévia 3D real por parte (miniatura +
      link "Ver arquivo enviado") — resolve "não sei mais qual STL subiu".
 
-**Ainda não confirmado**: o upload real (passo do navegador direto pro
-Supabase) contra o Supabase de produção — só testei a parte que dá pra
-testar sem credenciais (que o arquivo não passa pelo servidor). Também não
-confirmado se o bucket `models` já foi criado
-(`scripts/storage-setup.sql`) — sem ele, `createMeshUploadUrl` falha com
-uma mensagem de erro clara agora (não mais tela quebrada).
+Rodada 5 confirmou que a arquitetura de upload direto **está funcionando de
+verdade**: o erro "The related resource does not exist" veio do próprio
+Supabase (bucket `models` ainda não criado — usuário não tinha rodado
+`storage-setup.sql` ainda), não mais da Vercel/Next.js. Depois de criar o
+bucket, rodada 6 trouxe **um terceiro limite de tamanho**, dessa vez do
+Supabase: `413 EntityTooLarge`. Existem duas camadas independentes da
+Vercel/Next.js:
+- **Global file size limit** do projeto (Storage → Configuration no painel) —
+  no plano gratuito não passa de 50MB, e o valor inicial costuma vir bem
+  menor que isso.
+- **file_size_limit por bucket** (opcional, nunca pode ser maior que o
+  global) — atualizei `scripts/storage-setup.sql` pra já criar o bucket
+  `models` com 50MB explícito (`on conflict do update`, seguro rodar de
+  novo), mas isso só ajuda se o limite global do projeto também estiver em
+  50MB — **o usuário precisa subir esse valor manualmente no painel**, não
+  tem como fazer isso por SQL.
+
+**Resumo de todas as camadas de limite de tamanho que já apareceram nessa
+saga, da mais pra menos restritiva historicamente**: Next.js Server Action
+body (1MB, contornado com upload direto) → Vercel Function payload (4,5MB,
+teto fixo, também contornado) → Supabase Storage global file size limit
+(configurável até 50MB no free tier, **ainda pendente de confirmação que o
+usuário subiu**) → Supabase Storage bucket file_size_limit (50MB, já
+setado via SQL). Se aparecer outro erro de tamanho depois de tudo isso, o
+arquivo real provavelmente passa de 50MB — nesse caso o problema vira
+"como reduzir o STL", não mais configuração.
 
 **Feito — infraestrutura:**
 - Scaffold completo, schema do banco, migration
