@@ -70,7 +70,12 @@ pensada pra isso).
 - CRUD de produtos no admin (`/admin/produtos`, `/novo`, `/[id]`) — campos
   básicos (nome, slug, descrição, categoria, preço, status) via Server
   Actions + Zod. **Não testado contra banco real ainda.**
-- Repositório no GitHub (mateusbatatais/3dteu, branch `main`), 2 commits
+- CRUD de materiais (`/admin/materiais`) e, na edição do produto, gestão de
+  tamanhos (`ProductSizesManager`) e de partes + atribuição de materiais por
+  parte (`ProductPartsManager`) — todos via Server Actions ligadas direto a
+  `<form action={...}>` (sem JS de cliente extra). **Também não testado
+  contra banco real ainda.**
+- Repositório no GitHub (mateusbatatais/3dteu, branch `main`), 4 commits
   enviados. Vercel conectado ao GitHub (deploy automático a cada push) e ao
   Supabase (integração nativa)
 
@@ -88,19 +93,22 @@ pensada pra isso).
   insert into admin_users (id, email, name)
   values ('COLE-O-UID-AQUI', 'seu@email.com', 'Seu Nome');
   ```
-- Usuário tentou autorizar os conectores MCP da Vercel e do Supabase no
-  claude.ai (Settings → Connectors) pra permitir acesso direto sem precisar
-  copiar/colar nada. Autorizou, mas as ferramentas não apareciam na sessão em
-  andamento — **rodar `ToolSearch` por ferramentas da Vercel/Supabase logo no
-  início de uma sessão nova pra confirmar se já propagou**.
+- Usuário autorizou os conectores MCP da Vercel e do Supabase no claude.ai
+  (Settings → Connectors), mas as ferramentas **ainda não apareceram** —
+  testado via `ToolSearch` em duas sessões diferentes, nenhuma ferramenta da
+  Vercel/Supabase encontrada até agora. **Rodar `ToolSearch` de novo no
+  início de uma sessão nova pra confirmar se já propagou**; se continuar sem
+  aparecer depois de mais de uma sessão nova, provavelmente a autorização não
+  completou do lado do usuário (conferir em claude.ai se aparece como
+  "Connected" de fato).
 - Depois que o banco estiver confirmado: trocar `demo-data.ts` por
   `getProductBySlug` de verdade em `/produtos/[slug]`, testar o CRUD do admin
-  com dado real, testar o login do admin.
+  (produtos, materiais, tamanhos, partes) com dado real, testar o login do
+  admin.
 
 **Ainda não iniciado:**
-- CRUD de partes/materiais/tamanhos do produto (hoje só os campos básicos do
-  produto em si)
-- Upload de STL com conversão pra GLB
+- Upload de STL com conversão pra GLB (as partes hoje só têm nome + materiais
+  atribuídos, sem arquivo de malha — o viewer usa placeholder)
 - Formulário de checkout (dados do cliente, entrega)
 - E-mail transacional (Resend) — confirmação de pedido + link de rastreio
 - Integração Woovi (Pix)
