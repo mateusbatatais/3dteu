@@ -3,21 +3,22 @@ import postgres from "postgres";
 
 import * as schema from "./schema";
 
-// DATABASE_URL deve apontar para o connection pooler do Supabase (porta 6543,
-// modo "transaction") em runtime serverless/edge; use a porta 5432 direta
-// apenas para rodar migrations localmente (ver drizzle.config.ts).
+// DATABASE_URL (ou POSTGRES_URL, nome usado pela integração nativa
+// Vercel↔Supabase) deve apontar para o connection pooler do Supabase (porta
+// 6543, modo "transaction") em runtime serverless/edge; use a porta 5432
+// direta apenas para rodar migrations localmente (ver drizzle.config.ts).
 //
 // A conexão é criada de forma preguiçosa (só no primeiro uso real) para que
 // simplesmente importar este módulo — como o Next.js faz ao coletar dados de
-// build de toda rota — não quebre o build antes de DATABASE_URL existir.
+// build de toda rota — não quebre o build antes da env var existir.
 let instance: PostgresJsDatabase<typeof schema> | undefined;
 
 function getDb(): PostgresJsDatabase<typeof schema> {
   if (!instance) {
-    const connectionString = process.env.DATABASE_URL;
+    const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
     if (!connectionString) {
       throw new Error(
-        "DATABASE_URL não definida. Configure o .env (ou as env vars da Vercel) com a connection string do Supabase — veja .env.example.",
+        "DATABASE_URL (ou POSTGRES_URL) não definida. Configure o .env (ou as env vars da Vercel) com a connection string do Supabase — veja .env.example.",
       );
     }
     instance = drizzle(postgres(connectionString, { prepare: false }), { schema });

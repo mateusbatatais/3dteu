@@ -67,28 +67,39 @@ pensada pra isso).
   entrega esse remetente pro e-mail dono da conta; pra mandar pra clientes de
   verdade precisa verificar um domínio próprio na Resend e trocar
   `RESEND_FROM_EMAIL`.
-- Testes: Vitest + RTL (`npm run test`), Playwright E2E (`npm run test:e2e`).
-  CI (GitHub Actions) instala o Chromium sozinho na nuvem — **não precisa
-  instalar os browsers do Playwright localmente**, são ~700MB e a máquina do
-  usuário tem espaço limitado. Se precisar rodar E2E localmente por algum
-  motivo, `npx playwright install chromium` e remover depois.
+- Testes: Vitest + RTL (`npm run test`) rodam no CI e no pre-commit (Husky).
+  Playwright E2E (`npm run test:e2e`) é **só manual** — tirado do CI porque
+  instalar o Chromium a cada push consumia muita cota do GitHub Actions. Os
+  browsers do Playwright (~700MB) não ficam instalados localmente por padrão
+  — máquina do usuário tem espaço limitado; se precisar rodar E2E localmente,
+  `npx playwright install chromium` e remover depois (`rm -rf` nas pastas
+  `chromium-*`/`chromium_headless_shell-*` dentro de
+  `%LOCALAPPDATA%\ms-playwright`, sem mexer em versões que já existiam antes).
 
 ## Status (atualizado em 2026-08-04)
 
-O usuário já conseguiu logar no `/admin` (confirma que Supabase Auth + env
-vars da Vercel para autenticação estão funcionando). Ainda não confirmado se
-`/admin/produtos` e `/admin/materiais` mostram os dados seedados (depende de
-`DATABASE_URL`/`DIRECT_DATABASE_URL` estarem certas na Vercel) — **primeira
-coisa a checar numa sessão nova se o usuário disser que algo não carrega**.
+Login do admin confirmado funcionando em produção. `/admin/produtos` deu erro
+("This page couldn't load") — causa raiz identificada e corrigida: a
+integração nativa Vercel↔Supabase cria as env vars do Postgres com nomes
+`POSTGRES_URL`/`POSTGRES_URL_NON_POOLING`, não `DATABASE_URL`/
+`DIRECT_DATABASE_URL` (que o código pedia). `src/server/db/client.ts` e
+`drizzle.config.ts` agora aceitam os dois nomes (fallback), então **não é
+necessário duplicar nada na Vercel** — só falta o usuário confirmar que
+funcionou depois do redeploy desse fix.
 
 **Feito — infraestrutura:**
-- Scaffold completo, CI (lint/test/build/e2e), schema do banco, migration
+- Scaffold completo, schema do banco, migration
   (`drizzle/0000_romantic_piledriver.sql`) e seed (`scripts/seed.sql`) já
   aplicados no Supabase pelo usuário
 - Repositório no GitHub (mateusbatatais/3dteu, branch `main`), Vercel
   conectado ao GitHub (deploy automático a cada push) e ao Supabase
   (integração nativa)
 - Login do admin funcionando de verdade (confirmado pelo usuário)
+- CI (GitHub Actions) roda só lint+test+build a cada push — **E2E saiu do CI**
+  (consumia muita cota instalando o Chromium a cada vez) e agora só roda
+  manualmente com `npm run test:e2e`. Em troca, **Husky** foi configurado:
+  `pre-commit` roda lint+testes unitários, `pre-push` roda o build — ambos
+  locais, testados e funcionando.
 
 **Feito — catálogo:**
 - `/produtos` e `/produtos/[slug]` **ligados ao banco real** (nada de dado
