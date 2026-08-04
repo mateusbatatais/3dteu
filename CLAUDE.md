@@ -365,9 +365,23 @@ real nem contra a API da Woovi de verdade):**
   e o bucket `models` pode nem existir ainda — ver `scripts/storage-setup.sql`).
 
 **Pendente pra fechar o ciclo:**
+- Rodar a migração `drizzle/0001_brainy_the_order.sql` contra o Supabase real
+  (`npm run db:migrate` ou colar o SQL no SQL Editor) — sem isso, nada da
+  rodada 10 (Superfrete completo, imagens de produto) funciona contra
+  produção. É só aditivo (CREATE TABLE / ALTER TABLE ADD COLUMN), seguro.
 - Rodar `scripts/storage-setup.sql` no SQL Editor do Supabase (cria o bucket
   `models`) — sem isso, o upload de STL falha. **Provavelmente ainda não foi
   feito**, perguntar/confirmar numa sessão nova.
+- Rodar `scripts/storage-media-setup.sql` (cria o bucket `product-media`,
+  novo na rodada 10) — sem isso, upload de foto/gif de produto falha.
+- Conseguir um token da Superfrete (`SUPERFRETE_API_TOKEN`) e testar a
+  cotação de frete de verdade no checkout — a integração inteira (cotação +
+  emissão de etiqueta) foi implementada contra a documentação pública, nunca
+  contra a API real (mesma ressalva já feita pra Woovi). Preencher
+  `/admin/configuracoes` (endereço de remetente) antes de testar a etiqueta.
+- Preencher peso/dimensões dos produtos já cadastrados em
+  `/admin/produtos/[id]` (aba Info) — sem isso a cotação usa o fallback de
+  caixa pequena, que pode dar um valor de frete errado pra peças maiores.
 - Confirmar que o upload de STL funciona de ponta a ponta contra o Supabase
   real (só testei o parsing/render do STLLoader com arquivo local, não o
   upload em si)
@@ -503,10 +517,52 @@ de verdade e o conteúdo saiu certo. `generateMetadata`, o JSON-LD, o
 puderam ser testados** nesta sessão — o build só confirma que compilam
 (TypeScript), não que o conteúdo gerado está correto contra dados reais.
 
-**Ainda não iniciado (dentro desta rodada):**
-- Etapa 5: polimento visual do admin (estado ativo no menu, dashboard com
-  dados reais, confirmação antes de excluir, tabs no produto, cores de
-  status, toast consistente)
+**Etapa 5 (polimento visual do admin) — feita, e é a última das 5 etapas
+desta rodada**:
+- Sidebar e nav mobile ganharam estado ativo de verdade (extraído pra
+  `admin-nav.tsx`, client component com `usePathname`) — antes nenhum item
+  do menu se destacava na rota atual.
+- Dashboard (`/admin`) trocou os 3 cards que só duplicavam o menu por
+  números reais (`getAdminDashboardStats`): produtos publicados, pedidos
+  aguardando pagamento, pedidos dos últimos 7 dias, faturamento (soma dos
+  pedidos com status pago em diante).
+- `ConfirmDeleteButton` (novo, `src/components/confirm-delete-button.tsx`,
+  usa o `Dialog` do design system que já existia e nunca tinha sido usado em
+  lugar nenhum) substitui os `<form><button>Excluir</button></form>` crus
+  sem nenhuma confirmação em materiais, parte de produto, tamanho e imagem
+  de produto — clique acidental em exclusão era um risco real. Também dá
+  toast de sucesso/erro pros 4 fluxos de uma vez só, sem precisar mexer em
+  cada um.
+- `/admin/produtos/[id]` agrupou Info/Tamanhos/Partes/Imagens em `Tabs`
+  (também já existia sem uso) em vez de empilhar tudo verticalmente.
+- Status do pedido ganhou uma cor por estado (`ORDER_STATUS_BADGE_CLASSES`)
+  — antes só distinguia "aguardando pagamento" do resto; agora os 7 estados
+  têm cores distintas (âmbar/esmeralda/azul/violeta/ciano/verde-azulado/
+  vermelho), usadas nas 3 telas que mostram o Badge de status.
+  `updateOrderStatus` (mudar status do pedido) virou um client component com
+  toast (`OrderStatusForm`) em vez de um `<form action>` sem nenhum feedback.
+- `/admin/materiais`: pequeno ajuste de respiro/agrupamento no formulário de
+  criação (não uma reformulação grande — o formulário já tinha label-em-cima
+  -do-campo, só faltava espaçamento e um título de seção).
+- **Fora do escopo, por decisão consciente** (mencionado no plano, não
+  esquecido): skeletons de loading — exigiria Suspense boundaries por
+  página, refactor maior que não compensa pro volume de dados do admin.
+
+**Testado nesta etapa**: Tabs, `ConfirmDeleteButton` (dialog abre, "Excluir"
+confirma, dialog fecha, toast "Excluído." aparece), `AdminSidebarNav` (item
+da rota atual fica destacado em violeta) e as 7 cores de Badge de status —
+tudo verificado com Playwright numa página mockada, sem erro de console. O
+dashboard com números reais e o restante do admin continuam sem poder ser
+testados contra o banco de verdade nesta sessão (mesma limitação de sempre).
+
+### Resumo da rodada 10 (Superfrete completo + SEO avançado + admin)
+
+As 5 etapas do plano (`C:\Users\Mateus\.claude\plans\graceful-prancing-corbato.md`)
+foram concluídas, cada uma com seu próprio commit, lint/test/build passando,
+e verificação visual (Playwright) do que dava pra testar sem banco de dados
+real. Nada foi testado de ponta a ponta contra o Supabase/Superfrete de
+verdade — ver "Pendente pra fechar o ciclo" (mais abaixo) pro que falta o
+usuário confirmar/configurar.
 
 **Aviso já registrado no plano**: a integração com a Superfrete (etapas 2 e
 3) não pode ser testada contra a API real nesta sessão (sem token) — mesmo

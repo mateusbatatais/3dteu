@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAllOrdersForAdmin } from "@/features/orders/queries";
-import { ORDER_STATUS_LABELS } from "@/features/orders/types";
+import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from "@/features/orders/types";
 import { formatPriceCents } from "@/lib/format";
 
 export default async function AdminPedidosPage() {
@@ -34,7 +34,7 @@ export default async function AdminPedidosPage() {
                   <p className="text-sm text-muted-foreground">{order.customerEmail}</p>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={order.status === "awaiting_payment" ? "secondary" : "default"}>
+                  <Badge variant="outline" className={ORDER_STATUS_BADGE_CLASSES[order.status]}>
                     {ORDER_STATUS_LABELS[order.status]}
                   </Badge>
                 </TableCell>

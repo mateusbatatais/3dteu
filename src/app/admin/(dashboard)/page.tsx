@@ -1,36 +1,56 @@
-import Link from "next/link";
+import { Clock, DollarSign, Package, ShoppingBag } from "lucide-react";
 
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getAdminDashboardStats } from "@/features/orders/queries";
+import { formatPriceCents } from "@/lib/format";
 
-export default function AdminDashboardPage() {
+const STAT_CARDS = [
+  {
+    key: "publishedProductCount" as const,
+    label: "Produtos publicados",
+    icon: Package,
+    format: (value: number) => value.toString(),
+  },
+  {
+    key: "awaitingPaymentCount" as const,
+    label: "Aguardando pagamento",
+    icon: Clock,
+    format: (value: number) => value.toString(),
+  },
+  {
+    key: "ordersLast7DaysCount" as const,
+    label: "Pedidos (7 dias)",
+    icon: ShoppingBag,
+    format: (value: number) => value.toString(),
+  },
+  {
+    key: "totalRevenueCents" as const,
+    label: "Faturamento (pago)",
+    icon: DollarSign,
+    format: (value: number) => formatPriceCents(value),
+  },
+];
+
+export default async function AdminDashboardPage() {
+  const stats = await getAdminDashboardStats();
+
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        <Link href="/admin/produtos">
-          <Card className="transition-colors hover:bg-muted/50">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {STAT_CARDS.map((stat) => (
+          <Card key={stat.key}>
             <CardHeader>
-              <CardTitle>Produtos</CardTitle>
-              <CardDescription>Cadastrar e editar o catálogo, tamanhos e partes.</CardDescription>
+              <div className="flex items-center justify-between">
+                <CardDescription>{stat.label}</CardDescription>
+                <stat.icon className="size-4 text-muted-foreground" />
+              </div>
             </CardHeader>
+            <CardContent>
+              <CardTitle className="text-2xl">{stat.format(stats[stat.key])}</CardTitle>
+            </CardContent>
           </Card>
-        </Link>
-        <Link href="/admin/materiais">
-          <Card className="transition-colors hover:bg-muted/50">
-            <CardHeader>
-              <CardTitle>Materiais</CardTitle>
-              <CardDescription>Catálogo global de filamentos e cores.</CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
-        <Link href="/admin/pedidos">
-          <Card className="transition-colors hover:bg-muted/50">
-            <CardHeader>
-              <CardTitle>Pedidos</CardTitle>
-              <CardDescription>Acompanhar e mudar o status dos pedidos.</CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
+        ))}
       </div>
     </div>
   );

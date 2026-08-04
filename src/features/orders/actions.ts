@@ -6,17 +6,25 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/server/db/client";
 import { orderStatusEnum, orders } from "@/server/db/schema";
 
+import type { OrderStatus } from "./types";
+
 const ORDER_STATUSES = orderStatusEnum.enumValues;
 
-export async function updateOrderStatus(orderId: string, formData: FormData) {
-  const status = String(formData.get("status") ?? "");
-  if (!ORDER_STATUSES.includes(status as (typeof ORDER_STATUSES)[number])) return;
+export interface UpdateOrderStatusResult {
+  error?: string;
+}
+
+export async function updateOrderStatus(orderId: string, status: string): Promise<UpdateOrderStatusResult> {
+  if (!ORDER_STATUSES.includes(status as (typeof ORDER_STATUSES)[number])) {
+    return { error: "Status inválido." };
+  }
 
   await db
     .update(orders)
-    .set({ status: status as (typeof ORDER_STATUSES)[number], updatedAt: new Date() })
+    .set({ status: status as OrderStatus, updatedAt: new Date() })
     .where(eq(orders.id, orderId));
 
   revalidatePath("/admin/pedidos");
   revalidatePath(`/admin/pedidos/${orderId}`);
+  return {};
 }

@@ -1,3 +1,4 @@
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,11 +47,11 @@ export function ProductPartsManager({
             <div key={part.id} className="max-w-2xl rounded-xl bg-card p-4 ring-1 ring-foreground/10">
               <div className="flex items-center justify-between">
                 <span className="font-medium">{part.name}</span>
-                <form action={deleteProductPart.bind(null, productId, part.id)}>
-                  <button type="submit" className="text-sm text-muted-foreground underline-offset-2 hover:underline">
-                    Excluir parte
-                  </button>
-                </form>
+                <ConfirmDeleteButton
+                  action={deleteProductPart.bind(null, productId, part.id)}
+                  label="Excluir parte"
+                  description={`Excluir a parte "${part.name}"? O arquivo 3D e os materiais atribuídos a ela também somem.`}
+                />
               </div>
 
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">

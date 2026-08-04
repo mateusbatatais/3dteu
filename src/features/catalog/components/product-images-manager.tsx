@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useId, useState, useTransition } from "react";
 
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { getMediaExtension, MAX_MEDIA_FILE_SIZE_BYTES, MEDIA_BUCKET } from "@/lib/supabase/storage-constants";
@@ -121,15 +122,12 @@ export function ProductImagesManager({ productId, images }: { productId: string;
                   Capa
                 </span>
               ) : null}
-              <form action={deleteProductImage.bind(null, productId, image.id)} className="absolute -right-1.5 -top-1.5">
-                <button
-                  type="submit"
-                  aria-label="Excluir imagem"
-                  className="flex size-5 items-center justify-center rounded-full bg-destructive text-xs text-destructive-foreground shadow"
-                >
-                  ×
-                </button>
-              </form>
+              <ConfirmDeleteButton
+                action={deleteProductImage.bind(null, productId, image.id)}
+                label="×"
+                description="Excluir esta imagem? Se ela for a capa, a próxima da lista assume o lugar."
+                className="absolute -right-1.5 -top-1.5 size-5 rounded-full bg-destructive p-0 text-xs text-destructive-foreground shadow hover:bg-destructive/90"
+              />
             </div>
           ))}
         </div>

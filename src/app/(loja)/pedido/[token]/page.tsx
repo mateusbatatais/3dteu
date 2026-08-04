@@ -2,8 +2,8 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
-import { ORDER_STATUS_LABELS } from "@/features/orders/types";
 import { getOrderByToken } from "@/features/orders/queries";
+import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from "@/features/orders/types";
 import type { ShippingAddress } from "@/features/shipping/types";
 import { formatPriceCents } from "@/lib/format";
 
@@ -24,7 +24,9 @@ export default async function PedidoPage({ params }: PageProps<"/pedido/[token]"
       <p className="mt-1 text-sm text-muted-foreground">Feito por {order.customerName}</p>
 
       <div className="mt-6 flex items-center gap-3">
-        <Badge>{ORDER_STATUS_LABELS[order.status]}</Badge>
+        <Badge variant="outline" className={ORDER_STATUS_BADGE_CLASSES[order.status]}>
+          {ORDER_STATUS_LABELS[order.status]}
+        </Badge>
         <span className="text-sm text-muted-foreground">
           {order.deliveryMethod === "pickup" ? "Retirada em mãos" : `Envio · ${order.shippingCarrierName ?? "Superfrete"}`}
         </span>

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProductForm } from "@/features/catalog/components/product-form";
 import { ProductImagesManager } from "@/features/catalog/components/product-images-manager";
 import { ProductPartsManager } from "@/features/catalog/components/product-parts-manager";
@@ -18,19 +19,33 @@ export default async function EditarProdutoPage({ params }: PageProps<"/admin/pr
   if (!product) notFound();
 
   return (
-    <div className="flex flex-col gap-10">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Editar produto</h1>
-        <div className="mt-6">
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight">Editar produto</h1>
+
+      <Tabs defaultValue="info" className="mt-6">
+        <TabsList>
+          <TabsTrigger value="info">Info</TabsTrigger>
+          <TabsTrigger value="tamanhos">Tamanhos</TabsTrigger>
+          <TabsTrigger value="partes">Partes</TabsTrigger>
+          <TabsTrigger value="imagens">Imagens</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="info" className="mt-6">
           <ProductForm categories={categories} product={product} />
-        </div>
-      </div>
+        </TabsContent>
 
-      <ProductSizesManager productId={product.id} sizes={product.sizeOptions} />
+        <TabsContent value="tamanhos" className="mt-6">
+          <ProductSizesManager productId={product.id} sizes={product.sizeOptions} />
+        </TabsContent>
 
-      <ProductPartsManager productId={product.id} parts={product.parts} allMaterials={allMaterials} />
+        <TabsContent value="partes" className="mt-6">
+          <ProductPartsManager productId={product.id} parts={product.parts} allMaterials={allMaterials} />
+        </TabsContent>
 
-      <ProductImagesManager productId={product.id} images={product.images} />
+        <TabsContent value="imagens" className="mt-6">
+          <ProductImagesManager productId={product.id} images={product.images} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +30,11 @@ export default async function AdminMateriaisPage() {
         Catálogo global de filamentos. Cada parte de um produto escolhe quais destes materiais aceita.
       </p>
 
-      <form action={createFilament} className="mt-6 flex max-w-3xl flex-wrap items-end gap-3 rounded-xl bg-card ring-1 ring-foreground/10 p-4">
+      <h2 className="mt-6 text-xs font-medium tracking-wide text-muted-foreground uppercase">Novo material</h2>
+      <form
+        action={createFilament}
+        className="mt-2 flex max-w-3xl flex-wrap items-end gap-4 rounded-xl bg-card ring-1 ring-foreground/10 p-4"
+      >
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="name">Nome</Label>
           <Input id="name" name="name" required placeholder="Azul" className="w-40" />
@@ -48,7 +53,7 @@ export default async function AdminMateriaisPage() {
           </Select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="hexColor">Cor (hex)</Label>
+          <Label htmlFor="hexColor">Cor</Label>
           <Input id="hexColor" name="hexColor" type="color" defaultValue="#2563eb" className="w-16 p-1" />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -99,11 +104,10 @@ export default async function AdminMateriaisPage() {
                 <TableCell>{FILAMENT_TYPE_LABELS[material.type]}</TableCell>
                 <TableCell>{formatPriceCents(material.priceModifierCents)}</TableCell>
                 <TableCell className="text-right">
-                  <form action={deleteFilament.bind(null, material.id)}>
-                    <button type="submit" className="text-sm text-muted-foreground underline-offset-2 hover:underline">
-                      Excluir
-                    </button>
-                  </form>
+                  <ConfirmDeleteButton
+                    action={deleteFilament.bind(null, material.id)}
+                    description={`Excluir o material "${material.name}"? Produtos que usam esse material podem ficar sem opção de cor.`}
+                  />
                 </TableCell>
               </TableRow>
             ))}

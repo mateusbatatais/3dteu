@@ -1,11 +1,9 @@
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { updateOrderStatus } from "@/features/orders/actions";
+import { OrderStatusForm } from "@/features/orders/components/order-status-form";
 import { getOrderByIdForAdmin } from "@/features/orders/queries";
-import { ORDER_STATUS_LABELS } from "@/features/orders/types";
+import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from "@/features/orders/types";
 import { PurchaseLabelButton } from "@/features/shipping/components/purchase-label-button";
 import type { ShippingAddress } from "@/features/shipping/types";
 import { formatPriceCents } from "@/lib/format";
@@ -23,7 +21,9 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
     <div className="max-w-2xl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Pedido de {order.customerName}</h1>
-        <Badge>{ORDER_STATUS_LABELS[order.status]}</Badge>
+        <Badge variant="outline" className={ORDER_STATUS_BADGE_CLASSES[order.status]}>
+          {ORDER_STATUS_LABELS[order.status]}
+        </Badge>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         {order.customerEmail} {order.customerPhone ? `· ${order.customerPhone}` : ""}
@@ -105,26 +105,7 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
         )}
       </div>
 
-      <form action={updateOrderStatus.bind(null, order.id)} className="mt-6 flex items-end gap-3 rounded-xl bg-card ring-1 ring-foreground/10 p-4">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <label htmlFor="status" className="text-sm font-medium">
-            Mudar status
-          </label>
-          <Select name="status" defaultValue={order.status}>
-            <SelectTrigger id="status" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button type="submit">Salvar</Button>
-      </form>
+      <OrderStatusForm orderId={order.id} currentStatus={order.status} />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,11 +38,10 @@ export function ProductSizesManager({ productId, sizes }: { productId: string; s
                 <TableCell>{formatPriceCents(size.priceModifierCents)}</TableCell>
                 <TableCell>{size.weightModifierGrams >= 0 ? "+" : ""}{size.weightModifierGrams}</TableCell>
                 <TableCell className="text-right">
-                  <form action={deleteSizeOption.bind(null, productId, size.id)}>
-                    <button type="submit" className="text-sm text-muted-foreground underline-offset-2 hover:underline">
-                      Excluir
-                    </button>
-                  </form>
+                  <ConfirmDeleteButton
+                    action={deleteSizeOption.bind(null, productId, size.id)}
+                    description={`Excluir o tamanho "${size.label}"? Pedidos já feitos não são afetados.`}
+                  />
                 </TableCell>
               </TableRow>
             ))}
