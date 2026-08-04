@@ -50,7 +50,14 @@ function Part({ part }: { part: ViewerPart }) {
   return <StlPart meshUrl={part.meshUrl} color={part.color} />;
 }
 
-export function ProductViewer3D({ parts }: { parts: ViewerPart[] }) {
+export function ProductViewer3D({
+  parts,
+  interactive = true,
+}: {
+  parts: ViewerPart[];
+  /** false = sem controles de câmera; usado nas miniaturas do catálogo. */
+  interactive?: boolean;
+}) {
   return (
     <div className="aspect-square w-full overflow-hidden rounded-xl bg-muted/30 ring-1 ring-foreground/10">
       <Canvas camera={{ position: [2.5, 2, 2.5], fov: 40 }}>
@@ -66,7 +73,7 @@ export function ProductViewer3D({ parts }: { parts: ViewerPart[] }) {
           </Bounds>
           <Environment preset="city" />
         </Suspense>
-        <OrbitControls enablePan={false} minDistance={1.5} maxDistance={6} />
+        {interactive ? <OrbitControls enablePan={false} minDistance={1.5} maxDistance={6} /> : null}
       </Canvas>
     </div>
   );

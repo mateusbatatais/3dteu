@@ -18,6 +18,20 @@ function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === "23505";
 }
 
+/**
+ * Qualquer mudança em tamanhos/partes/materiais/preço de um produto precisa
+ * revalidar não só a tela do admin, mas também a página pública do produto
+ * e a listagem — sem isso, o cliente (e o admin, ao navegar de volta pro
+ * catálogo) podia continuar vendo a versão antiga.
+ */
+async function revalidateProductPages(productId: string) {
+  const [product] = await db.select({ slug: products.slug }).from(products).where(eq(products.id, productId));
+
+  revalidatePath(`/admin/produtos/${productId}`);
+  revalidatePath("/produtos");
+  if (product) revalidatePath(`/produtos/${product.slug}`);
+}
+
 function toRow(values: ProductFormValues) {
   return {
     name: values.name,
@@ -64,7 +78,7 @@ export async function updateProduct(id: string, values: ProductFormValues): Prom
   }
 
   revalidatePath("/admin/produtos");
-  revalidatePath(`/admin/produtos/${id}`);
+  await revalidateProductPages(id);
   return {};
 }
 
@@ -89,12 +103,12 @@ export async function addSizeOption(productId: string, formData: FormData) {
     weightModifierGrams: Math.round(weightModifierGrams),
   });
 
-  revalidatePath(`/admin/produtos/${productId}`);
+  await revalidateProductPages(productId);
 }
 
 export async function deleteSizeOption(productId: string, sizeId: string) {
   await db.delete(sizeOptions).where(eq(sizeOptions.id, sizeId));
-  revalidatePath(`/admin/produtos/${productId}`);
+  await revalidateProductPages(productId);
 }
 
 // ---------------------------------------------------------------------------
@@ -106,12 +120,12 @@ export async function addProductPart(productId: string, formData: FormData) {
   if (!name) return;
 
   await db.insert(productParts).values({ productId, name });
-  revalidatePath(`/admin/produtos/${productId}`);
+  await revalidateProductPages(productId);
 }
 
 export async function deleteProductPart(productId: string, partId: string) {
   await db.delete(productParts).where(eq(productParts.id, partId));
-  revalidatePath(`/admin/produtos/${productId}`);
+  await revalidateProductPages(productId);
 }
 
 export interface UploadMeshResult {
@@ -151,7 +165,7 @@ export async function uploadPartMesh(
     .set({ meshFileUrl: publicUrl, stlFileUrl: publicUrl })
     .where(eq(productParts.id, partId));
 
-  revalidatePath(`/admin/produtos/${productId}`);
+  await revalidateProductPages(productId);
   return {};
 }
 
@@ -167,5 +181,5 @@ export async function setPartMaterials(productId: string, partId: string, formDa
     }
   });
 
-  revalidatePath(`/admin/produtos/${productId}`);
+  await revalidateProductPages(productId);
 }

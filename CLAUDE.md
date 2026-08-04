@@ -55,7 +55,19 @@ pensada pra isso).
   pura, dá pra tingir o material sem precisar clonar/percorrer uma cena).
   Upload de STL é feito no admin (ver "Upload de arquivo 3D" abaixo). Enquanto
   uma parte não tem `meshFileUrl`, o viewer (`product-viewer-3d.tsx`) desenha
-  uma peça placeholder colorida em vez de quebrar.
+  uma peça placeholder colorida em vez de quebrar. `ProductViewer3D` aceita
+  `interactive={false}` (sem `OrbitControls`) — é o que a listagem
+  (`/produtos`) usa pra desenhar uma miniatura 3D real de cada produto em vez
+  de um ícone genérico; a query `getPublishedProductsForCatalog` traz a
+  primeira parte+material de cada produto só pra isso.
+- **Toda mutação de produto (preço/status, tamanhos, partes, materiais por
+  parte, upload de STL) precisa revalidar tanto o admin quanto a página
+  pública** (`/produtos/[slug]`) **e a listagem** (`/produtos`) —
+  `revalidateProductPages(productId)` em `actions.ts` centraliza isso. Bug
+  real que já aconteceu: upload de STL só revalidava o admin, então a loja
+  continuava mostrando a peça antiga/placeholder. Se um admin mudar algo e o
+  cliente relatar "não mudou nada", primeiro suspeitar de uma action nova
+  que esqueceu de chamar `revalidateProductPages`.
 - **Upload de arquivo 3D**: `uploadPartMesh` (`src/features/catalog/actions.ts`)
   recebe o `.stl` de um `<input type="file">`, sobe pro bucket `models` do
   Supabase Storage (público — são só modelos de preview, sem dado sensível)
@@ -137,6 +149,22 @@ perguntou se não valeria trocar pro Material UI. Decisões tomadas:
   abaixo). O admin também recebeu uma passada de polimento visual (cantos
   arredondados/anel consistente com a loja), mas não uma reformulação
   completa.
+
+Rodada seguinte: usuário testou o upload de STL num produto já existente e
+"não mudou o cubo no site", e notou que o catálogo não mostra nenhum preview
+do produto (só um ícone genérico). Duas causas reais, corrigidas:
+- **Bug de revalidação**: `uploadPartMesh` (e toda outra action de
+  tamanho/parte/material) só revalidava a página do admin, nunca a página
+  pública do produto nem a listagem — por isso a loja podia continuar
+  mostrando a versão antiga mesmo com o upload tendo funcionado. Centralizei
+  a revalidação em `revalidateProductPages()`. **Ainda não confirmado se
+  isso resolve o caso relatado** — também é possível que o upload em si
+  tenha falhado (ex.: bucket `models` não criado ainda); pedir pro usuário
+  tentar de novo e reportar se aparece alguma mensagem de erro no formulário.
+- **Catálogo sem preview**: implementado — `/produtos` agora desenha uma
+  miniatura 3D de verdade (mesmo `ProductViewer3D`, sem `OrbitControls`) pra
+  cada produto que já tem STL cadastrado, com fallback pro ícone genérico
+  só quando nenhuma parte tem malha ainda.
 
 **Feito — infraestrutura:**
 - Scaffold completo, schema do banco, migration

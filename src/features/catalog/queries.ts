@@ -12,6 +12,41 @@ export async function getPublishedProducts() {
   });
 }
 
+/**
+ * Produtos publicados com o suficiente pra desenhar uma miniatura 3D real no
+ * catálogo (parte + cor do primeiro material disponível), em vez do ícone
+ * genérico.
+ */
+export async function getPublishedProductsForCatalog() {
+  const rows = await db.query.products.findMany({
+    where: eq(products.status, "published"),
+    orderBy: [asc(products.createdAt)],
+    with: {
+      parts: {
+        orderBy: [asc(productParts.sortOrder)],
+        with: { materialOptions: { with: { filament: true } } },
+      },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    description: row.description,
+    basePriceCents: row.basePriceCents,
+    previewParts: row.parts.map((part) => {
+      const firstMaterial = part.materialOptions[0]?.filament;
+      return {
+        id: part.id,
+        meshUrl: part.meshFileUrl,
+        color: firstMaterial?.hexColor ?? "#a1a1aa",
+        colorSecondary: firstMaterial?.hexColorSecondary ?? null,
+      };
+    }),
+  }));
+}
+
 /** Lista todos os produtos (rascunho e publicado) para a tabela do admin. */
 export async function getAllProductsForAdmin() {
   return db.query.products.findMany({
