@@ -128,39 +128,46 @@ export async function deleteProductPart(productId: string, partId: string) {
   await revalidateProductPages(productId);
 }
 
-export interface UploadMeshResult {
+// ---------------------------------------------------------------------------
+// Upload de STL em duas etapas: o arquivo NUNCA passa pelo servidor Next.js.
+// Vercel Functions (inclusive Server Actions) têm um teto de 4,5MB por
+// requisição que não dá pra configurar — um .stl real passa disso com
+// frequência. Por isso:
+//   1) o servidor só gera uma URL assinada de upload (payload minúsculo);
+//   2) o navegador manda o arquivo DIRETO pro Supabase Storage com essa URL;
+//   3) o servidor só confirma, gravando a URL pública no banco.
+// ---------------------------------------------------------------------------
+
+export interface CreateMeshUploadUrlResult {
   error?: string;
+  path?: string;
+  token?: string;
 }
 
-export async function uploadPartMesh(
-  productId: string,
-  partId: string,
-  formData: FormData,
-): Promise<UploadMeshResult> {
-  const file = formData.get("file");
-
-  if (!(file instanceof File) || file.size === 0) {
-    return { error: "Selecione um arquivo .stl." };
-  }
-  if (!file.name.toLowerCase().endsWith(".stl")) {
-    return { error: "Só arquivos .stl são aceitos." };
-  }
-
-  // Qualquer erro aqui (env var faltando, bucket inexistente, etc.) precisa
-  // virar uma mensagem no formulário — nunca deixar escapar sem tratamento,
-  // porque isso derruba a página inteira com o erro genérico do Next
-  // ("This page couldn't load"), sem indicar o que realmente aconteceu.
+export async function createMeshUploadUrl(partId: string): Promise<CreateMeshUploadUrlResult> {
   try {
     const storage = createStorageClient();
     const path = `${partId}-${Date.now()}.stl`;
 
-    const { error: uploadError } = await storage.storage.from(MODELS_BUCKET).upload(path, file, {
-      contentType: "model/stl",
-    });
-    if (uploadError) {
-      return { error: `Falha ao enviar o arquivo: ${uploadError.message}` };
+    const { data, error } = await storage.storage.from(MODELS_BUCKET).createSignedUploadUrl(path);
+    if (error || !data) {
+      return { error: `Falha ao preparar o upload: ${error?.message ?? "erro desconhecido"}` };
     }
 
+    return { path: data.path, token: data.token };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido.";
+    return { error: `Falha ao preparar o upload: ${message}` };
+  }
+}
+
+export interface ConfirmMeshResult {
+  error?: string;
+}
+
+export async function confirmPartMesh(productId: string, partId: string, path: string): Promise<ConfirmMeshResult> {
+  try {
+    const storage = createStorageClient();
     const {
       data: { publicUrl },
     } = storage.storage.from(MODELS_BUCKET).getPublicUrl(path);
@@ -174,7 +181,7 @@ export async function uploadPartMesh(
     return {};
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro desconhecido.";
-    return { error: `Falha ao enviar o arquivo: ${message}` };
+    return { error: `Falha ao confirmar o upload: ${message}` };
   }
 }
 

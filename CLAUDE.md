@@ -68,18 +68,29 @@ pensada pra isso).
   continuava mostrando a peça antiga/placeholder. Se um admin mudar algo e o
   cliente relatar "não mudou nada", primeiro suspeitar de uma action nova
   que esqueceu de chamar `revalidateProductPages`.
-- **Upload de arquivo 3D**: `uploadPartMesh` (`src/features/catalog/actions.ts`)
-  recebe o `.stl` de um `<input type="file">`, sobe pro bucket `models` do
-  Supabase Storage (público — são só modelos de preview, sem dado sensível)
-  via `src/lib/supabase/storage.ts` (cliente com a service role key, só usar
-  em código de servidor) e grava a URL pública em `meshFileUrl`/`stlFileUrl`.
-  O bucket precisa existir no Supabase antes de funcionar — SQL em
-  `scripts/storage-setup.sql`, rodar uma vez no SQL Editor (ainda não
-  confirmado que o usuário rodou). UI fica em `MeshUploadForm`
-  (`src/features/catalog/components/mesh-upload-form.tsx`), um Client
-  Component usando `useActionState` pra mostrar erro/loading — é a única
-  parte do admin que precisou de `"use client"` pra isso; o resto do CRUD
-  usa Server Actions ligadas direto a `<form>` sem JS de cliente.
+- **Upload de arquivo 3D — vai direto do navegador pro Supabase Storage,
+  NUNCA passa pelo servidor Next.js.** Motivo: Vercel Functions (Server
+  Actions inclusive) têm um teto de 4,5MB por requisição que não dá pra
+  configurar, e um `.stl` real passa disso com frequência (ver a saga
+  completa no histórico de status, mais abaixo, foram 4 rodadas até achar
+  essa causa raiz). Fluxo em 3 passos:
+  1. `createMeshUploadUrl(partId)` (`src/features/catalog/actions.ts`) pede
+     uma signed upload URL ao Supabase (payload minúsculo, só o `partId`)
+  2. O navegador manda o arquivo direto pro Supabase com
+     `supabase.storage.from("models").uploadToSignedUrl(path, token, file)`
+     — usa o cliente **browser** (`src/lib/supabase/client.ts`, anon key),
+     não precisa de nenhuma policy de RLS extra (o token já autoriza)
+  3. `confirmPartMesh(productId, partId, path)` só grava a URL pública em
+     `meshFileUrl`/`stlFileUrl` e revalida
+  UI em `MeshUploadForm` (`src/features/catalog/components/mesh-upload-form.tsx`,
+  Client Component com `useState`/`useTransition` — é a única parte do
+  admin que precisa de JS de cliente pra isso; o resto do CRUD usa Server
+  Actions ligadas direto a `<form>`). O bucket `models` precisa existir no
+  Supabase antes de funcionar — SQL em `scripts/storage-setup.sql`.
+  `src/lib/supabase/storage.ts` (service role, só servidor) e
+  `storage-constants.ts` (constante `MODELS_BUCKET`, segura pro cliente
+  também) ficam separados de propósito pra não vazar a service role key
+  pro bundle do navegador.
 - Preço: `calculateProductPriceCents` (`src/features/catalog/pricing.ts`) é a
   fonte única da verdade — base + modificador de tamanho + soma dos
   modificadores de material por parte. Sempre recalcular no servidor no
@@ -131,69 +142,62 @@ integração nativa Vercel↔Supabase cria as env vars do Postgres com nomes
 necessário duplicar nada na Vercel** — só falta o usuário confirmar que
 funcionou depois do redeploy desse fix.
 
-Usuário achou o visual "muito feio e mal feito" **duas vezes seguidas**,
-mesmo depois de uma primeira passada de design só na loja — e nessa segunda
-rodada também disse "não achei aonde incluir o STL, estou perdido" e
-perguntou se não valeria trocar pro Material UI. Decisões tomadas:
-- **Não trocamos pra Material UI** — recomendei manter shadcn/Base UI
-  (biblioteca sólida e atual; MUI tem estética "Google Material" datada e
-  trocar significaria reescrever tudo sem garantia de resolver o problema
-  real). Se o usuário insistir depois de ver a segunda passada de design,
-  reconsiderar — mas não fazer de novo sem alinhar antes, é uma mudança grande.
-- Causa raiz real da "feiura" era em boa parte o **bug da fonte serifada**
-  (ver acima) — confirmado reproduzindo o **site real em produção**, não só
-  local. Corrigido.
-- "Estou perdido" no admin era porque **não existia upload de STL nenhum**
-  e **não existia menu de navegação** no admin (só um link de texto pra
-  voltar ao dashboard) — os dois foram implementados nesta sessão (ver
-  abaixo). O admin também recebeu uma passada de polimento visual (cantos
-  arredondados/anel consistente com a loja), mas não uma reformulação
-  completa.
+Usuário achou o visual "muito feio e mal feito" e perguntou se não valeria
+trocar pro Material UI — **recomendei manter shadcn/Base UI** (biblioteca
+atual e sólida; MUI tem estética "Google Material" datada e trocar
+significaria reescrever tudo sem garantia de resolver o problema real). A
+causa raiz real da "feiura" era em boa parte um **bug real de fonte**: em
+`globals.css`, `--font-sans: var(--font-sans)` era **circular** e nunca
+resolvia, então o site inteiro caía no serif padrão do navegador — confirmado
+reproduzindo **o site real em produção**, não só local. Corrigido.
 
-Rodada seguinte: usuário testou o upload de STL num produto já existente e
-"não mudou o cubo no site", e notou que o catálogo não mostra nenhum preview
-do produto (só um ícone genérico). Duas causas reais, corrigidas:
-- **Bug de revalidação**: `uploadPartMesh` (e toda outra action de
-  tamanho/parte/material) só revalidava a página do admin, nunca a página
-  pública do produto nem a listagem — por isso a loja podia continuar
-  mostrando a versão antiga mesmo com o upload tendo funcionado. Centralizei
-  a revalidação em `revalidateProductPages()`. **Ainda não confirmado se
-  isso resolve o caso relatado** — também é possível que o upload em si
-  tenha falhado (ex.: bucket `models` não criado ainda); pedir pro usuário
-  tentar de novo e reportar se aparece alguma mensagem de erro no formulário.
-- **Catálogo sem preview**: implementado — `/produtos` agora desenha uma
-  miniatura 3D de verdade (mesmo `ProductViewer3D`, sem `OrbitControls`) pra
-  cada produto que já tem STL, com fallback pro ícone genérico.
+### A saga do upload de STL (4 rodadas até a causa raiz de verdade)
 
-Rodada seguinte a essa: usuário confirmou "na verdade parece que não salva o
-stl" — **achei a causa raiz de verdade**, reproduzida localmente: **Server
-Actions do Next.js limitam o corpo da requisição a 1MB por padrão**, e um
-`.stl` real passa disso com folga. O upload travava a página inteira com o
-mesmo erro genérico "This page couldn't load" que apareceu antes pro
-`DATABASE_URL`. Corrigido em `next.config.ts`
-(`experimental.serverActions.bodySizeLimit: "50mb"`) — **testei de verdade**:
-gerei um arquivo de 2MB, submeti via Playwright contra o `uploadPartMesh`
-real, e confirmei que ele passa da barreira de tamanho e chega no código
-(o erro que aparece depois é só a falta de credencial do Supabase nesta
-máquina, esperado). Também:
-- Envolvi `uploadPartMesh` inteiro num try/catch — antes, qualquer erro
-  inesperado (não só o de tamanho) derrubava a página inteira em vez de
-  mostrar uma mensagem no formulário. Esse padrão (nunca deixar uma Server
-  Action lançar sem tratamento pro cliente) vale a pena revisar nas outras
-  actions também se aparecer o mesmo tipo de sintoma.
-- Adicionei uma prévia 3D de verdade **dentro do editor de partes no
-  admin** (`ProductPartsManager`), miniatura pequena ao lado do botão de
-  upload, mais um link "Ver arquivo enviado" com a URL direta — resolve o
-  "não sei mais qual STL subiu": antes só existia um texto
-  "Malha 3D cadastrada ✓" sem nenhuma confirmação visual real.
+Isso vale registrar em detalhe porque o sintoma mudava de descrição a cada
+rodada, mas a causa foi ficando mais clara conforme reproduzi cada hipótese
+em vez de só corrigir no escuro:
 
-**Ainda não confirmado**: se isso resolve o caso relatado end-to-end contra
-o Supabase de produção (só testei localmente sem credenciais reais, o que
-prova que a barreira de tamanho foi removida mas não prova que o upload
-completo — Storage + banco — funciona de ponta a ponta). Também não
-confirmado se o bucket `models` já foi criado (`scripts/storage-setup.sql`).
-  cada produto que já tem STL cadastrado, com fallback pro ícone genérico
-  só quando nenhuma parte tem malha ainda.
+1. "Estou perdido, não achei onde incluir o STL" → **não existia upload
+   nenhum** nem menu de navegação no admin. Implementados os dois.
+2. "Enviei um STL, não mudou o cubo no site" → **bug de revalidação real**:
+   toda action de produto (upload incluído) só revalidava a página do
+   admin, nunca a pública nem a listagem. Corrigido com
+   `revalidateProductPages()`, centralizando a revalidação dos três lugares.
+   Também aproveitei pra desenhar uma miniatura 3D de verdade em
+   `/produtos` (antes só tinha ícone genérico).
+3. "Na verdade parece que não salva" → reproduzi localmente: **Server
+   Actions do Next.js limitam o corpo da requisição a 1MB por padrão**, e
+   um `.stl` real passa disso. Aumentei pra "50mb" no `next.config.ts` — mas
+   isso **não foi suficiente** (ver rodada 4).
+4. Usuário testou de novo, deu erro na mesma tela. Causa real: **a Vercel
+   tem um teto de 4,5MB por requisição em qualquer Function, e isso NÃO dá
+   pra configurar** — o `bodySizeLimit` do Next só ajuda até esse teto da
+   plataforma, nunca acima dele. A solução (recomendada pela própria Vercel
+   pra esse cenário) é o arquivo nunca passar pelo servidor: **upload direto
+   do navegador pro Supabase Storage** via signed upload URL.
+   - `createMeshUploadUrl(partId)` (Server Action, payload minúsculo) pede
+     uma URL assinada ao Supabase (`storage.createSignedUploadUrl`)
+   - o navegador manda o arquivo direto pro Supabase com
+     `supabase.storage.uploadToSignedUrl(...)` — o Next.js nunca vê os bytes
+   - `confirmPartMesh(productId, partId, path)` (Server Action, também
+     minúscula) só grava a URL pública no banco e revalida
+   - **Testei de verdade**: gerei um arquivo de 6MB (acima do teto da
+     Vercel) e confirmei via Playwright que a requisição que chega no
+     servidor tem **40 bytes** — o arquivo nunca passa por lá. A página não
+     quebra mais; mostra erro legível no formulário em qualquer cenário de
+     falha (todo o fluxo está em try/catch).
+   - Também corrigi a usabilidade apontada pelo usuário ("não entendi o
+     botão enviar"): `MeshUploadForm` agora tem label clara acima do input
+     e o botão "Confirmar envio" abaixo, em vez de lado a lado espremidos.
+   - `ProductPartsManager` ganhou uma prévia 3D real por parte (miniatura +
+     link "Ver arquivo enviado") — resolve "não sei mais qual STL subiu".
+
+**Ainda não confirmado**: o upload real (passo do navegador direto pro
+Supabase) contra o Supabase de produção — só testei a parte que dá pra
+testar sem credenciais (que o arquivo não passa pelo servidor). Também não
+confirmado se o bucket `models` já foi criado
+(`scripts/storage-setup.sql`) — sem ele, `createMeshUploadUrl` falha com
+uma mensagem de erro clara agora (não mais tela quebrada).
 
 **Feito — infraestrutura:**
 - Scaffold completo, schema do banco, migration

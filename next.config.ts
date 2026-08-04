@@ -3,10 +3,14 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      // Server Actions limitam o corpo da requisição a 1MB por padrão — um
-      // arquivo .stl real passa disso facilmente. Sem isso, o upload de
-      // malha 3D no admin falha silenciosamente antes do nosso código rodar.
-      bodySizeLimit: "50mb",
+      // A Vercel tem um teto de 4,5MB por requisição em qualquer Function
+      // (Server Actions inclusive) que NÃO dá pra configurar — por isso o
+      // upload de STL (src/features/catalog/actions.ts) vai direto do
+      // navegador pro Supabase Storage, sem passar pelo servidor. Esse limite
+      // aqui é só pra outras Server Actions terem um erro claro do Next em
+      // vez de um 413 opaco da Vercel, caso algum payload (não-arquivo)
+      // cresça demais.
+      bodySizeLimit: "4mb",
     },
   },
 };

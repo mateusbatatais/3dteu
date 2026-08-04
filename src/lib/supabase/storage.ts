@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+export { MODELS_BUCKET } from "./storage-constants";
+
 /**
  * Cliente com a service role key, só para uso em Server Actions/rotas de
  * servidor que precisam gravar no Storage (bypassa RLS). Nunca importar isto
@@ -17,5 +19,3 @@ export function createStorageClient() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
-
-export const MODELS_BUCKET = "models";
