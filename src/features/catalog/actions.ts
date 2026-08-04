@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { createStorageClient, MODELS_BUCKET } from "@/lib/supabase/storage";
 import { db } from "@/server/db/client";
 import { productPartMaterialOptions, productParts, products, sizeOptions } from "@/server/db/schema";
 
@@ -111,6 +112,47 @@ export async function addProductPart(productId: string, formData: FormData) {
 export async function deleteProductPart(productId: string, partId: string) {
   await db.delete(productParts).where(eq(productParts.id, partId));
   revalidatePath(`/admin/produtos/${productId}`);
+}
+
+export interface UploadMeshResult {
+  error?: string;
+}
+
+export async function uploadPartMesh(
+  productId: string,
+  partId: string,
+  formData: FormData,
+): Promise<UploadMeshResult> {
+  const file = formData.get("file");
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Selecione um arquivo .stl." };
+  }
+  if (!file.name.toLowerCase().endsWith(".stl")) {
+    return { error: "Só arquivos .stl são aceitos." };
+  }
+
+  const storage = createStorageClient();
+  const path = `${partId}-${Date.now()}.stl`;
+
+  const { error: uploadError } = await storage.storage.from(MODELS_BUCKET).upload(path, file, {
+    contentType: "model/stl",
+  });
+  if (uploadError) {
+    return { error: `Falha ao enviar o arquivo: ${uploadError.message}` };
+  }
+
+  const {
+    data: { publicUrl },
+  } = storage.storage.from(MODELS_BUCKET).getPublicUrl(path);
+
+  await db
+    .update(productParts)
+    .set({ meshFileUrl: publicUrl, stlFileUrl: publicUrl })
+    .where(eq(productParts.id, partId));
+
+  revalidatePath(`/admin/produtos/${productId}`);
+  return {};
 }
 
 export async function setPartMaterials(productId: string, partId: string, formData: FormData) {

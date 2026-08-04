@@ -21,13 +21,21 @@ pensada pra isso).
   (igual Radix), mas `Dialog`/`Sheet` também usam `render` em vez de `asChild`.
 - Rotas da loja (home, produtos, carrinho, checkout, pedido) ficam no route
   group `src/app/(loja)/` com layout próprio (`SiteHeader`/`SiteFooter`,
-  `src/components/site-*.tsx`) — `/admin` fica fora desse grupo, com seu
-  próprio layout, então não herda o header da loja. Grupo `(loja)` não
-  aparece na URL.
+  `src/components/site-*.tsx`). Rotas autenticadas do admin ficam em
+  `src/app/admin/(dashboard)/` com menu lateral (`admin/(dashboard)/layout.tsx`);
+  `admin/login` fica fora desse grupo, só dentro do `admin/layout.tsx` externo
+  (bem enxuto), pra não mostrar o menu na tela de login. Nomes de grupo entre
+  parênteses não aparecem na URL.
 - Cor de marca: roxo/violeta (`--primary` em `oklch(... 293)` no
   `globals.css`) substituindo o cinza neutro puro do preset original do
   shadcn — decisão de design, não peça de dado técnico; se o usuário definir
   uma identidade visual própria depois, é só trocar essas variáveis.
+- **Bug real corrigido**: `globals.css` tinha `--font-sans: var(--font-sans)`
+  (circular!) em vez de `var(--font-geist-sans)` — a fonte nunca resolvia e
+  o site inteiro caía no serif padrão do navegador. Isso não era só um
+  detalhe estético, contribuiu bastante pra sensação de "site malfeito"
+  reportada pelo usuário. Corrigido; qualquer relato futuro de "fonte
+  estranha" merece checar se essa variável não foi reintroduzida errada.
 - Banco: Supabase (Postgres) via Drizzle ORM. `src/server/db/client.ts` é
   **lazy de propósito** (um `Proxy` que só abre a conexão no primeiro uso
   real) — importar o módulo não exige `DATABASE_URL`. Isso existe porque o
@@ -41,10 +49,25 @@ pensada pra isso).
   `middleware()`). Sem `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` configuradas, o
   proxy deixa passar sem checar sessão (só loga um warning) em vez de quebrar
   o app inteiro.
-- Preview 3D: react-three-fiber + drei. Modelos são convertidos de STL para
-  GLB no upload (upload em si ainda não implementado). Enquanto uma parte do
-  produto não tem `meshFileUrl`, o viewer (`product-viewer-3d.tsx`) desenha
+- Preview 3D: react-three-fiber + drei + `three-stdlib` (`STLLoader`). O STL
+  é carregado **direto no navegador, sem conversão pra GLB** — decisão
+  deliberada pra simplificar (GLB era over-engineering; STL já é geometria
+  pura, dá pra tingir o material sem precisar clonar/percorrer uma cena).
+  Upload de STL é feito no admin (ver "Upload de arquivo 3D" abaixo). Enquanto
+  uma parte não tem `meshFileUrl`, o viewer (`product-viewer-3d.tsx`) desenha
   uma peça placeholder colorida em vez de quebrar.
+- **Upload de arquivo 3D**: `uploadPartMesh` (`src/features/catalog/actions.ts`)
+  recebe o `.stl` de um `<input type="file">`, sobe pro bucket `models` do
+  Supabase Storage (público — são só modelos de preview, sem dado sensível)
+  via `src/lib/supabase/storage.ts` (cliente com a service role key, só usar
+  em código de servidor) e grava a URL pública em `meshFileUrl`/`stlFileUrl`.
+  O bucket precisa existir no Supabase antes de funcionar — SQL em
+  `scripts/storage-setup.sql`, rodar uma vez no SQL Editor (ainda não
+  confirmado que o usuário rodou). UI fica em `MeshUploadForm`
+  (`src/features/catalog/components/mesh-upload-form.tsx`), um Client
+  Component usando `useActionState` pra mostrar erro/loading — é a única
+  parte do admin que precisou de `"use client"` pra isso; o resto do CRUD
+  usa Server Actions ligadas direto a `<form>` sem JS de cliente.
 - Preço: `calculateProductPriceCents` (`src/features/catalog/pricing.ts`) é a
   fonte única da verdade — base + modificador de tamanho + soma dos
   modificadores de material por parte. Sempre recalcular no servidor no
@@ -96,11 +119,24 @@ integração nativa Vercel↔Supabase cria as env vars do Postgres com nomes
 necessário duplicar nada na Vercel** — só falta o usuário confirmar que
 funcionou depois do redeploy desse fix.
 
-Usuário achou o visual "muito feio e mal feito" — feedback válido, o app
-estava no estilo padrão do shadcn sem nenhum polimento. Fez-se uma primeira
-passada de design **só na loja** (usuário escolheu essa prioridade sobre o
-admin). Ver "Feito — design" abaixo. **O admin continua com o visual cru**
-— próxima passada de design, se pedirem.
+Usuário achou o visual "muito feio e mal feito" **duas vezes seguidas**,
+mesmo depois de uma primeira passada de design só na loja — e nessa segunda
+rodada também disse "não achei aonde incluir o STL, estou perdido" e
+perguntou se não valeria trocar pro Material UI. Decisões tomadas:
+- **Não trocamos pra Material UI** — recomendei manter shadcn/Base UI
+  (biblioteca sólida e atual; MUI tem estética "Google Material" datada e
+  trocar significaria reescrever tudo sem garantia de resolver o problema
+  real). Se o usuário insistir depois de ver a segunda passada de design,
+  reconsiderar — mas não fazer de novo sem alinhar antes, é uma mudança grande.
+- Causa raiz real da "feiura" era em boa parte o **bug da fonte serifada**
+  (ver acima) — confirmado reproduzindo o **site real em produção**, não só
+  local. Corrigido.
+- "Estou perdido" no admin era porque **não existia upload de STL nenhum**
+  e **não existia menu de navegação** no admin (só um link de texto pra
+  voltar ao dashboard) — os dois foram implementados nesta sessão (ver
+  abaixo). O admin também recebeu uma passada de polimento visual (cantos
+  arredondados/anel consistente com a loja), mas não uma reformulação
+  completa.
 
 **Feito — infraestrutura:**
 - Scaffold completo, schema do banco, migration
@@ -141,40 +177,51 @@ real nem contra a API da Woovi de verdade):**
 - Admin de pedidos (`/admin/pedidos`, `/admin/pedidos/[id]`) — lista, detalhe,
   trocar status manualmente
 
-**Feito — design (só na loja, admin não foi tocado):**
+**Feito — design (loja completa + base do admin):**
 - `SiteHeader` (logo, link pro catálogo, ícone de carrinho com contador) e
-  `SiteFooter` — loja inteira movida pra `src/app/(loja)/` pra compartilhar
-  esse layout sem vazar pro admin
-- Cor de marca violeta aplicada via `globals.css` (afeta o app inteiro,
-  incluindo admin, de graça)
+  `SiteFooter` — loja inteira em `src/app/(loja)/`
+- Cor de marca violeta aplicada via `globals.css` (afeta o app inteiro)
+- **Bug da fonte serifada corrigido** (impacto grande, ver acima)
 - Home com seção de destaques (3 cards com ícone), cards de produto na
   listagem com thumbnail placeholder, swatches de material com anel de
   seleção em vez de borda+escala, caixa de preço destacada no configurador
-- Verificado visualmente (headless) — sem erros de console, mas **sem
-  testar contra o banco real** (mesma limitação de sempre: sem credenciais
-  do Supabase nesta máquina). Testei o configurador com uma página temporária
-  de dado mockado, que já foi apagada antes do commit.
+- **Admin ganhou um menu lateral de verdade**
+  (`admin/(dashboard)/layout.tsx`): Dashboard/Produtos/Materiais/Pedidos
+  sempre visíveis, com fallback de nav horizontal no mobile (sem hamburguer/
+  drawer, só uma lista com scroll horizontal — simplificação deliberada)
+- Cantos/anel do admin (materiais, tamanhos, pedidos) alinhados ao mesmo
+  padrão visual da loja (`rounded-xl` + `ring-1 ring-foreground/10`)
+- Verificado visualmente (headless) contra **o site real em produção**
+  (não só local) pra confirmar o bug da fonte e o resultado das mudanças.
+  O upload de STL e o carregamento via `STLLoader` foram testados com um
+  arquivo STL de exemplo gerado na hora (cubo ASCII simples) servido
+  localmente — confirma que o parsing/render funciona, mas **não testei o
+  upload de verdade pro Supabase Storage** (sem credenciais nesta máquina,
+  e o bucket `models` pode nem existir ainda — ver `scripts/storage-setup.sql`).
 
 **Pendente pra fechar o ciclo:**
-- Confirmar env vars da Vercel (`DATABASE_URL`, `DIRECT_DATABASE_URL`
-  principalmente) e testar uma compra de ponta a ponta
+- Rodar `scripts/storage-setup.sql` no SQL Editor do Supabase (cria o bucket
+  `models`) — sem isso, o upload de STL falha. **Provavelmente ainda não foi
+  feito**, perguntar/confirmar numa sessão nova.
+- Confirmar que o upload de STL funciona de ponta a ponta contra o Supabase
+  real (só testei o parsing/render do STLLoader com arquivo local, não o
+  upload em si)
+- Testar uma compra de ponta a ponta contra o banco de produção
 - Criar conta na Woovi e configurar `WOOVI_APP_ID` + a URL do webhook
   (`https://SEU-DOMINIO/api/webhooks/woovi`) no painel deles — sem isso, o
   Pix não é gerado (pedido é criado mas fica "aguardando configuração")
 - Criar conta na Resend, configurar `RESEND_API_KEY` e verificar um domínio
   próprio (sem isso, e-mail não é enviado ou só chega pro dono da conta)
-- Criar o primeiro usuário admin (o usuário já fez isso e confirmou que
-  loga) — só falta garantir a linha em `admin_users` existe de fato
 - Usuário autorizou os conectores MCP da Vercel/Supabase no claude.ai, mas
   as ferramentas não apareceram em nenhuma sessão até agora — continuar
   rodando `ToolSearch` no início de sessões novas pra checar
 
 **Ainda não iniciado:**
-- Upload de STL com conversão pra GLB (partes hoje só têm nome + materiais,
-  sem arquivo de malha — o viewer usa placeholder)
 - Superfrete (cálculo de frete + etiqueta) — Fase 2
 - Asaas (cartão/boleto) — Fase 3
 - SEO avançado (sitemap, JSON-LD, OG dinâmico)
+- Reformulação visual mais profunda do admin, se o usuário ainda achar
+  insuficiente depois desta rodada (menu + polimento básico já entraram)
 
 ## Preferências do usuário (importante)
 

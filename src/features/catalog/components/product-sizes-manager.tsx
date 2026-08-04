@@ -53,7 +53,7 @@ export function ProductSizesManager({ productId, sizes }: { productId: string; s
 
       <form
         action={addSizeOption.bind(null, productId)}
-        className="mt-4 flex max-w-2xl flex-wrap items-end gap-3 rounded-lg border p-4"
+        className="mt-4 flex max-w-2xl flex-wrap items-end gap-3 rounded-xl bg-card ring-1 ring-foreground/10 p-4"
       >
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="label">Label</Label>

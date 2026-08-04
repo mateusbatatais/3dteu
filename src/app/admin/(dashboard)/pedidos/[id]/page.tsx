@@ -26,7 +26,7 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
         {order.customerEmail} {order.customerPhone ? `· ${order.customerPhone}` : ""}
       </p>
 
-      <div className="mt-6 rounded-lg border p-4">
+      <div className="mt-6 rounded-xl bg-card ring-1 ring-foreground/10 p-4">
         <h2 className="text-sm font-medium">Itens</h2>
         <ul className="mt-3 flex flex-col divide-y">
           {order.items.map((item) => (
@@ -45,7 +45,7 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
         </div>
       </div>
 
-      <div className="mt-6 rounded-lg border p-4">
+      <div className="mt-6 rounded-xl bg-card ring-1 ring-foreground/10 p-4">
         <h2 className="text-sm font-medium">Pagamento</h2>
         {payment ? (
           <p className="mt-2 text-sm text-muted-foreground">
@@ -56,7 +56,7 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
         )}
       </div>
 
-      <form action={updateOrderStatus.bind(null, order.id)} className="mt-6 flex items-end gap-3 rounded-lg border p-4">
+      <form action={updateOrderStatus.bind(null, order.id)} className="mt-6 flex items-end gap-3 rounded-xl bg-card ring-1 ring-foreground/10 p-4">
         <div className="flex flex-1 flex-col gap-1.5">
           <label htmlFor="status" className="text-sm font-medium">
             Mudar status

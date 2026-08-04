@@ -29,7 +29,7 @@ export default async function AdminMateriaisPage() {
         Catálogo global de filamentos. Cada parte de um produto escolhe quais destes materiais aceita.
       </p>
 
-      <form action={createFilament} className="mt-6 flex max-w-3xl flex-wrap items-end gap-3 rounded-lg border p-4">
+      <form action={createFilament} className="mt-6 flex max-w-3xl flex-wrap items-end gap-3 rounded-xl bg-card ring-1 ring-foreground/10 p-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="name">Nome</Label>
           <Input id="name" name="name" required placeholder="Azul" className="w-40" />

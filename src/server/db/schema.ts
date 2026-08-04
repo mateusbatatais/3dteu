@@ -85,8 +85,12 @@ export const productParts = pgTable("product_parts", {
     .references(() => products.id, { onDelete: "cascade" }),
   name: text("name").notNull(), // ex.: "corpo", "tampa"
   sortOrder: integer("sort_order").default(0).notNull(),
-  meshFileUrl: text("mesh_file_url"), // GLB convertido, usado no preview web
-  stlFileUrl: text("stl_file_url"), // STL original, usado só para impressão
+  // Hoje o upload grava o mesmo STL nas duas colunas: o preview 3D carrega o
+  // STL direto no navegador (three-stdlib STLLoader), sem conversão pra GLB.
+  // meshFileUrl existe separado pra permitir trocar por um GLB otimizado no
+  // futuro sem mudar o preview; stlFileUrl é sempre o arquivo original.
+  meshFileUrl: text("mesh_file_url"),
+  stlFileUrl: text("stl_file_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -3,9 +3,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { addProductPart, deleteProductPart, setPartMaterials } from "@/features/catalog/actions";
 
+import { MeshUploadForm } from "./mesh-upload-form";
+
 interface PartRow {
   id: string;
   name: string;
+  meshFileUrl: string | null;
   materialOptions: Array<{ filamentOptionId: string }>;
 }
 
@@ -27,17 +30,17 @@ export function ProductPartsManager({
 }) {
   return (
     <div>
-      <h2 className="text-lg font-medium">Partes e materiais</h2>
+      <h2 className="text-lg font-medium">Partes, materiais e arquivo 3D</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Um produto de peça única tem uma parte só. Produtos multi-cor têm uma parte por peça impressa
-        separadamente.
+        separadamente — cada uma com seu próprio arquivo .stl.
       </p>
 
       <div className="mt-3 flex flex-col gap-4">
         {parts.map((part) => {
           const selectedIds = new Set(part.materialOptions.map((m) => m.filamentOptionId));
           return (
-            <div key={part.id} className="max-w-2xl rounded-lg border p-4">
+            <div key={part.id} className="max-w-2xl rounded-xl bg-card p-4 ring-1 ring-foreground/10">
               <div className="flex items-center justify-between">
                 <span className="font-medium">{part.name}</span>
                 <form action={deleteProductPart.bind(null, productId, part.id)}>
@@ -80,6 +83,8 @@ export function ProductPartsManager({
                   </Button>
                 </form>
               )}
+
+              <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
             </div>
           );
         })}
@@ -87,7 +92,7 @@ export function ProductPartsManager({
 
       <form
         action={addProductPart.bind(null, productId)}
-        className="mt-4 flex max-w-2xl items-end gap-3 rounded-lg border p-4"
+        className="mt-4 flex max-w-2xl items-end gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10"
       >
         <div className="flex flex-1 flex-col gap-1.5">
           <Label htmlFor="partName">Nova parte</Label>

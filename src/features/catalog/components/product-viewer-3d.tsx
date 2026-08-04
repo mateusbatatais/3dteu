@@ -1,35 +1,32 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
-import { Canvas } from "@react-three/fiber";
-import { Bounds, Environment, OrbitControls, RoundedBox, useGLTF } from "@react-three/drei";
-import * as THREE from "three";
+import { Suspense } from "react";
+import { Canvas, useLoader } from "@react-three/fiber";
+import { Bounds, Environment, OrbitControls, RoundedBox } from "@react-three/drei";
+import { STLLoader } from "three-stdlib";
 
 export interface ViewerPart {
   id: string;
-  /** URL do .glb (convertido do STL no upload). Null renderiza uma peça placeholder. */
+  /** URL do arquivo .stl enviado no admin. Null renderiza uma peça placeholder. */
   meshUrl: string | null;
   color: string;
   colorSecondary?: string | null;
 }
 
-function GltfPart({ meshUrl, color }: { meshUrl: string; color: string }) {
-  const { scene } = useGLTF(meshUrl);
+// STL só descreve geometria (sem cor/material), então basta aplicar a cor
+// escolhida direto no material — sem precisar clonar/percorrer uma cena como
+// seria necessário com glTF.
+function StlPart({ meshUrl, color }: { meshUrl: string; color: string }) {
+  const geometry = useLoader(STLLoader, meshUrl);
 
-  const tinted = useMemo(() => {
-    const clone = scene.clone(true);
-    clone.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.material = new THREE.MeshStandardMaterial({ color });
-      }
-    });
-    return clone;
-  }, [scene, color]);
-
-  return <primitive object={tinted} />;
+  return (
+    <mesh geometry={geometry}>
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
 }
 
-// Usado enquanto o produto ainda não tem uma malha real cadastrada no admin.
+// Usado enquanto a parte ainda não tem um STL cadastrado no admin.
 function PlaceholderPart({ color, colorSecondary }: { color: string; colorSecondary?: string | null }) {
   return (
     <group>
@@ -50,7 +47,7 @@ function Part({ part }: { part: ViewerPart }) {
     return <PlaceholderPart color={part.color} colorSecondary={part.colorSecondary} />;
   }
 
-  return <GltfPart meshUrl={part.meshUrl} color={part.color} />;
+  return <StlPart meshUrl={part.meshUrl} color={part.color} />;
 }
 
 export function ProductViewer3D({ parts }: { parts: ViewerPart[] }) {
