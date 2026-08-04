@@ -1,0 +1,57 @@
+import { asc, eq } from "drizzle-orm";
+
+import { db } from "@/server/db/client";
+import { productParts, products, sizeOptions } from "@/server/db/schema";
+
+import type { Product } from "./types";
+
+export async function getPublishedProducts() {
+  return db.query.products.findMany({
+    where: eq(products.status, "published"),
+    orderBy: [asc(products.createdAt)],
+  });
+}
+
+export async function getProductBySlug(slug: string): Promise<Product | null> {
+  const row = await db.query.products.findFirst({
+    where: eq(products.slug, slug),
+    with: {
+      parts: {
+        orderBy: [asc(productParts.sortOrder)],
+        with: {
+          materialOptions: { with: { filament: true } },
+        },
+      },
+      sizeOptions: { orderBy: [asc(sizeOptions.sortOrder)] },
+    },
+  });
+
+  if (!row || row.status !== "published") return null;
+
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    basePriceCents: row.basePriceCents,
+    parts: row.parts.map((part) => ({
+      id: part.id,
+      name: part.name,
+      meshFileUrl: part.meshFileUrl,
+      availableMaterials: part.materialOptions.map(({ filament }) => ({
+        id: filament.id,
+        type: filament.type,
+        name: filament.name,
+        hexColor: filament.hexColor,
+        hexColorSecondary: filament.hexColorSecondary,
+        priceModifierCents: filament.priceModifierCents,
+      })),
+    })),
+    sizeOptions: row.sizeOptions.map((size) => ({
+      id: size.id,
+      label: size.label,
+      scaleFactor: Number(size.scaleFactor),
+      priceModifierCents: size.priceModifierCents,
+      weightModifierGrams: size.weightModifierGrams,
+    })),
+  };
+}
