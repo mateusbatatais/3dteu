@@ -40,14 +40,33 @@ pensada pra isso).
   fonte única da verdade — base + modificador de tamanho + soma dos
   modificadores de material por parte. Sempre recalcular no servidor no
   checkout, nunca confiar no preço vindo do carrinho do cliente.
-- Pagamento: Woovi (Pix) planejado pra Fase 1, Asaas depois. Interface
-  `PaymentProvider` já definida (`src/features/payments/types.ts`), nada
-  implementado ainda.
-- Frete: retirada em mãos na Fase 1, Superfrete na Fase 2 — só os tipos
-  existem (`src/features/shipping/types.ts`).
-- Checkout: **sem conta de cliente** — convidado, com rastreio do pedido por
-  link único (`/pedido/[token]`) enviado por e-mail via Resend (e-mail ainda
-  não implementado).
+- Pagamento: Woovi (Pix) implementado (`src/features/payments/woovi.ts`).
+  Endpoint `https://api.woovi.com/api/v1/charge`, header `Authorization:
+  <AppID>` (sem prefixo Bearer). Webhook em `src/app/api/webhooks/woovi/route.ts`
+  valida a assinatura (`x-webhook-signature`) com a **chave pública da própria
+  Woovi**, que é fixa/hardcoded no código (é pública por definição, só serve
+  pra verificar — não precisa de env var de secret). Criar cobrança é
+  "best effort" no checkout: se `WOOVI_APP_ID` não estiver configurada ou a
+  chamada falhar, o pedido é criado do mesmo jeito, só sem QR code de Pix
+  ainda. **Nunca testado de verdade** (sem AppID de sandbox/produção
+  disponível nesta sessão) — conferir contra a doc oficial
+  (developers.woovi.com) antes de confiar 100% em produção. Asaas fica pra
+  Fase 3, nada implementado.
+- Frete: só retirada em mãos funciona (Fase 1) — o checkout nem oferece
+  Superfrete ainda como opção. Tipos em `src/features/shipping/types.ts`.
+- Checkout: **sem conta de cliente** — convidado, pedido criado via
+  `submitOrder` (`src/features/checkout/actions.ts`), que recalcula os preços
+  no servidor a partir do catálogo (nunca confia no preço do carrinho),
+  tenta gerar a cobrança Woovi e manda e-mail de confirmação — os dois
+  últimos passos são best-effort e não derrubam a criação do pedido se
+  falharem. Rastreio por link único (`/pedido/[token]`), com o QR/copia-cola
+  do Pix quando existir.
+- E-mail: Resend (`src/features/orders/email.ts`), best-effort (loga e
+  segue se `RESEND_API_KEY` não existir). **Atenção**: o remetente padrão
+  `onboarding@resend.dev` só é confiável pra testes — a Resend normalmente só
+  entrega esse remetente pro e-mail dono da conta; pra mandar pra clientes de
+  verdade precisa verificar um domínio próprio na Resend e trocar
+  `RESEND_FROM_EMAIL`.
 - Testes: Vitest + RTL (`npm run test`), Playwright E2E (`npm run test:e2e`).
   CI (GitHub Actions) instala o Chromium sozinho na nuvem — **não precisa
   instalar os browsers do Playwright localmente**, são ~700MB e a máquina do
@@ -56,63 +75,66 @@ pensada pra isso).
 
 ## Status (atualizado em 2026-08-04)
 
-**Feito:**
-- Scaffold completo, CI (lint/test/build/e2e), schema do banco
-  (`src/server/db/schema.ts`), migration gerada
-  (`drizzle/0000_romantic_piledriver.sql`) **e já aplicada no Supabase** pelo
-  usuário, junto com `scripts/seed.sql` (produto de exemplo "fidget-cubo")
-- Preview 3D + configurador de produto (tamanho/cor por parte + preço ao
-  vivo) funcionando — hoje a página `/produtos/[slug]` usa dado mockado
-  (`src/features/catalog/demo-data.ts`), ainda não trocada pela query real
-  (`getProductBySlug`) por falta de confirmação de que as env vars da Vercel
-  estão certas
-- Carrinho (Zustand + localStorage) funcionando de ponta a ponta, testado
-- CRUD de produtos no admin (`/admin/produtos`, `/novo`, `/[id]`) — campos
-  básicos (nome, slug, descrição, categoria, preço, status) via Server
-  Actions + Zod. **Não testado contra banco real ainda.**
-- CRUD de materiais (`/admin/materiais`) e, na edição do produto, gestão de
-  tamanhos (`ProductSizesManager`) e de partes + atribuição de materiais por
-  parte (`ProductPartsManager`) — todos via Server Actions ligadas direto a
-  `<form action={...}>` (sem JS de cliente extra). **Também não testado
-  contra banco real ainda.**
-- Repositório no GitHub (mateusbatatais/3dteu, branch `main`), 4 commits
-  enviados. Vercel conectado ao GitHub (deploy automático a cada push) e ao
-  Supabase (integração nativa)
+O usuário já conseguiu logar no `/admin` (confirma que Supabase Auth + env
+vars da Vercel para autenticação estão funcionando). Ainda não confirmado se
+`/admin/produtos` e `/admin/materiais` mostram os dados seedados (depende de
+`DATABASE_URL`/`DIRECT_DATABASE_URL` estarem certas na Vercel) — **primeira
+coisa a checar numa sessão nova se o usuário disser que algo não carrega**.
 
-**Pendente / interrompido nisso:**
-- Confirmar se a Vercel tem as env vars certas e redeployar. Nomes
-  esperados pelo código: `NEXT_PUBLIC_SUPABASE_URL`,
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
-  `DATABASE_URL` (pooler, porta 6543), `DIRECT_DATABASE_URL` (direta, porta
-  5432), `NEXT_PUBLIC_SITE_URL`. A integração nativa Vercel↔Supabase pode ter
-  criado nomes diferentes (ex.: `POSTGRES_URL`, `SUPABASE_URL`) — se sim,
-  ajustar o código pra usar os nomes reais em vez de pedir pra recriar.
-- Criar o primeiro usuário admin (Supabase → Authentication → Add user) +
-  inserir na tabela `admin_users`:
-  ```sql
-  insert into admin_users (id, email, name)
-  values ('COLE-O-UID-AQUI', 'seu@email.com', 'Seu Nome');
-  ```
-- Usuário autorizou os conectores MCP da Vercel e do Supabase no claude.ai
-  (Settings → Connectors), mas as ferramentas **ainda não apareceram** —
-  testado via `ToolSearch` em duas sessões diferentes, nenhuma ferramenta da
-  Vercel/Supabase encontrada até agora. **Rodar `ToolSearch` de novo no
-  início de uma sessão nova pra confirmar se já propagou**; se continuar sem
-  aparecer depois de mais de uma sessão nova, provavelmente a autorização não
-  completou do lado do usuário (conferir em claude.ai se aparece como
-  "Connected" de fato).
-- Depois que o banco estiver confirmado: trocar `demo-data.ts` por
-  `getProductBySlug` de verdade em `/produtos/[slug]`, testar o CRUD do admin
-  (produtos, materiais, tamanhos, partes) com dado real, testar o login do
-  admin.
+**Feito — infraestrutura:**
+- Scaffold completo, CI (lint/test/build/e2e), schema do banco, migration
+  (`drizzle/0000_romantic_piledriver.sql`) e seed (`scripts/seed.sql`) já
+  aplicados no Supabase pelo usuário
+- Repositório no GitHub (mateusbatatais/3dteu, branch `main`), Vercel
+  conectado ao GitHub (deploy automático a cada push) e ao Supabase
+  (integração nativa)
+- Login do admin funcionando de verdade (confirmado pelo usuário)
+
+**Feito — catálogo:**
+- `/produtos` e `/produtos/[slug]` **ligados ao banco real** (nada de dado
+  mockado — `demo-data.ts` foi removido)
+- Preview 3D + configurador de produto (tamanho/cor por parte + preço ao
+  vivo)
+- CRUD de produtos (`/admin/produtos`), materiais (`/admin/materiais`),
+  tamanhos e partes+materiais (dentro da edição do produto)
+
+**Feito — compra (implementado nesta sessão, ainda não testado contra banco
+real nem contra a API da Woovi de verdade):**
+- Carrinho (Zustand + localStorage) — testado antes, continua igual
+- Checkout (`/checkout`): formulário de nome/e-mail/telefone, só retirada em
+  mãos por enquanto, cria o pedido via `submitOrder`
+- Pedido: `Order` + `OrderItem`s gravados com preço recalculado no servidor
+- Pagamento: `WooviProvider` criado, tenta gerar cobrança Pix ao finalizar o
+  pedido (best-effort — sem `WOOVI_APP_ID` o pedido é criado normalmente, só
+  sem QR code)
+- Webhook `/api/webhooks/woovi` — recebe confirmação de pagamento, valida
+  assinatura RSA com a chave pública da Woovi, marca o pedido como pago
+- E-mail de confirmação via Resend (best-effort, idem)
+- `/pedido/[token]` — página de rastreio real (status, itens, total, QR Pix
+  se existir)
+- Admin de pedidos (`/admin/pedidos`, `/admin/pedidos/[id]`) — lista, detalhe,
+  trocar status manualmente
+
+**Pendente pra fechar o ciclo:**
+- Confirmar env vars da Vercel (`DATABASE_URL`, `DIRECT_DATABASE_URL`
+  principalmente) e testar uma compra de ponta a ponta
+- Criar conta na Woovi e configurar `WOOVI_APP_ID` + a URL do webhook
+  (`https://SEU-DOMINIO/api/webhooks/woovi`) no painel deles — sem isso, o
+  Pix não é gerado (pedido é criado mas fica "aguardando configuração")
+- Criar conta na Resend, configurar `RESEND_API_KEY` e verificar um domínio
+  próprio (sem isso, e-mail não é enviado ou só chega pro dono da conta)
+- Criar o primeiro usuário admin (o usuário já fez isso e confirmou que
+  loga) — só falta garantir a linha em `admin_users` existe de fato
+- Usuário autorizou os conectores MCP da Vercel/Supabase no claude.ai, mas
+  as ferramentas não apareceram em nenhuma sessão até agora — continuar
+  rodando `ToolSearch` no início de sessões novas pra checar
 
 **Ainda não iniciado:**
-- Upload de STL com conversão pra GLB (as partes hoje só têm nome + materiais
-  atribuídos, sem arquivo de malha — o viewer usa placeholder)
-- Formulário de checkout (dados do cliente, entrega)
-- E-mail transacional (Resend) — confirmação de pedido + link de rastreio
-- Integração Woovi (Pix)
-- Integração Superfrete (Fase 2)
+- Upload de STL com conversão pra GLB (partes hoje só têm nome + materiais,
+  sem arquivo de malha — o viewer usa placeholder)
+- Superfrete (cálculo de frete + etiqueta) — Fase 2
+- Asaas (cartão/boleto) — Fase 3
+- SEO avançado (sitemap, JSON-LD, OG dinâmico)
 
 ## Preferências do usuário (importante)
 

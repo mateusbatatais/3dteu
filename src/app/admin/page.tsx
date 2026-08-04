@@ -23,12 +23,14 @@ export default function AdminDashboardPage() {
             </CardHeader>
           </Card>
         </Link>
-        <Card className="opacity-60">
-          <CardHeader>
-            <CardTitle>Pedidos</CardTitle>
-            <CardDescription>Em breve.</CardDescription>
-          </CardHeader>
-        </Card>
+        <Link href="/admin/pedidos">
+          <Card className="transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>Pedidos</CardTitle>
+              <CardDescription>Acompanhar e mudar o status dos pedidos.</CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
       </div>
     </div>
   );
