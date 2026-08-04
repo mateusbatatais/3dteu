@@ -462,9 +462,48 @@ renderizam e populam corretamente com dados mockados — sem erros de console.
 `DATABASE_URL` configurada localmente, ela (e qualquer outra página do admin
 que toque o banco, isso já era esperado) retorna 500 neste ambiente de dev.
 
+**Etapa 4 (imagens/gifs de produto + SEO avançado) — feita**:
+- Upload de fotos/gifs por produto (`ProductImagesManager`, novo bucket
+  `product-media` — `scripts/storage-media-setup.sql`, ainda precisa ser
+  rodado no Supabase) reaproveitando 100% a arquitetura de upload direto já
+  validada pro STL (signed URL, sem passar pelo servidor). Aparecem como
+  galeria abaixo do preview 3D na página do produto (o 3D continua sendo o
+  destaque) e no admin com miniatura + badge "Capa" na primeira + botão de
+  excluir.
+- `Product` (tipo + `getProductBySlug`) passou a expor `description`,
+  `metaTitle`, `metaDescription` e `images` — os dois primeiros já existiam
+  no banco desde antes mas nunca tinham sido lidos em lugar nenhum.
+  `ProductForm` ganhou uma seção "SEO" (título/descrição opcionais).
+- `generateMetadata` em `/produtos/[slug]` (título/descrição por produto,
+  canonical, JSON-LD `Product` com preço/disponibilidade). Home e listagem
+  ganharam `alternates.canonical`. Root layout ganhou `metadataBase`,
+  `openGraph`/`twitter` padrão.
+- `opengraph-image.tsx` por produto: usa a primeira foto real se existir,
+  senão gera um card via `next/og` (nome + preço + marca em fundo violeta) —
+  não dá pra "fotografar" o preview 3D no servidor sem um esforço bem maior
+  (renderizar three.js fora do navegador), então esse card é o fallback
+  pragmático combinado com a opção de foto real da rodada 10.
+- `sitemap.ts` e `robots.ts` novos. **Bug de build pego e corrigido**:
+  `sitemap.ts` sem `force-dynamic` quebrava o build inteiro tentando
+  pré-renderizar contra o banco no momento do build (mesmo motivo que já
+  levou `/produtos` a usar `force-dynamic` — CI/local não têm
+  `DATABASE_URL`). Reproduzi rodando `npm run build` localmente, adicionei o
+  `export const dynamic = "force-dynamic"` e confirmei que o build volta a
+  passar.
+- Decisão consciente: a coluna `products.ogImageUrl` (já existia no banco,
+  nunca usada) ficou sem uso — a galeria de fotos reais supera a utilidade
+  dela; não fazia sentido manter dois mecanismos pra mesma coisa.
+
+**Testado nesta etapa** (mesma limitação de sempre — sem `DATABASE_URL`
+local): `ProductImagesManager` e a galeria do `ProductConfigurator` são
+verificáveis com dados mockados (Playwright confirmou renderização correta,
+sem erro de console) e `/robots.txt` é estático — testei contra o dev server
+de verdade e o conteúdo saiu certo. `generateMetadata`, o JSON-LD, o
+`opengraph-image` de verdade e o `/sitemap.xml` dependem de banco e **não
+puderam ser testados** nesta sessão — o build só confirma que compilam
+(TypeScript), não que o conteúdo gerado está correto contra dados reais.
+
 **Ainda não iniciado (dentro desta rodada):**
-- Etapa 4: upload de imagens/gifs de produto + SEO avançado (metadata
-  dinâmica, sitemap, robots, JSON-LD, OG image)
 - Etapa 5: polimento visual do admin (estado ativo no menu, dashboard com
   dados reais, confirmação antes de excluir, tabs no produto, cores de
   status, toast consistente)

@@ -38,6 +38,8 @@ interface ProductFormProps {
     heightCm: number | null;
     widthCm: number | null;
     lengthCm: number | null;
+    metaTitle: string | null;
+    metaDescription: string | null;
   };
 }
 
@@ -66,6 +68,8 @@ export function ProductForm({ categories, product }: ProductFormProps) {
           heightCm: product.heightCm ?? 0,
           widthCm: product.widthCm ?? 0,
           lengthCm: product.lengthCm ?? 0,
+          metaTitle: product.metaTitle ?? "",
+          metaDescription: product.metaDescription ?? "",
         }
       : {
           name: "",
@@ -78,6 +82,8 @@ export function ProductForm({ categories, product }: ProductFormProps) {
           heightCm: 0,
           widthCm: 0,
           lengthCm: 0,
+          metaTitle: "",
+          metaDescription: "",
         },
   });
 
@@ -174,6 +180,27 @@ export function ProductForm({ categories, product }: ProductFormProps) {
             <Label htmlFor="lengthCm">Comprimento (cm)</Label>
             <Input id="lengthCm" type="number" min="1" {...register("lengthCm")} />
             {errors.lengthCm ? <p className="text-sm text-destructive">{errors.lengthCm.message}</p> : null}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">SEO</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Opcional — sem preencher, a página usa o nome e a descrição normais do produto.
+        </p>
+        <div className="mt-2 flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="metaTitle">Título para SEO</Label>
+            <Input id="metaTitle" {...register("metaTitle")} />
+            {errors.metaTitle ? <p className="text-sm text-destructive">{errors.metaTitle.message}</p> : null}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="metaDescription">Descrição para SEO</Label>
+            <Textarea id="metaDescription" rows={2} {...register("metaDescription")} />
+            {errors.metaDescription ? (
+              <p className="text-sm text-destructive">{errors.metaDescription.message}</p>
+            ) : null}
           </div>
         </div>
       </div>

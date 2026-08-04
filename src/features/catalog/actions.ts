@@ -1,13 +1,13 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { createStorageClient, MODELS_BUCKET } from "@/lib/supabase/storage";
-import { ALLOWED_MESH_EXTENSIONS, type MeshExtension } from "@/lib/supabase/storage-constants";
+import { createStorageClient, MEDIA_BUCKET, MODELS_BUCKET } from "@/lib/supabase/storage";
+import { ALLOWED_MEDIA_EXTENSIONS, ALLOWED_MESH_EXTENSIONS, type MediaExtension, type MeshExtension } from "@/lib/supabase/storage-constants";
 import { db } from "@/server/db/client";
-import { productPartMaterialOptions, productParts, products, sizeOptions } from "@/server/db/schema";
+import { productImages, productPartMaterialOptions, productParts, products, sizeOptions } from "@/server/db/schema";
 
 import { productFormSchema, type ProductFormValues } from "./schemas";
 
@@ -45,6 +45,8 @@ function toRow(values: ProductFormValues) {
     heightCm: values.heightCm || null,
     widthCm: values.widthCm || null,
     lengthCm: values.lengthCm || null,
+    metaTitle: values.metaTitle || null,
+    metaDescription: values.metaDescription || null,
   };
 }
 
@@ -207,5 +209,63 @@ export async function setPartMaterials(productId: string, partId: string, formDa
     }
   });
 
+  await revalidateProductPages(productId);
+}
+
+// ---------------------------------------------------------------------------
+// Fotos/gifs do produto — mesmo padrão de upload direto pro Supabase Storage
+// já usado pro STL (createMeshUploadUrl/confirmPartMesh acima), só que num
+// bucket separado (product-media) e com limites bem menores.
+// ---------------------------------------------------------------------------
+
+export async function createProductImageUploadUrl(
+  productId: string,
+  extension: string,
+): Promise<CreateMeshUploadUrlResult> {
+  const normalizedExt = extension.toLowerCase().replace(/^\./, "");
+  if (!(ALLOWED_MEDIA_EXTENSIONS as readonly string[]).includes(normalizedExt)) {
+    return { error: `Formato .${normalizedExt} não suportado. Use jpg, png, webp ou gif.` };
+  }
+
+  try {
+    const storage = createStorageClient();
+    const path = `${productId}-${Date.now()}.${normalizedExt as MediaExtension}`;
+
+    const { data, error } = await storage.storage.from(MEDIA_BUCKET).createSignedUploadUrl(path);
+    if (error || !data) {
+      return { error: `Falha ao preparar o upload: ${error?.message ?? "erro desconhecido"}` };
+    }
+
+    return { path: data.path, token: data.token };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido.";
+    return { error: `Falha ao preparar o upload: ${message}` };
+  }
+}
+
+export async function confirmProductImage(productId: string, path: string): Promise<ConfirmMeshResult> {
+  try {
+    const storage = createStorageClient();
+    const {
+      data: { publicUrl },
+    } = storage.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+
+    const [{ nextPosition } = { nextPosition: 0 }] = await db
+      .select({ nextPosition: sql<number>`coalesce(max(${productImages.position}), -1) + 1` })
+      .from(productImages)
+      .where(eq(productImages.productId, productId));
+
+    await db.insert(productImages).values({ productId, url: publicUrl, position: nextPosition });
+
+    await revalidateProductPages(productId);
+    return {};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido.";
+    return { error: `Falha ao confirmar o upload: ${message}` };
+  }
+}
+
+export async function deleteProductImage(productId: string, imageId: string) {
+  await db.delete(productImages).where(eq(productImages.id, imageId));
   await revalidateProductPages(productId);
 }

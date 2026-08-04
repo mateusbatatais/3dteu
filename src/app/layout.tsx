@@ -16,12 +16,29 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const SITE_TITLE = "Fidgets sob encomenda";
+const SITE_DESCRIPTION = "Fidgets impressos em 3D sob encomenda, com cor, material e tamanho personalizáveis.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "Fidgets sob encomenda",
+    default: SITE_TITLE,
     template: "%s | Fidgets sob encomenda",
   },
-  description: "Fidgets impressos em 3D sob encomenda, com cor, material e tamanho personalizáveis.",
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    locale: "pt_BR",
+    siteName: SITE_TITLE,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

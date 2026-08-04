@@ -29,6 +29,7 @@ export interface Product {
   id: string;
   slug: string;
   name: string;
+  description: string | null;
   basePriceCents: number;
   /** Peso/dimensões da embalagem, usados na cotação de frete. Null nos
    * produtos cadastrados antes desses campos existirem — a cotação usa um
@@ -37,6 +38,11 @@ export interface Product {
   heightCm: number | null;
   widthCm: number | null;
   lengthCm: number | null;
+  /** Sobrepõem name/description no <title>/<meta description> quando preenchidos. */
+  metaTitle: string | null;
+  metaDescription: string | null;
+  /** Fotos/gifs reais do produto, na ordem de exibição — a primeira é a capa/imagem OG. */
+  images: string[];
   parts: ProductPart[];
   sizeOptions: SizeOption[];
 }

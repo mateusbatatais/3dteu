@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -75,7 +76,25 @@ export function ProductConfigurator({ product }: { product: Product }) {
 
   return (
     <div className="grid gap-8 md:grid-cols-2">
-      <ProductViewer3D parts={viewerParts} />
+      <div>
+        <ProductViewer3D parts={viewerParts} />
+
+        {product.images.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {product.images.map((url) => (
+              <Image
+                key={url}
+                src={url}
+                alt={product.name}
+                width={64}
+                height={64}
+                unoptimized
+                className="size-16 rounded-lg object-cover ring-1 ring-foreground/10"
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
 
       <div className="flex flex-col gap-6">
         <div>

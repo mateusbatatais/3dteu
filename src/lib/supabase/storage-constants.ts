@@ -17,3 +17,18 @@ export function getMeshExtension(filename: string): MeshExtension | null {
   const ext = filename.toLowerCase().split(".").pop();
   return (ALLOWED_MESH_EXTENSIONS as readonly string[]).includes(ext ?? "") ? (ext as MeshExtension) : null;
 }
+
+// Bucket separado do de malhas 3D — fotos/gifs do produto impresso, usadas
+// na galeria da página pública e como imagem de Open Graph.
+export const MEDIA_BUCKET = "product-media";
+
+// Fotos/gifs não precisam do teto de 50MB usado pra malha 3D.
+export const MAX_MEDIA_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
+export const ALLOWED_MEDIA_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif"] as const;
+export type MediaExtension = (typeof ALLOWED_MEDIA_EXTENSIONS)[number];
+
+export function getMediaExtension(filename: string): MediaExtension | null {
+  const ext = filename.toLowerCase().split(".").pop();
+  return (ALLOWED_MEDIA_EXTENSIONS as readonly string[]).includes(ext ?? "") ? (ext as MediaExtension) : null;
+}

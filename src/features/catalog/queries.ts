@@ -1,7 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/server/db/client";
-import { categories, filamentOptions, productParts, products, sizeOptions } from "@/server/db/schema";
+import { categories, filamentOptions, productImages, productParts, products, sizeOptions } from "@/server/db/schema";
 
 import type { Product } from "./types";
 
@@ -68,7 +68,7 @@ export async function getAllFilamentOptions() {
   return db.query.filamentOptions.findMany({ orderBy: [asc(filamentOptions.name)] });
 }
 
-/** Produto com partes (+ materiais atribuídos) e tamanhos, para a tela de edição do admin. */
+/** Produto com partes (+ materiais atribuídos), tamanhos e imagens, para a tela de edição do admin. */
 export async function getProductWithConfigForAdmin(id: string) {
   return db.query.products.findFirst({
     where: eq(products.id, id),
@@ -78,6 +78,7 @@ export async function getProductWithConfigForAdmin(id: string) {
         with: { materialOptions: true },
       },
       sizeOptions: { orderBy: [asc(sizeOptions.sortOrder)] },
+      images: { orderBy: [asc(productImages.position)] },
     },
   });
 }
@@ -93,6 +94,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
         },
       },
       sizeOptions: { orderBy: [asc(sizeOptions.sortOrder)] },
+      images: { orderBy: [asc(productImages.position)] },
     },
   });
 
@@ -102,11 +104,15 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     id: row.id,
     slug: row.slug,
     name: row.name,
+    description: row.description,
     basePriceCents: row.basePriceCents,
     weightGrams: row.weightGrams,
     heightCm: row.heightCm,
     widthCm: row.widthCm,
     lengthCm: row.lengthCm,
+    metaTitle: row.metaTitle,
+    metaDescription: row.metaDescription,
+    images: row.images.map((image) => image.url),
     parts: row.parts.map((part) => ({
       id: part.id,
       name: part.name,

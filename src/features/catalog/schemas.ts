@@ -23,6 +23,9 @@ export const productFormSchema = z.object({
   heightCm: optionalPositiveInt,
   widthCm: optionalPositiveInt,
   lengthCm: optionalPositiveInt,
+  // SEO — opcionais; sem eles, a página do produto cai no nome/descrição normais.
+  metaTitle: z.string().trim().max(70, "Máximo 70 caracteres.").optional(),
+  metaDescription: z.string().trim().max(160, "Máximo 160 caracteres.").optional(),
 });
 
 export type ProductFormValues = z.infer<typeof productFormSchema>;

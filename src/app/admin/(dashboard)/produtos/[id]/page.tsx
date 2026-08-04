@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ProductForm } from "@/features/catalog/components/product-form";
+import { ProductImagesManager } from "@/features/catalog/components/product-images-manager";
 import { ProductPartsManager } from "@/features/catalog/components/product-parts-manager";
 import { ProductSizesManager } from "@/features/catalog/components/product-sizes-manager";
 import { getAllFilamentOptions, getCategories, getProductWithConfigForAdmin } from "@/features/catalog/queries";
@@ -28,6 +29,8 @@ export default async function EditarProdutoPage({ params }: PageProps<"/admin/pr
       <ProductSizesManager productId={product.id} sizes={product.sizeOptions} />
 
       <ProductPartsManager productId={product.id} parts={product.parts} allMaterials={allMaterials} />
+
+      <ProductImagesManager productId={product.id} images={product.images} />
     </div>
   );
 }

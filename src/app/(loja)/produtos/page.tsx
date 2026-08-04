@@ -9,6 +9,7 @@ import { formatPriceCents } from "@/lib/format";
 export const metadata: Metadata = {
   title: "Catálogo",
   description: "Fidgets impressos em 3D sob encomenda, com cor e tamanho personalizáveis.",
+  alternates: { canonical: "/produtos" },
 };
 
 // Renderiza por request em vez de estático: evita depender de DATABASE_URL no
