@@ -1,12 +1,27 @@
+import Link from "next/link";
+
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
 export default function AdminDashboardPage() {
-  // TODO(Fase 1): cards de resumo (pedidos aguardando pagamento, imprimindo, etc.)
-  // e atalhos para /admin/produtos e /admin/pedidos.
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-      <p className="mt-2 text-muted-foreground">
-        Em breve: gestão de produtos, materiais, tamanhos e pedidos.
-      </p>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Link href="/admin/produtos">
+          <Card className="transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>Produtos</CardTitle>
+              <CardDescription>Cadastrar e editar o catálogo.</CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+        <Card className="opacity-60">
+          <CardHeader>
+            <CardTitle>Pedidos</CardTitle>
+            <CardDescription>Em breve.</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
     </div>
   );
 }

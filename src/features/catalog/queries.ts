@@ -1,7 +1,7 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/server/db/client";
-import { productParts, products, sizeOptions } from "@/server/db/schema";
+import { categories, productParts, products, sizeOptions } from "@/server/db/schema";
 
 import type { Product } from "./types";
 
@@ -10,6 +10,22 @@ export async function getPublishedProducts() {
     where: eq(products.status, "published"),
     orderBy: [asc(products.createdAt)],
   });
+}
+
+/** Lista todos os produtos (rascunho e publicado) para a tabela do admin. */
+export async function getAllProductsForAdmin() {
+  return db.query.products.findMany({
+    with: { category: true },
+    orderBy: [desc(products.createdAt)],
+  });
+}
+
+export async function getProductByIdForAdmin(id: string) {
+  return db.query.products.findFirst({ where: eq(products.id, id) });
+}
+
+export async function getCategories() {
+  return db.query.categories.findMany({ orderBy: [asc(categories.name)] });
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | null> {
