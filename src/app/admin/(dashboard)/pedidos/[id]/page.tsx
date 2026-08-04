@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { updateOrderStatus } from "@/features/orders/actions";
 import { getOrderByIdForAdmin } from "@/features/orders/queries";
 import { ORDER_STATUS_LABELS } from "@/features/orders/types";
+import type { ShippingAddress } from "@/features/shipping/types";
 import { formatPriceCents } from "@/lib/format";
 
 export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedidos/[id]">) {
@@ -15,6 +16,7 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
   if (!order) notFound();
 
   const payment = order.payments[0];
+  const shippingAddress = order.shippingAddress as ShippingAddress | null;
 
   return (
     <div className="max-w-2xl">
@@ -25,6 +27,20 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
       <p className="mt-1 text-sm text-muted-foreground">
         {order.customerEmail} {order.customerPhone ? `· ${order.customerPhone}` : ""}
       </p>
+
+      <div className="mt-6 rounded-xl bg-card ring-1 ring-foreground/10 p-4">
+        <h2 className="text-sm font-medium">Entrega</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {order.deliveryMethod === "pickup" ? "Retirada em mãos" : `Envio · ${order.shippingCarrierName ?? "Superfrete"}`}
+        </p>
+        {shippingAddress ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            {shippingAddress.street}, {shippingAddress.number}
+            {shippingAddress.complement ? ` - ${shippingAddress.complement}` : ""} · {shippingAddress.neighborhood} ·{" "}
+            {shippingAddress.city}/{shippingAddress.state} · CEP {shippingAddress.zipCode}
+          </p>
+        ) : null}
+      </div>
 
       <div className="mt-6 rounded-xl bg-card ring-1 ring-foreground/10 p-4">
         <h2 className="text-sm font-medium">Itens</h2>
@@ -39,6 +55,12 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
             </li>
           ))}
         </ul>
+        {order.shippingCostCents > 0 ? (
+          <div className="mt-3 flex items-center justify-between border-t pt-3 text-sm text-muted-foreground">
+            <span>Frete</span>
+            <span>{formatPriceCents(order.shippingCostCents)}</span>
+          </div>
+        ) : null}
         <div className="mt-3 flex items-center justify-between border-t pt-3 font-medium">
           <span>Total</span>
           <span>{formatPriceCents(order.totalCents)}</span>

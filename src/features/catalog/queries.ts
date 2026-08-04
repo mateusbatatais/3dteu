@@ -103,6 +103,10 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     slug: row.slug,
     name: row.name,
     basePriceCents: row.basePriceCents,
+    weightGrams: row.weightGrams,
+    heightCm: row.heightCm,
+    widthCm: row.widthCm,
+    lengthCm: row.lengthCm,
     parts: row.parts.map((part) => ({
       id: part.id,
       name: part.name,

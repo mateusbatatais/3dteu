@@ -12,6 +12,10 @@ const produtoUmaPeca: Product = {
   slug: "fidget-simples",
   name: "Fidget Simples",
   basePriceCents: 2500,
+  weightGrams: 30,
+  heightCm: 4,
+  widthCm: 12,
+  lengthCm: 16,
   parts: [{ id: "parte-corpo", name: "corpo", meshFileUrl: null, availableMaterials: [azul, dualAzulLaranja, madeira] }],
   sizeOptions: [
     { id: "size-p", label: "P", scaleFactor: 0.8, priceModifierCents: -300, weightModifierGrams: -10 },
@@ -25,6 +29,10 @@ const produtoDuasPecas: Product = {
   slug: "fidget-multi-peca",
   name: "Fidget Multi-peça",
   basePriceCents: 4000,
+  weightGrams: 45,
+  heightCm: 5,
+  widthCm: 14,
+  lengthCm: 18,
   parts: [
     { id: "parte-corpo", name: "corpo", meshFileUrl: null, availableMaterials: [azul, madeira] },
     { id: "parte-tampa", name: "tampa", meshFileUrl: null, availableMaterials: [azul, dualAzulLaranja] },

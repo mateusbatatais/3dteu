@@ -30,6 +30,13 @@ export interface Product {
   slug: string;
   name: string;
   basePriceCents: number;
+  /** Peso/dimensões da embalagem, usados na cotação de frete. Null nos
+   * produtos cadastrados antes desses campos existirem — a cotação usa um
+   * fallback de caixa pequena nesse caso (ver `features/shipping`). */
+  weightGrams: number | null;
+  heightCm: number | null;
+  widthCm: number | null;
+  lengthCm: number | null;
   parts: ProductPart[];
   sizeOptions: SizeOption[];
 }

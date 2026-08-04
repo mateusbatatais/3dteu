@@ -408,9 +408,36 @@ próxima sessão/rodada precisa confirmar que o usuário rodou a migração (via
 `npm run db:migrate` ou colando o SQL no SQL Editor do Supabase) antes das
 próximas etapas fazerem sentido contra o banco de produção.
 
+**Etapa 2 (cotação de frete no checkout) — feita**: `SuperfreteShippingProvider`
+(`src/features/shipping/superfrete.ts`) implementado contra a documentação
+pública da Superfrete (não testado contra a API real — ver aviso acima).
+`checkout-form.tsx` reescrito de `useState` solto pra `react-hook-form` +
+`zod` (`schemas.ts`, mesmo padrão do `ProductForm`), com seletor de entrega
+(Retirada/Envio), CEP com autocomplete via ViaCEP (`via-cep.ts` — testado de
+verdade via Playwright contra a API pública real, funciona), botão "Calcular
+frete" e lista de opções de transportadora. `submitOrder` nunca confia no
+preço/serviço vindo do cliente: re-cota no servidor (`shipping-quotes.ts`,
+`resolveShippingQuotes`) a partir só do CEP + itens, e só aceita gravar o
+pedido se o `serviceId` escolhido ainda existir na resposta — mesmo
+princípio já usado pra preço de produto. Página de rastreio
+(`/pedido/[token]`) e detalhe do pedido no admin passam a mostrar
+método de entrega, endereço e transportadora/custo de frete quando houver.
+
+**Bug real pego e corrigido durante o teste desta etapa**: a função que
+re-cota o frete (`resolveShippingQuotes`) só tinha try/catch em volta da
+chamada à Superfrete — as consultas ao banco (`getStoreSettings`,
+`getProductBySlug`) ficavam fora do bloco protegido. Sem banco configurado
+localmente (ambiente de dev desta sessão não tem `DATABASE_URL`), cliquei em
+"Calcular frete" via Playwright e a falha se propagava sem tratamento.
+Corrigido envolvendo a função inteira num único try/catch — reproduzido de
+novo depois do fix e confirmado que agora aparece a mensagem "Não foi
+possível calcular o frete agora" em vez de quebrar. **Só foi possível testar
+a metade client-side do fluxo** (alternar retirada/envio, autofill de CEP
+via ViaCEP real, validação de formulário) — a cotação de frete de verdade e
+o envio do pedido continuam sem poder ser testados nesta sessão por falta de
+banco de dados e de token da Superfrete.
+
 **Ainda não iniciado (dentro desta rodada):**
-- Etapa 2: Superfrete — cotação real no checkout (endereço, CEP via ViaCEP,
-  `SuperfreteShippingProvider`, recálculo server-side do frete)
 - Etapa 3: Superfrete — `/admin/configuracoes` (remetente) + emissão de
   etiqueta de verdade
 - Etapa 4: upload de imagens/gifs de produto + SEO avançado (metadata

@@ -4,16 +4,28 @@ import { calculateProductPriceCents, InvalidSelectionError } from "@/features/ca
 import { getProductBySlug } from "@/features/catalog/queries";
 import { sendOrderConfirmationEmail } from "@/features/orders/email";
 import { wooviProvider } from "@/features/payments/woovi";
+import type { DeliveryMethod, ShippingAddress } from "@/features/shipping/types";
 import { db } from "@/server/db/client";
 import { orderItems, orders, payments } from "@/server/db/schema";
 
+import { resolveShippingQuotes } from "./shipping-quotes";
 import type { CartItem } from "./types";
 
 export interface SubmitOrderInput {
   customerName: string;
   customerEmail: string;
   customerPhone?: string;
+  deliveryMethod: DeliveryMethod;
+  /** Obrigatório quando deliveryMethod === "superfrete". */
+  shippingAddress?: ShippingAddress;
+  /** Id do serviço escolhido entre as opções de `getShippingQuotes` — o preço
+   * nunca vem do cliente, é sempre re-buscado aqui a partir deste id. */
+  shippingServiceId?: string;
   items: CartItem[];
+}
+
+export async function getShippingQuotes(zipCode: string, items: CartItem[]) {
+  return resolveShippingQuotes(zipCode, items);
 }
 
 export interface SubmitOrderResult {
@@ -64,8 +76,33 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     });
   }
 
-  // Fase 1: só retirada em mãos (Superfrete entra na Fase 2).
-  const shippingCostCents = 0;
+  let shippingCostCents = 0;
+  let shippingCarrierName: string | null = null;
+  let shippingServiceId: string | null = null;
+  let shippingAddress: ShippingAddress | null = null;
+
+  if (input.deliveryMethod === "superfrete") {
+    if (!input.shippingAddress || !input.shippingServiceId) {
+      return { error: "Preencha o endereço de entrega e escolha uma opção de frete." };
+    }
+
+    // Nunca confia no preço/transportadora vindo do cliente — re-cota com o
+    // mesmo endereço e itens, e só aceita o serviceId escolhido se ele ainda
+    // existir na resposta (preço pode ter mudado desde que o cliente cotou).
+    const { quotes, error } = await resolveShippingQuotes(input.shippingAddress.zipCode, input.items);
+    if (error) return { error };
+
+    const quote = quotes.find((q) => q.serviceId === input.shippingServiceId);
+    if (!quote) {
+      return { error: "A opção de frete escolhida não está mais disponível. Calcule o frete de novo." };
+    }
+
+    shippingCostCents = quote.priceCents;
+    shippingCarrierName = quote.carrierName;
+    shippingServiceId = quote.serviceId;
+    shippingAddress = input.shippingAddress;
+  }
+
   const totalCents = resolvedItems.reduce((sum, item) => sum + item.subtotalCents, 0) + shippingCostCents;
 
   const [order] = await db
@@ -74,9 +111,11 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
       customerName: input.customerName.trim(),
       customerEmail: input.customerEmail.trim(),
       customerPhone: input.customerPhone?.trim() || null,
-      deliveryMethod: "pickup",
-      shippingAddress: null,
+      deliveryMethod: input.deliveryMethod,
+      shippingAddress,
       shippingCostCents,
+      shippingCarrierName,
+      shippingServiceId,
       totalCents,
     })
     .returning();

@@ -12,16 +12,32 @@ export interface ShippingAddress {
 }
 
 export interface ShippingQuote {
+  /** Id do serviço na Superfrete (ex.: "1" = PAC, "2" = SEDEX) — guardado no
+   * pedido pra poder re-cotar o mesmo serviço na hora de comprar a etiqueta. */
+  serviceId: string;
   carrierName: string;
   priceCents: number;
   estimatedDays: number;
 }
 
+/** Um item de carrinho já resolvido em peso/dimensão reais do catálogo. */
+export interface ShippingPackageItem {
+  weightGrams: number;
+  heightCm: number;
+  widthCm: number;
+  lengthCm: number;
+  quantity: number;
+}
+
 /**
  * Contrato para o cálculo de frete. Fase 1: só "pickup" (retirada em mãos,
- * custo zero). Fase 2: implementar SuperfreteShippingProvider chamando a
- * API do Superfrete para cotação e emissão de etiqueta.
+ * custo zero, sem passar por aqui). Fase 2: SuperfreteShippingProvider
+ * (`superfrete.ts`) chama a API real da Superfrete para cotação.
  */
 export interface ShippingProvider {
-  getQuotes(destinationZipCode: string, weightGrams: number): Promise<ShippingQuote[]>;
+  getQuotes(params: {
+    originZipCode: string;
+    destinationZipCode: string;
+    items: ShippingPackageItem[];
+  }): Promise<ShippingQuote[]>;
 }
