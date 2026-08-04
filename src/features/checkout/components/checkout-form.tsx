@@ -47,7 +47,7 @@ export function CheckoutForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <div className="rounded-lg border p-4">
+      <div className="rounded-xl bg-muted/40 p-4">
         <h2 className="text-sm font-medium">Entrega</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Por enquanto só retirada em mãos — combinamos o local/horário por e-mail depois da confirmação.

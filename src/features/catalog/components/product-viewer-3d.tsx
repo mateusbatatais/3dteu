@@ -55,7 +55,7 @@ function Part({ part }: { part: ViewerPart }) {
 
 export function ProductViewer3D({ parts }: { parts: ViewerPart[] }) {
   return (
-    <div className="aspect-square w-full overflow-hidden rounded-lg border bg-muted/30">
+    <div className="aspect-square w-full overflow-hidden rounded-xl bg-muted/30 ring-1 ring-foreground/10">
       <Canvas camera={{ position: [2.5, 2, 2.5], fov: 40 }}>
         <ambientLight intensity={0.7} />
         <directionalLight position={[3, 5, 2]} intensity={1} />

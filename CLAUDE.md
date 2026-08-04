@@ -19,6 +19,15 @@ pensada pra isso).
   como outro elemento (ex.: um `<Link>`), usa-se `render={<Link .../>}` +
   `nativeButton={false}`. `Select` usa `defaultValue`/`value`/`onValueChange`
   (igual Radix), mas `Dialog`/`Sheet` também usam `render` em vez de `asChild`.
+- Rotas da loja (home, produtos, carrinho, checkout, pedido) ficam no route
+  group `src/app/(loja)/` com layout próprio (`SiteHeader`/`SiteFooter`,
+  `src/components/site-*.tsx`) — `/admin` fica fora desse grupo, com seu
+  próprio layout, então não herda o header da loja. Grupo `(loja)` não
+  aparece na URL.
+- Cor de marca: roxo/violeta (`--primary` em `oklch(... 293)` no
+  `globals.css`) substituindo o cinza neutro puro do preset original do
+  shadcn — decisão de design, não peça de dado técnico; se o usuário definir
+  uma identidade visual própria depois, é só trocar essas variáveis.
 - Banco: Supabase (Postgres) via Drizzle ORM. `src/server/db/client.ts` é
   **lazy de propósito** (um `Proxy` que só abre a conexão no primeiro uso
   real) — importar o módulo não exige `DATABASE_URL`. Isso existe porque o
@@ -87,6 +96,12 @@ integração nativa Vercel↔Supabase cria as env vars do Postgres com nomes
 necessário duplicar nada na Vercel** — só falta o usuário confirmar que
 funcionou depois do redeploy desse fix.
 
+Usuário achou o visual "muito feio e mal feito" — feedback válido, o app
+estava no estilo padrão do shadcn sem nenhum polimento. Fez-se uma primeira
+passada de design **só na loja** (usuário escolheu essa prioridade sobre o
+admin). Ver "Feito — design" abaixo. **O admin continua com o visual cru**
+— próxima passada de design, se pedirem.
+
 **Feito — infraestrutura:**
 - Scaffold completo, schema do banco, migration
   (`drizzle/0000_romantic_piledriver.sql`) e seed (`scripts/seed.sql`) já
@@ -125,6 +140,20 @@ real nem contra a API da Woovi de verdade):**
   se existir)
 - Admin de pedidos (`/admin/pedidos`, `/admin/pedidos/[id]`) — lista, detalhe,
   trocar status manualmente
+
+**Feito — design (só na loja, admin não foi tocado):**
+- `SiteHeader` (logo, link pro catálogo, ícone de carrinho com contador) e
+  `SiteFooter` — loja inteira movida pra `src/app/(loja)/` pra compartilhar
+  esse layout sem vazar pro admin
+- Cor de marca violeta aplicada via `globals.css` (afeta o app inteiro,
+  incluindo admin, de graça)
+- Home com seção de destaques (3 cards com ícone), cards de produto na
+  listagem com thumbnail placeholder, swatches de material com anel de
+  seleção em vez de borda+escala, caixa de preço destacada no configurador
+- Verificado visualmente (headless) — sem erros de console, mas **sem
+  testar contra o banco real** (mesma limitação de sempre: sem credenciais
+  do Supabase nesta máquina). Testei o configurador com uma página temporária
+  de dado mockado, que já foi apagada antes do commit.
 
 **Pendente pra fechar o ciclo:**
 - Confirmar env vars da Vercel (`DATABASE_URL`, `DIRECT_DATABASE_URL`

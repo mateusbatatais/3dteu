@@ -1,3 +1,4 @@
+import { Box } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -29,13 +30,18 @@ export default async function ProdutosPage() {
             <Link
               key={product.id}
               href={`/produtos/${product.slug}`}
-              className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+              className="group overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 transition-shadow hover:shadow-md"
             >
-              <h2 className="font-medium">{product.name}</h2>
-              {product.description ? (
-                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{product.description}</p>
-              ) : null}
-              <p className="mt-3 font-semibold">a partir de {formatPriceCents(product.basePriceCents)}</p>
+              <div className="flex aspect-square items-center justify-center bg-gradient-to-br from-primary/15 to-primary/5">
+                <Box className="size-10 text-primary/50 transition-transform group-hover:scale-110" />
+              </div>
+              <div className="p-4">
+                <h2 className="font-medium">{product.name}</h2>
+                {product.description ? (
+                  <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{product.description}</p>
+                ) : null}
+                <p className="mt-3 font-semibold">a partir de {formatPriceCents(product.basePriceCents)}</p>
+              </div>
             </Link>
           ))}
         </div>

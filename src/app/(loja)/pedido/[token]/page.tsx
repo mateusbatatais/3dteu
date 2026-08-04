@@ -26,7 +26,7 @@ export default async function PedidoPage({ params }: PageProps<"/pedido/[token]"
         <span className="text-sm text-muted-foreground">Retirada em mãos</span>
       </div>
 
-      <ul className="mt-6 flex flex-col divide-y rounded-lg border">
+      <ul className="mt-6 flex flex-col divide-y rounded-xl bg-card ring-1 ring-foreground/10">
         {order.items.map((item) => (
           <li key={item.id} className="flex items-center justify-between p-4">
             <div>
@@ -45,14 +45,14 @@ export default async function PedidoPage({ params }: PageProps<"/pedido/[token]"
 
       {order.status === "awaiting_payment" ? (
         payment?.pixQrCode ? (
-          <div className="mt-8 flex flex-col items-center gap-3 rounded-lg border p-6 text-center">
+          <div className="mt-8 flex flex-col items-center gap-3 rounded-xl bg-card ring-1 ring-foreground/10 p-6 text-center">
             <p className="font-medium">Pague com Pix pra confirmar o pedido</p>
             <Image src={payment.pixQrCode} alt="QR code Pix" width={220} height={220} unoptimized />
             <p className="w-full break-all rounded bg-muted p-2 text-xs">{payment.pixCopyPaste}</p>
             <p className="text-xs text-muted-foreground">Depois de pagar, atualize esta página para ver a confirmação.</p>
           </div>
         ) : (
-          <p className="mt-8 rounded-lg border p-4 text-sm text-muted-foreground">
+          <p className="mt-8 rounded-xl bg-card ring-1 ring-foreground/10 p-4 text-sm text-muted-foreground">
             Seu pedido foi registrado, mas a cobrança Pix ainda não foi gerada. Em breve entraremos em contato
             com as instruções de pagamento.
           </p>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ShoppingCart } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -18,15 +19,16 @@ export default function CarrinhoPage() {
       <h1 className="text-3xl font-semibold tracking-tight">Carrinho</h1>
 
       {items.length === 0 ? (
-        <div className="mt-6">
+        <div className="mt-16 flex flex-col items-center gap-3 text-center">
+          <ShoppingCart className="size-10 text-muted-foreground/50" />
           <p className="text-muted-foreground">Seu carrinho está vazio.</p>
-          <Button render={<Link href="/produtos" />} nativeButton={false} className="mt-4">
+          <Button render={<Link href="/produtos" />} nativeButton={false} className="mt-2">
             Ver catálogo
           </Button>
         </div>
       ) : (
         <div className="mt-8 flex flex-col gap-6">
-          <ul className="flex flex-col divide-y rounded-lg border">
+          <ul className="flex flex-col divide-y rounded-xl bg-card ring-1 ring-foreground/10">
             {items.map((item, index) => (
               <li key={`${item.productId}-${index}`} className="flex items-center justify-between gap-4 p-4">
                 <div>

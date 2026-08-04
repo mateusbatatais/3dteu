@@ -79,7 +79,7 @@ export function ProductConfigurator({ product }: { product: Product }) {
 
       <div className="flex flex-col gap-6">
         <div>
-          <h2 className="text-sm font-medium">Tamanho</h2>
+          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Tamanho</h2>
           <div className="mt-2 flex flex-wrap gap-2">
             {product.sizeOptions.map((size) => (
               <Button
@@ -87,6 +87,7 @@ export function ProductConfigurator({ product }: { product: Product }) {
                 type="button"
                 variant={size.id === sizeId ? "default" : "outline"}
                 size="sm"
+                className="min-w-10"
                 onClick={() => setSizeId(size.id)}
               >
                 {size.label}
@@ -97,8 +98,8 @@ export function ProductConfigurator({ product }: { product: Product }) {
 
         {product.parts.map((part) => (
           <div key={part.id}>
-            <h2 className="text-sm font-medium capitalize">{part.name}</h2>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
+            <div className="mt-2 flex flex-wrap gap-3">
               {part.availableMaterials.map((material) => {
                 const isSelected = materialByPart[part.id] === material.id;
                 return (
@@ -109,8 +110,10 @@ export function ProductConfigurator({ product }: { product: Product }) {
                     aria-label={material.name}
                     aria-pressed={isSelected}
                     onClick={() => setMaterialByPart((prev) => ({ ...prev, [part.id]: material.id }))}
-                    className={`h-8 w-8 rounded-full border-2 transition-transform ${
-                      isSelected ? "scale-110 border-foreground" : "border-transparent"
+                    className={`size-9 rounded-full transition-shadow ${
+                      isSelected
+                        ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                        : "ring-1 ring-border hover:ring-foreground/30"
                     }`}
                     style={{
                       background: material.hexColorSecondary
@@ -124,9 +127,9 @@ export function ProductConfigurator({ product }: { product: Product }) {
           </div>
         ))}
 
-        <div className="mt-auto border-t pt-4">
+        <div className="mt-auto rounded-xl bg-muted/40 p-4">
           <p className="text-2xl font-semibold">{priceCents !== null ? formatPriceCents(priceCents) : "—"}</p>
-          <Button className="mt-4 w-full" disabled={priceCents === null} onClick={handleAddToCart}>
+          <Button className="mt-4 w-full" size="lg" disabled={priceCents === null} onClick={handleAddToCart}>
             Adicionar ao carrinho
           </Button>
         </div>
