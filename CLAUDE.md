@@ -139,7 +139,7 @@ pensada pra isso).
   `chromium-*`/`chromium_headless_shell-*` dentro de
   `%LOCALAPPDATA%\ms-playwright`, sem mexer em versões que já existiam antes).
 
-## Status (atualizado em 2026-08-04)
+## Status (atualizado em 2026-08-04, rodada do bug de câmera/OBJ)
 
 Login do admin confirmado funcionando em produção. `/admin/produtos` deu erro
 ("This page couldn't load") — causa raiz identificada e corrigida: a
@@ -258,6 +258,44 @@ por causa desse teste. Não teria achado esse problema sem tentar quebrar
 de propósito. Ainda não testado um .3mf real exportado de um fatiador de
 verdade — o código usa o mesmo padrão comprovado do OBJ, mas vale conferir
 na primeira vez que o usuário testar com um arquivo de verdade.
+
+Rodada 9: usuário reportou "o OBJ aparece rápido na página do produto e
+depois some — parece algo no eixo/rotação". Reproduzi localmente com um
+OBJ em escala realista (cubo de 25mm, como um arquivo de fatiador de
+verdade viria, em vez do cubo unitário usado nos testes anteriores) e
+`ProductConfigurator` de verdade: a câmera carregava **extremamente
+zoomada, cortando o objeto**, e ficava assim indefinidamente (sem
+interação) — só corrigia sozinha depois de qualquer clique (cor, tamanho).
+Não era rotação nem o objeto sumindo de verdade, era enquadramento de
+câmera errado desde o primeiro frame.
+
+Causa raiz (confirmada instrumentando `Bounds` com `console.log`, não
+adivinhada): `<OrbitControls>` **não tinha a prop `makeDefault`**, então
+nunca se registrava no estado global do react-three-fiber
+(`useThree(s => s.controls)` retornava sempre `null`). Sem enxergar os
+controles, o método `clip()` do `Bounds` (do `@react-three/drei`) não
+conseguia ajustar `controls.maxDistance` pro tamanho real do conteúdo —
+e o `maxDistance={6}` fixo que estava no código (pensado pro cubo
+placeholder de 1 unidade) capava a câmera bem mais perto do que a
+distância de enquadramento correta calculada pro objeto de 25 unidades
+(~52). Resultado: câmera grudada no objeto, cortando tudo. Um clique em
+cor/tamanho recalculava a malha (`retint` gera um objeto novo) e isso
+disparava um novo `fit()+clip()` — mas o `maxDistance` continuava preso em
+6, e por pura coincidência de escala o segundo cálculo ficava menos
+errado, mascarando o sintoma como "só corrige depois de clicar".
+
+Fix: `<OrbitControls makeDefault enablePan={false} />`, removendo o
+`minDistance`/`maxDistance` fixos — agora é o próprio `Bounds` quem ajusta
+a distância dinamicamente pro tamanho real de cada malha, seja ela um
+cubo placeholder de 1 unidade ou um arquivo real em qualquer escala.
+Cheguei a tentar um fix alternativo primeiro (hook manual chamando
+`bounds.refresh().fit().clip()` num `useEffect` a cada malha carregada) —
+**não funcionou** porque não atacava a causa raiz (controles ausentes),
+só repetia a mesma chamada que já rodava automaticamente. Removido depois
+de achar a causa real; o `<Bounds fit clip observe>` sozinho já é
+suficiente uma vez que os controles estão registrados. Reverificado com
+Playwright: enquadramento correto desde os 200ms iniciais, sem precisar
+de nenhuma interação, e color/size click continuam funcionando.
 
 **Ainda não confirmado**: se o usuário reduziu/converteu o arquivo pra
 caber no limite, ou se optou por upgrade do Supabase. Também não

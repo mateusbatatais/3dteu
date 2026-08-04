@@ -137,7 +137,10 @@ export function ProductViewer3D({
           </Bounds>
           <Environment preset="city" />
         </Suspense>
-        {interactive ? <OrbitControls enablePan={false} minDistance={1.5} maxDistance={6} /> : null}
+        {/* makeDefault registra os controles no estado global do r3f — sem isso o
+        Bounds não os enxerga e não ajusta o maxDistance, então um objeto maior
+        que a distância fixa antiga (6) ficava com a câmera grudada nele. */}
+        {interactive ? <OrbitControls makeDefault enablePan={false} /> : null}
       </Canvas>
     </div>
   );
