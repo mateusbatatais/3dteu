@@ -139,7 +139,7 @@ pensada pra isso).
   `chromium-*`/`chromium_headless_shell-*` dentro de
   `%LOCALAPPDATA%\ms-playwright`, sem mexer em versões que já existiam antes).
 
-## Status (atualizado em 2026-08-04, rodada do bug de câmera/OBJ)
+## Status (atualizado em 2026-08-04, rodada 10 — Superfrete/SEO/admin)
 
 Login do admin confirmado funcionando em produção. `/admin/produtos` deu erro
 ("This page couldn't load") — causa raiz identificada e corrigida: a
@@ -381,12 +381,52 @@ real nem contra a API da Woovi de verdade):**
   as ferramentas não apareceram em nenhuma sessão até agora — continuar
   rodando `ToolSearch` no início de sessões novas pra checar
 
-**Ainda não iniciado:**
-- Superfrete (cálculo de frete + etiqueta) — Fase 2
+### Rodada 10: Superfrete completo + SEO avançado (com imagens/gifs) + polimento do admin
+
+Usuário priorizou 3 frentes de uma vez (Superfrete, SEO avançado, polimento
+do admin) e confirmou dois pontos de escopo maior do que o mínimo: (1)
+Superfrete inclui emissão de etiqueta de verdade, não só cotação — precisa
+de endereço de remetente da loja e dimensões de embalagem por produto, que
+não existiam; (2) em vez de imagem OG só gerada por texto, o admin vai poder
+subir fotos/gifs reais do produto (a imagem OG usa a primeira foto quando
+existir, com fallback pro card gerado por texto). Plano completo (5 etapas)
+salvo em `C:\Users\Mateus\.claude\plans\graceful-prancing-corbato.md`.
+
+**Etapa 1 (migração de banco) — feita**: `src/server/db/schema.ts` ganhou
+`products.heightCm/widthCm/lengthCm` (nullable — produtos antigos caem num
+fallback de caixa pequena até o admin preencher), `orders.shippingCarrierName`
+/`shippingServiceId` (guardam o serviço cotado no checkout pra re-cotar na
+hora de comprar a etiqueta), tabela `shipments` (espelha `payments`:
+provider/externalId/status/rawPayload — só ganha uma linha quando o admin
+clica em "comprar etiqueta", nunca automático, já que gasta saldo real da
+carteira Superfrete), tabela `storeSettings` (linha única, endereço de
+remetente) e tabela `productImages` (galeria de fotos/gifs por produto).
+Migração `drizzle/0001_brainy_the_order.sql` gerada e revisada — só `CREATE
+TABLE`/`ALTER TABLE ADD COLUMN` aditivos, nada destrutivo, seguro rodar
+contra o banco de produção. **Ainda não aplicada no Supabase real** —
+próxima sessão/rodada precisa confirmar que o usuário rodou a migração (via
+`npm run db:migrate` ou colando o SQL no SQL Editor do Supabase) antes das
+próximas etapas fazerem sentido contra o banco de produção.
+
+**Ainda não iniciado (dentro desta rodada):**
+- Etapa 2: Superfrete — cotação real no checkout (endereço, CEP via ViaCEP,
+  `SuperfreteShippingProvider`, recálculo server-side do frete)
+- Etapa 3: Superfrete — `/admin/configuracoes` (remetente) + emissão de
+  etiqueta de verdade
+- Etapa 4: upload de imagens/gifs de produto + SEO avançado (metadata
+  dinâmica, sitemap, robots, JSON-LD, OG image)
+- Etapa 5: polimento visual do admin (estado ativo no menu, dashboard com
+  dados reais, confirmação antes de excluir, tabs no produto, cores de
+  status, toast consistente)
+
+**Aviso já registrado no plano**: a integração com a Superfrete (etapas 2 e
+3) não pode ser testada contra a API real nesta sessão (sem token) — mesmo
+problema já documentado com a Woovi. Vai ser implementada contra a
+documentação pública, mas o formato exato de request/response só se
+confirma no primeiro teste real.
+
+**Ainda não iniciado (fora desta rodada):**
 - Asaas (cartão/boleto) — Fase 3
-- SEO avançado (sitemap, JSON-LD, OG dinâmico)
-- Reformulação visual mais profunda do admin, se o usuário ainda achar
-  insuficiente depois desta rodada (menu + polimento básico já entraram)
 
 ## Preferências do usuário (importante)
 

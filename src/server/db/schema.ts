@@ -47,6 +47,8 @@ export const paymentStatusEnum = pgEnum("payment_status", [
 
 export const adminRoleEnum = pgEnum("admin_role", ["admin", "editor"]);
 
+export const shipmentStatusEnum = pgEnum("shipment_status", ["pending", "purchased", "error"]);
+
 // ---------------------------------------------------------------------------
 // Catálogo
 // ---------------------------------------------------------------------------
@@ -70,6 +72,12 @@ export const products = pgTable("products", {
   basePriceCents: integer("base_price_cents").notNull(),
   weightGrams: integer("weight_grams"),
   printTimeMinutes: integer("print_time_minutes"),
+  // Dimensões da embalagem para cotação/etiqueta de frete — null nos produtos
+  // cadastrados antes desta coluna existir; a cotação usa um fallback de
+  // caixa pequena nesse caso (ver src/features/shipping/superfrete.ts).
+  heightCm: integer("height_cm"),
+  widthCm: integer("width_cm"),
+  lengthCm: integer("length_cm"),
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),
   ogImageUrl: text("og_image_url"),
@@ -139,6 +147,18 @@ export const sizeOptions = pgTable("size_options", {
   sortOrder: integer("sort_order").default(0).notNull(),
 });
 
+// Fotos/gifs reais do produto impresso — complementam (não substituem) o
+// preview 3D e alimentam a imagem de Open Graph quando existirem.
+export const productImages = pgTable("product_images", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  productId: uuid("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  position: integer("position").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // Pedidos
 // ---------------------------------------------------------------------------
@@ -154,6 +174,10 @@ export const orders = pgTable("orders", {
   deliveryMethod: deliveryMethodEnum("delivery_method").notNull(),
   shippingAddress: jsonb("shipping_address"), // null quando deliveryMethod = "pickup"
   shippingCostCents: integer("shipping_cost_cents").default(0).notNull(),
+  // Serviço da Superfrete cotado/escolhido no checkout — guardados pra poder
+  // re-cotar o mesmo serviço na hora de comprar a etiqueta (ver `shipments`).
+  shippingCarrierName: text("shipping_carrier_name"),
+  shippingServiceId: text("shipping_service_id"),
   totalCents: integer("total_cents").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -192,6 +216,47 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Etiqueta de envio comprada via Superfrete para um pedido — espelha o
+// formato de `payments` (provider + externalId + status + payload bruto).
+// Uma linha só é criada quando o admin confirma a compra (nunca automático,
+// já que isso gasta saldo real da carteira Superfrete).
+export const shipments = pgTable("shipments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  orderId: uuid("order_id")
+    .notNull()
+    .unique()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  provider: text("provider").default("superfrete").notNull(),
+  externalId: text("external_id"),
+  trackingCode: text("tracking_code"),
+  labelUrl: text("label_url"),
+  status: shipmentStatusEnum("status").default("pending").notNull(),
+  rawPayload: jsonb("raw_payload"), // resposta bruta da Superfrete, para auditoria
+  purchasedAt: timestamp("purchased_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// Configuração da loja
+// ---------------------------------------------------------------------------
+
+// Linha única (id fixo "default") com os dados do remetente usados para
+// emitir etiquetas de frete — preenchido em /admin/configuracoes.
+export const storeSettings = pgTable("store_settings", {
+  id: text("id").primaryKey().default("default"),
+  senderName: text("sender_name"),
+  senderDocument: text("sender_document"), // CPF ou CNPJ
+  senderPhone: text("sender_phone"),
+  zipCode: text("zip_code"),
+  street: text("street"),
+  number: text("number"),
+  complement: text("complement"),
+  neighborhood: text("neighborhood"),
+  city: text("city"),
+  state: text("state"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // Admin
 // ---------------------------------------------------------------------------
@@ -218,6 +283,11 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, { fields: [products.categoryId], references: [categories.id] }),
   parts: many(productParts),
   sizeOptions: many(sizeOptions),
+  images: many(productImages),
+}));
+
+export const productImagesRelations = relations(productImages, ({ one }) => ({
+  product: one(products, { fields: [productImages.productId], references: [products.id] }),
 }));
 
 export const productPartsRelations = relations(productParts, ({ one, many }) => ({
@@ -247,9 +317,14 @@ export const sizeOptionsRelations = relations(sizeOptions, ({ one }) => ({
   product: one(products, { fields: [sizeOptions.productId], references: [products.id] }),
 }));
 
-export const ordersRelations = relations(orders, ({ many }) => ({
+export const ordersRelations = relations(orders, ({ one, many }) => ({
   items: many(orderItems),
   payments: many(payments),
+  shipment: one(shipments, { fields: [orders.id], references: [shipments.orderId] }),
+}));
+
+export const shipmentsRelations = relations(shipments, ({ one }) => ({
+  order: one(orders, { fields: [shipments.orderId], references: [orders.id] }),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
