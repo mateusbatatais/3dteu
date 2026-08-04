@@ -26,27 +26,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
 
-  e2e:
-    runs-on: ubuntu-latest
-    needs: lint-test-build
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
+# E2E (Playwright) roda só manualmente/local (`npm run test:e2e`) — tirado do
+# CI porque instalar o Chromium a cada push consumia muita cota do GitHub
+# Actions. Lint/unit tests/build continuam automáticos aqui porque são
+# rápidos e baratos; a rede de segurança extra fica no pre-commit/pre-push
+# (ver .husky/).
