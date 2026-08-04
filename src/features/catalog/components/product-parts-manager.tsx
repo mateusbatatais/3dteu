@@ -20,6 +20,8 @@ interface MaterialOption {
   hexColorSecondary: string | null;
 }
 
+const SECTION_LABEL_CLASS = "text-xs font-medium tracking-wide text-muted-foreground uppercase";
+
 export function ProductPartsManager({
   productId,
   parts,
@@ -51,62 +53,66 @@ export function ProductPartsManager({
                 </form>
               </div>
 
-              {allMaterials.length === 0 ? (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Cadastre materiais em /admin/materiais antes de atribuí-los a uma parte.
-                </p>
-              ) : (
-                <form action={setPartMaterials.bind(null, productId, part.id)} className="mt-3">
-                  <div className="flex flex-wrap gap-3">
-                    {allMaterials.map((material) => (
-                      <label key={material.id} className="flex items-center gap-1.5 text-sm">
-                        <input
-                          type="checkbox"
-                          name="filamentOptionId"
-                          value={material.id}
-                          defaultChecked={selectedIds.has(material.id)}
-                          className="size-4"
-                        />
-                        <span
-                          className="inline-block size-3.5 rounded-full border"
-                          style={{
-                            background: material.hexColorSecondary
-                              ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
-                              : (material.hexColor ?? "#a1a1aa"),
-                          }}
-                        />
-                        {material.name}
-                      </label>
-                    ))}
-                  </div>
-                  <Button type="submit" size="sm" variant="outline" className="mt-3">
-                    Salvar materiais desta parte
-                  </Button>
-                </form>
-              )}
-
-              <div className="mt-4 flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-start">
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
                 <div className="w-full max-w-40 shrink-0">
                   <ProductViewer3D
                     parts={[{ id: part.id, meshUrl: part.meshFileUrl, color: "#a1a1aa", colorSecondary: null }]}
                     interactive={false}
                   />
-                </div>
-                <div className="flex-1">
-                  <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
                   {part.meshFileUrl ? (
                     <a
                       href={part.meshFileUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-2 block break-all text-xs text-muted-foreground underline-offset-2 hover:underline"
+                      className="mt-1.5 block break-all text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
                     >
                       Ver arquivo enviado
                     </a>
-                  ) : (
-                    <p className="mt-2 text-xs text-muted-foreground">Nenhum arquivo enviado ainda.</p>
-                  )}
+                  ) : null}
                 </div>
+                <div className="flex-1">
+                  <h3 className={SECTION_LABEL_CLASS}>Arquivo 3D (STL)</h3>
+                  <div className="mt-2">
+                    <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 border-t pt-3">
+                <h3 className={SECTION_LABEL_CLASS}>Materiais aceitos</h3>
+                {allMaterials.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Cadastre materiais em /admin/materiais antes de atribuí-los a uma parte.
+                  </p>
+                ) : (
+                  <form action={setPartMaterials.bind(null, productId, part.id)} className="mt-2">
+                    <div className="flex flex-wrap gap-3">
+                      {allMaterials.map((material) => (
+                        <label key={material.id} className="flex items-center gap-1.5 text-sm">
+                          <input
+                            type="checkbox"
+                            name="filamentOptionId"
+                            value={material.id}
+                            defaultChecked={selectedIds.has(material.id)}
+                            className="size-4"
+                          />
+                          <span
+                            className="inline-block size-3.5 rounded-full border"
+                            style={{
+                              background: material.hexColorSecondary
+                                ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
+                                : (material.hexColor ?? "#a1a1aa"),
+                            }}
+                          />
+                          {material.name}
+                        </label>
+                      ))}
+                    </div>
+                    <Button type="submit" size="sm" variant="outline" className="mt-3">
+                      Salvar materiais desta parte
+                    </Button>
+                  </form>
+                )}
               </div>
             </div>
           );

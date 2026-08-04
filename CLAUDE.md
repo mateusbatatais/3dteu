@@ -209,15 +209,38 @@ Vercel/Next.js:
   50MB — **o usuário precisa subir esse valor manualmente no painel**, não
   tem como fazer isso por SQL.
 
-**Resumo de todas as camadas de limite de tamanho que já apareceram nessa
-saga, da mais pra menos restritiva historicamente**: Next.js Server Action
-body (1MB, contornado com upload direto) → Vercel Function payload (4,5MB,
-teto fixo, também contornado) → Supabase Storage global file size limit
-(configurável até 50MB no free tier, **ainda pendente de confirmação que o
-usuário subiu**) → Supabase Storage bucket file_size_limit (50MB, já
-setado via SQL). Se aparecer outro erro de tamanho depois de tudo isso, o
-arquivo real provavelmente passa de 50MB — nesse caso o problema vira
-"como reduzir o STL", não mais configuração.
+Rodada 7: usuário revelou que **o arquivo real tem 70MB** — passa até do
+teto absoluto do plano gratuito do Supabase (50MB, não configurável sem
+virar plano pago). Resumo de todas as camadas de limite que apareceram
+nessa saga, da mais pra menos restritiva historicamente: Next.js Server
+Action body (1MB, contornado com upload direto) → Vercel Function payload
+(4,5MB, teto fixo, também contornado) → Supabase Storage global file size
+limit + bucket file_size_limit (50MB no free tier, é o teto de verdade).
+
+Nessa rodada, além de explicar o teto de 50MB (opções: reduzir a malha do
+STL, exportar como binário em vez de ASCII, ou virar plano Pro do Supabase
+— decisão do usuário, não deu pra saber qual ele escolheu), o usuário
+repetiu a reclamação de UX: "o file upload tá muito feio e escondido".
+Resposta nessa sessão:
+- `MAX_MESH_FILE_SIZE_BYTES` (50MB) virou constante compartilhada
+  (`storage-constants.ts`) e o `MeshUploadForm` agora **valida o tamanho no
+  cliente, na hora de escolher o arquivo** — mostra erro claro
+  (`"Esse arquivo tem 70.0MB, e o máximo é 50.0MB..."`) **sem nenhuma
+  chamada de rede**, confirmado via Playwright (0 requisições POST feitas
+  ao selecionar um arquivo grande demais).
+- Redesenhei a seção dentro de `ProductPartsManager`: label
+  "ARQUIVO 3D (STL)" em destaque (mesmo estilo dos labels do
+  `ProductConfigurator`), caixa com borda tracejada (convenção visual de
+  upload), aviso de "Máximo 50.0MB" sempre visível, nome+tamanho do arquivo
+  mostrado assim que selecionado. Também reordenei: upload agora vem antes
+  da seção de materiais, não depois — é a primeira coisa que aparece dentro
+  do card da parte.
+
+**Ainda não confirmado**: se o usuário reduziu/converteu o arquivo pra
+caber no limite, ou se optou por upgrade do Supabase. Também não
+confirmado se ele já subiu o Global file size limit do projeto pra 50MB no
+painel (pendente desde a rodada 6) — sem isso, mesmo um arquivo de 40MB
+ainda seria barrado pelo Supabase.
 
 **Feito — infraestrutura:**
 - Scaffold completo, schema do banco, migration
