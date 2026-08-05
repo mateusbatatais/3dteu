@@ -570,6 +570,59 @@ problema já documentado com a Woovi. Vai ser implementada contra a
 documentação pública, mas o formato exato de request/response só se
 confirma no primeiro teste real.
 
+### Rodada 11: `/admin` quebrado em produção depois da rodada 10
+
+Usuário rodou a migração 0001 (com um recomeço no meio — `CREATE TYPE
+"shipment_status"` já existia de uma tentativa anterior que tinha parado no
+meio; resolvido com uma versão idempotente do mesmo SQL, `CREATE TABLE IF
+NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` / `DO $$ ... EXCEPTION WHEN
+duplicate_object` em volta do `CREATE TYPE`/`ADD CONSTRAINT`, que não têm
+"IF NOT EXISTS" nativo no Postgres). Mesmo com a migração aplicada e o
+deploy confirmado (`575f6bf`, "Ready" no painel da Vercel), `/admin`
+continuava com "This page couldn't load" (React error #441, que em produção
+só diz "erro no Server Components render", sem detalhe) logo depois do
+login.
+
+**Causa raiz real** (não foi a query de estatísticas do dashboard, que já
+tinha sido blindada com try/catch numa tentativa anterior — isso sozinho
+não resolveu): `src/app/admin/(dashboard)/admin-nav.tsx` recebia
+`NAV_ITEMS` via prop vinda de `layout.tsx` (Server Component), e cada item
+carrega `icon: LayoutDashboard` etc. — uma **referência de componente**.
+Passar isso de um Server Component pra um Client Component quebra em
+produção ("Functions cannot be passed directly to Client Components"),
+mesmo passando limpo no `next build` local (TypeScript não pega isso — só
+falha no render de verdade, contra uma requisição real). Como o erro
+acontecia na camada do **layout**, ele derrubava TODA rota dentro de
+`admin/(dashboard)/`, não só o dashboard — o usuário só tinha testado
+`/admin` especificamente, mas o sintoma real provavelmente afetava
+`/admin/produtos`, `/admin/pedidos` etc. também.
+
+**Por que passou batido na verificação da Etapa 5**: a página de teste usada
+pra verificar `AdminSidebarNav` via Playwright tinha `"use client"` no topo
+— ou seja, o teste rodou inteiramente do lado do cliente, sem nunca
+atravessar a fronteira Server→Client de verdade que só existe quando um
+Server Component de verdade (o `layout.tsx` real) passa a prop pro
+Client Component. Lição: testar um Client Component isolado numa página
+client não prova que o caminho real (Server Component pai → Client
+Component filho) funciona.
+
+**Fix**: `NAV_ITEMS` passou a ser definido dentro do próprio
+`admin-nav.tsx` (que já é `"use client"`), eliminando a travessia da
+fronteira — `AdminSidebarNav`/`AdminMobileNav` não recebem mais `items`
+como prop. **Verificado de verdade**: rodei o dev server local e conferi o
+log (`.next/dev/logs/next-development.log`) antes/depois — antes da
+correção não dava pra reproduzir sem banco real; depois da correção,
+`curl http://localhost:3000/admin` retornou **200** mesmo sem
+`DATABASE_URL` configurada localmente (o log mostra só o erro esperado de
+banco ausente, capturado pelo try/catch do dashboard — nenhum erro de
+"functions cannot be passed"). Antes disso, qualquer rota do admin
+quebraria já na camada do layout, antes até de tentar consultar o banco.
+
+**Ainda não confirmado pelo usuário**: se `/admin` (e as outras rotas do
+admin) já carregam certo em produção depois desse deploy
+(commit `0c24f38`) — perguntar/confirmar numa sessão nova se isso não
+aparecer registrado como resolvido.
+
 **Ainda não iniciado (fora desta rodada):**
 - Asaas (cartão/boleto) — Fase 3
 
