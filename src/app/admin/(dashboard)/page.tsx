@@ -1,7 +1,7 @@
 import { Clock, DollarSign, Package, ShoppingBag } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAdminDashboardStats } from "@/features/orders/queries";
+import { getAdminDashboardStats, type AdminDashboardStats } from "@/features/orders/queries";
 import { formatPriceCents } from "@/lib/format";
 
 const STAT_CARDS = [
@@ -32,7 +32,16 @@ const STAT_CARDS = [
 ];
 
 export default async function AdminDashboardPage() {
-  const stats = await getAdminDashboardStats();
+  // Best-effort, mesmo princípio já usado pra Woovi/Resend/Superfrete: os
+  // números do dashboard são um extra, nunca deveriam derrubar a página
+  // inteira. Se a query falhar, loga o erro de verdade (aparece no log da
+  // Vercel) e mostra "—" em vez de "This page couldn't load".
+  let stats: AdminDashboardStats | null = null;
+  try {
+    stats = await getAdminDashboardStats();
+  } catch (error) {
+    console.error("[admin] falha ao buscar estatísticas do dashboard", error);
+  }
 
   return (
     <div>
@@ -47,7 +56,7 @@ export default async function AdminDashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <CardTitle className="text-2xl">{stat.format(stats[stat.key])}</CardTitle>
+              <CardTitle className="text-2xl">{stats ? stat.format(stats[stat.key]) : "—"}</CardTitle>
             </CardContent>
           </Card>
         ))}
