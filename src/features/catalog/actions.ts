@@ -7,7 +7,14 @@ import { redirect } from "next/navigation";
 import { createStorageClient, MEDIA_BUCKET, MODELS_BUCKET } from "@/lib/supabase/storage";
 import { ALLOWED_MEDIA_EXTENSIONS, ALLOWED_MESH_EXTENSIONS, type MediaExtension, type MeshExtension } from "@/lib/supabase/storage-constants";
 import { db } from "@/server/db/client";
-import { productImages, productPartMaterialOptions, productParts, products, sizeOptions } from "@/server/db/schema";
+import {
+  productImages,
+  productPartMaterialOptions,
+  productPartRegions,
+  productParts,
+  products,
+  sizeOptions,
+} from "@/server/db/schema";
 
 import { productFormSchema, type ProductFormValues } from "./schemas";
 
@@ -177,17 +184,48 @@ export interface ConfirmMeshResult {
   error?: string;
 }
 
-export async function confirmPartMesh(productId: string, partId: string, path: string): Promise<ConfirmMeshResult> {
+function defaultRegionLabel(paintState: number): string {
+  return paintState === 0 ? "Região padrão" : `Extrusora ${paintState}`;
+}
+
+/**
+ * `paintStates`: estados detectados no navegador na hora do upload (ver
+ * mmu-3mf.ts) quando o arquivo é um .3mf pintado (MMU) — undefined/vazio pra
+ * um arquivo normal. Substitui completamente as regiões da parte: um novo
+ * upload troca o arquivo inteiro, então as regiões antigas não fazem
+ * sentido mais (podem nem existir no arquivo novo).
+ */
+export async function confirmPartMesh(
+  productId: string,
+  partId: string,
+  path: string,
+  paintStates?: number[],
+): Promise<ConfirmMeshResult> {
   try {
     const storage = createStorageClient();
     const {
       data: { publicUrl },
     } = storage.storage.from(MODELS_BUCKET).getPublicUrl(path);
 
-    await db
-      .update(productParts)
-      .set({ meshFileUrl: publicUrl, stlFileUrl: publicUrl })
-      .where(eq(productParts.id, partId));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(productParts)
+        .set({ meshFileUrl: publicUrl, stlFileUrl: publicUrl })
+        .where(eq(productParts.id, partId));
+
+      await tx.delete(productPartRegions).where(eq(productPartRegions.productPartId, partId));
+
+      if (paintStates && paintStates.length > 0) {
+        await tx.insert(productPartRegions).values(
+          paintStates.map((paintState, index) => ({
+            productPartId: partId,
+            paintState,
+            label: defaultRegionLabel(paintState),
+            sortOrder: index,
+          })),
+        );
+      }
+    });
 
     await revalidateProductPages(productId);
     return {};
@@ -195,6 +233,14 @@ export async function confirmPartMesh(productId: string, partId: string, path: s
     const message = error instanceof Error ? error.message : "Erro desconhecido.";
     return { error: `Falha ao confirmar o upload: ${message}` };
   }
+}
+
+export async function updateRegionLabel(productId: string, regionId: string, formData: FormData) {
+  const label = String(formData.get("label") ?? "").trim();
+  if (!label) return;
+
+  await db.update(productPartRegions).set({ label }).where(eq(productPartRegions.id, regionId));
+  await revalidateProductPages(productId);
 }
 
 export async function setPartMaterials(productId: string, partId: string, formData: FormData) {

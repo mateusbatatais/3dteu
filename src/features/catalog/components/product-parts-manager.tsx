@@ -2,16 +2,23 @@ import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addProductPart, deleteProductPart, setPartMaterials } from "@/features/catalog/actions";
+import { addProductPart, deleteProductPart, setPartMaterials, updateRegionLabel } from "@/features/catalog/actions";
 
 import { MeshUploadForm } from "./mesh-upload-form";
 import { ProductViewer3D } from "./product-viewer-3d";
+
+interface RegionRow {
+  id: string;
+  label: string;
+  paintState: number;
+}
 
 interface PartRow {
   id: string;
   name: string;
   meshFileUrl: string | null;
   materialOptions: Array<{ filamentOptionId: string }>;
+  regions: RegionRow[];
 }
 
 interface MaterialOption {
@@ -78,6 +85,30 @@ export function ProductPartsManager({
                   </div>
                 </div>
               </div>
+
+              {part.regions.length > 0 ? (
+                <div className="mt-4 border-t pt-3">
+                  <h3 className={SECTION_LABEL_CLASS}>Regiões pintadas (.3mf multi-cor)</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Detectadas automaticamente no arquivo enviado. O cliente escolhe uma cor por região, entre os
+                    materiais aceitos abaixo. Renomeie pra facilitar (ex.: &ldquo;Corpo&rdquo;, &ldquo;Manchas&rdquo;).
+                  </p>
+                  <div className="mt-2 flex flex-col gap-2">
+                    {part.regions.map((region) => (
+                      <form
+                        key={region.id}
+                        action={updateRegionLabel.bind(null, productId, region.id)}
+                        className="flex items-center gap-2"
+                      >
+                        <Input name="label" defaultValue={region.label} className="h-8 max-w-48 text-sm" />
+                        <Button type="submit" size="sm" variant="outline">
+                          Salvar
+                        </Button>
+                      </form>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-4 border-t pt-3">
                 <h3 className={SECTION_LABEL_CLASS}>Materiais aceitos</h3>

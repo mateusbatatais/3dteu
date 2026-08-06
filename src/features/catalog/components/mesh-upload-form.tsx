@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getMeshExtension, MAX_MESH_FILE_SIZE_BYTES, MODELS_BUCKET } from "@/lib/supabase/storage-constants";
 
 import { confirmPartMesh, createMeshUploadUrl } from "../actions";
+import { detectPaintedStates } from "../mmu-3mf";
 
 const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
   stl: "model/stl",
@@ -32,18 +33,25 @@ export function MeshUploadForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // Regiões pintadas (MMU) detectadas no .3mf selecionado — null = ainda não
+  // detectado/não é um .3mf pintado. A detecção rola no navegador, no arquivo
+  // que o próprio admin acabou de escolher, antes de qualquer upload.
+  const [detectedStates, setDetectedStates] = useState<number[] | null>(null);
+  const [isDetecting, setIsDetecting] = useState(false);
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     setSuccess(false);
     setError(null);
+    setDetectedStates(null);
 
     if (!selected) {
       setFile(null);
       return;
     }
 
-    if (!getMeshExtension(selected.name)) {
+    const extension = getMeshExtension(selected.name);
+    if (!extension) {
       setError("Formato não suportado. Use .stl, .obj ou .3mf.");
       setFile(null);
       event.target.value = "";
@@ -62,6 +70,19 @@ export function MeshUploadForm({
     }
 
     setFile(selected);
+
+    if (extension === "3mf") {
+      setIsDetecting(true);
+      try {
+        const states = await detectPaintedStates(selected);
+        setDetectedStates(states);
+      } catch {
+        // Arquivo não é um 3MF pintado (ou não deu pra ler) — trata como arquivo normal, sem erro pro admin.
+        setDetectedStates(null);
+      } finally {
+        setIsDetecting(false);
+      }
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -95,14 +116,16 @@ export function MeshUploadForm({
         return;
       }
 
-      // 3) Confirma no servidor: grava a URL pública na parte do produto.
-      const confirmed = await confirmPartMesh(productId, partId, prepared.path);
+      // 3) Confirma no servidor: grava a URL pública na parte do produto (+
+      // as regiões pintadas detectadas no passo anterior, se houver).
+      const confirmed = await confirmPartMesh(productId, partId, prepared.path, detectedStates ?? undefined);
       if (confirmed.error) {
         setError(confirmed.error);
         return;
       }
 
       setFile(null);
+      setDetectedStates(null);
       setSuccess(true);
     });
   }
@@ -128,7 +151,17 @@ export function MeshUploadForm({
         </p>
       ) : null}
 
-      <Button type="submit" size="sm" disabled={isPending || !file} className="mt-1 self-start">
+      {isDetecting ? (
+        <p className="text-xs text-muted-foreground">Verificando se o .3mf tem regiões pintadas (MMU)...</p>
+      ) : null}
+      {detectedStates && detectedStates.length > 0 ? (
+        <p className="text-xs font-medium text-primary">
+          Detectamos {detectedStates.length} região(ões) pintada(s) neste arquivo — o cliente vai poder escolher
+          uma cor por região.
+        </p>
+      ) : null}
+
+      <Button type="submit" size="sm" disabled={isPending || isDetecting || !file} className="mt-1 self-start">
         {isPending ? "Enviando..." : "Confirmar envio"}
       </Button>
 

@@ -102,6 +102,28 @@ export const productParts = pgTable("product_parts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Regiões pintadas dentro de um único arquivo .3mf (pintura MMU da
+// PrusaSlicer/BambuStudio) — a parte continua sendo 1 arquivo, mas o cliente
+// escolhe uma cor por região em vez de uma cor pra peça inteira. É só
+// metadado (rótulo + qual "estado"/extrusora pintado corresponde); a
+// geometria em si nunca é armazenada aqui — é sempre re-lida do arquivo
+// original no navegador (ver src/features/catalog/mmu-3mf.ts).
+export const productPartRegions = pgTable(
+  "product_part_regions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    productPartId: uuid("product_part_id")
+      .notNull()
+      .references(() => productParts.id, { onDelete: "cascade" }),
+    // Estado decodificado do arquivo pintado: 0 = região padrão/sem pintura, 1-16 = Extrusora 1-16.
+    paintState: integer("paint_state").notNull(),
+    label: text("label").notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("product_part_region_state_unique").on(table.productPartId, table.paintState)],
+);
+
 // Catálogo global de materiais/filamentos disponíveis para uso em qualquer produto.
 export const filamentOptions = pgTable("filament_options", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -293,6 +315,11 @@ export const productImagesRelations = relations(productImages, ({ one }) => ({
 export const productPartsRelations = relations(productParts, ({ one, many }) => ({
   product: one(products, { fields: [productParts.productId], references: [products.id] }),
   materialOptions: many(productPartMaterialOptions),
+  regions: many(productPartRegions),
+}));
+
+export const productPartRegionsRelations = relations(productPartRegions, ({ one }) => ({
+  part: one(productParts, { fields: [productPartRegions.productPartId], references: [productParts.id] }),
 }));
 
 export const filamentOptionsRelations = relations(filamentOptions, ({ many }) => ({

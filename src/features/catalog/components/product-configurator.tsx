@@ -9,24 +9,77 @@ import { useCartStore } from "@/features/checkout/cart-store";
 import { formatPriceCents } from "@/lib/format";
 
 import { calculateProductPriceCents, InvalidSelectionError } from "../pricing";
-import type { Product, ProductSelection } from "../types";
+import type { FilamentOption, Product, ProductSelection } from "../types";
 import { ProductViewer3D, type ViewerPart } from "./product-viewer-3d";
+
+function MaterialSwatches({
+  materials,
+  selectedId,
+  onSelect,
+}: {
+  materials: FilamentOption[];
+  selectedId: string | undefined;
+  onSelect: (materialId: string) => void;
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-3">
+      {materials.map((material) => {
+        const isSelected = selectedId === material.id;
+        return (
+          <button
+            key={material.id}
+            type="button"
+            title={material.name}
+            aria-label={material.name}
+            aria-pressed={isSelected}
+            onClick={() => onSelect(material.id)}
+            className={`size-9 rounded-full transition-shadow ${
+              isSelected
+                ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                : "ring-1 ring-border hover:ring-foreground/30"
+            }`}
+            style={{
+              background: material.hexColorSecondary
+                ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
+                : (material.hexColor ?? "#a1a1aa"),
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 export function ProductConfigurator({ product }: { product: Product }) {
   const [sizeId, setSizeId] = useState(product.sizeOptions[0]?.id ?? "");
   const [materialByPart, setMaterialByPart] = useState<Record<string, string>>(() =>
-    Object.fromEntries(product.parts.map((part) => [part.id, part.availableMaterials[0]?.id ?? ""])),
+    Object.fromEntries(
+      product.parts.filter((part) => part.regions.length === 0).map((part) => [part.id, part.availableMaterials[0]?.id ?? ""]),
+    ),
+  );
+  // Uma parte com regiões (.3mf pintado) escolhe uma cor por região, não uma pra parte inteira.
+  const [materialByRegion, setMaterialByRegion] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      product.parts.flatMap((part) => part.regions.map((region) => [region.id, part.availableMaterials[0]?.id ?? ""])),
+    ),
   );
 
   const selection: ProductSelection = useMemo(
     () => ({
       sizeId,
-      partSelections: product.parts.map((part) => ({
-        partId: part.id,
-        filamentOptionId: materialByPart[part.id],
-      })),
+      partSelections: product.parts.map((part) =>
+        part.regions.length > 0
+          ? {
+              partId: part.id,
+              regionSelections: part.regions.map((region) => ({
+                regionId: region.id,
+                filamentOptionId: materialByRegion[region.id],
+              })),
+            }
+          : { partId: part.id, filamentOptionId: materialByPart[part.id] },
+      ),
     }),
-    [sizeId, materialByPart, product.parts],
+    [sizeId, materialByPart, materialByRegion, product.parts],
   );
 
   const priceCents = useMemo(() => {
@@ -39,6 +92,18 @@ export function ProductConfigurator({ product }: { product: Product }) {
   }, [product, selection]);
 
   const viewerParts: ViewerPart[] = product.parts.map((part) => {
+    if (part.regions.length > 0) {
+      return {
+        id: part.id,
+        meshUrl: part.meshFileUrl,
+        color: "#a1a1aa",
+        regions: part.regions.map((region) => {
+          const material = part.availableMaterials.find((m) => m.id === materialByRegion[region.id]);
+          return { paintState: region.paintState, color: material?.hexColor ?? "#a1a1aa" };
+        }),
+      };
+    }
+
     const material = part.availableMaterials.find((m) => m.id === materialByPart[part.id]);
     return {
       id: part.id,
@@ -56,6 +121,16 @@ export function ProductConfigurator({ product }: { product: Product }) {
     const sizeLabel = product.sizeOptions.find((s) => s.id === sizeId)?.label ?? "";
     const partsSummary = product.parts
       .map((part) => {
+        if (part.regions.length > 0) {
+          const regionsSummary = part.regions
+            .map((region) => {
+              const material = part.availableMaterials.find((m) => m.id === materialByRegion[region.id]);
+              return `${region.label}: ${material?.name ?? "—"}`;
+            })
+            .join(", ");
+          return `${part.name} (${regionsSummary})`;
+        }
+
         const material = part.availableMaterials.find((m) => m.id === materialByPart[part.id]);
         return `${part.name}: ${material?.name ?? "—"}`;
       })
@@ -115,36 +190,31 @@ export function ProductConfigurator({ product }: { product: Product }) {
           </div>
         </div>
 
-        {product.parts.map((part) => (
-          <div key={part.id}>
-            <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
-            <div className="mt-2 flex flex-wrap gap-3">
-              {part.availableMaterials.map((material) => {
-                const isSelected = materialByPart[part.id] === material.id;
-                return (
-                  <button
-                    key={material.id}
-                    type="button"
-                    title={material.name}
-                    aria-label={material.name}
-                    aria-pressed={isSelected}
-                    onClick={() => setMaterialByPart((prev) => ({ ...prev, [part.id]: material.id }))}
-                    className={`size-9 rounded-full transition-shadow ${
-                      isSelected
-                        ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                        : "ring-1 ring-border hover:ring-foreground/30"
-                    }`}
-                    style={{
-                      background: material.hexColorSecondary
-                        ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
-                        : (material.hexColor ?? "#a1a1aa"),
-                    }}
-                  />
-                );
-              })}
+        {product.parts.map((part) =>
+          part.regions.length > 0 ? (
+            part.regions.map((region) => (
+              <div key={region.id}>
+                <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  {part.name} · {region.label}
+                </h2>
+                <MaterialSwatches
+                  materials={part.availableMaterials}
+                  selectedId={materialByRegion[region.id]}
+                  onSelect={(materialId) => setMaterialByRegion((prev) => ({ ...prev, [region.id]: materialId }))}
+                />
+              </div>
+            ))
+          ) : (
+            <div key={part.id}>
+              <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
+              <MaterialSwatches
+                materials={part.availableMaterials}
+                selectedId={materialByPart[part.id]}
+                onSelect={(materialId) => setMaterialByPart((prev) => ({ ...prev, [part.id]: materialId }))}
+              />
             </div>
-          </div>
-        ))}
+          ),
+        )}
 
         <div className="mt-auto rounded-xl bg-muted/40 p-4">
           <p className="text-2xl font-semibold">{priceCents !== null ? formatPriceCents(priceCents) : "—"}</p>

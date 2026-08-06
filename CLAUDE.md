@@ -139,7 +139,7 @@ pensada pra isso).
   `chromium-*`/`chromium_headless_shell-*` dentro de
   `%LOCALAPPDATA%\ms-playwright`, sem mexer em versões que já existiam antes).
 
-## Status (atualizado em 2026-08-04, rodada 10 — Superfrete/SEO/admin)
+## Status (atualizado em 2026-08-06, rodada 12 — .3mf pintado/MMU)
 
 Login do admin confirmado funcionando em produção. `/admin/produtos` deu erro
 ("This page couldn't load") — causa raiz identificada e corrigida: a
@@ -365,10 +365,19 @@ real nem contra a API da Woovi de verdade):**
   e o bucket `models` pode nem existir ainda — ver `scripts/storage-setup.sql`).
 
 **Pendente pra fechar o ciclo:**
-- Rodar a migração `drizzle/0001_brainy_the_order.sql` contra o Supabase real
-  (`npm run db:migrate` ou colar o SQL no SQL Editor) — sem isso, nada da
-  rodada 10 (Superfrete completo, imagens de produto) funciona contra
-  produção. É só aditivo (CREATE TABLE / ALTER TABLE ADD COLUMN), seguro.
+- Rodar as migrações `drizzle/0001_brainy_the_order.sql` e
+  `drizzle/0002_flawless_runaways.sql` contra o Supabase real (`npm run
+  db:migrate` ou colar o SQL no SQL Editor) — sem isso, nada da rodada 10
+  (Superfrete completo, imagens de produto) nem da rodada 12 (regiões
+  pintadas) funciona contra produção. As duas são só aditivas (CREATE TABLE
+  / ALTER TABLE ADD COLUMN), seguras. **Atenção pro mesmo problema da rodada
+  11**: se a 0001 já foi parcialmente aplicada antes, rodar de novo pode dar
+  "already exists" num `CREATE TYPE` — nesse caso usar a versão idempotente
+  (`DO $$ ... EXCEPTION WHEN duplicate_object`) já documentada na rodada 11,
+  não a migração crua.
+- Testar upload de um `.3mf` pintado de verdade (o `Bulbasaur.3mf` do
+  usuário) contra o Supabase real — só foi testado com o arquivo servido
+  estaticamente, nunca através do fluxo de upload signed-URL de verdade.
 - Rodar `scripts/storage-setup.sql` no SQL Editor do Supabase (cria o bucket
   `models`) — sem isso, o upload de STL falha. **Provavelmente ainda não foi
   feito**, perguntar/confirmar numa sessão nova.
@@ -625,6 +634,80 @@ aparecer registrado como resolvido.
 
 **Ainda não iniciado (fora desta rodada):**
 - Asaas (cartão/boleto) — Fase 3
+
+### Rodada 12: suporte a .3mf multi-cor pintado (MMU) por região
+
+Usuário trouxe um arquivo real (`Bulbasaur.3mf`, ~20MB, ~1 milhão de
+triângulos) exportado da PrusaSlicer com a ferramenta de **pintura MMU**
+(Multi Material Unit) e perguntou se dava pra deixar o cliente escolher uma
+cor por região pintada. Investigação revelou que **não é um 3MF
+multi-objeto** (a arquitetura multi-peça existente não se aplica) — é uma
+malha única com um atributo proprietário por triângulo
+(`slic3rpe:mmu_segmentation`) que o `ThreeMFLoader` (three-stdlib) não
+entende. Esse formato **não é documentado oficialmente pela Prusa** (há uma
+issue aberta pedindo documentação: prusa3d/PrusaSlicer#13900) — o algoritmo
+de decodificação foi extraído direto do código-fonte real deles
+(`TriangleSelector.cpp`, `Model.cpp`) e **validado rodando contra o arquivo
+real do usuário antes de qualquer código React**: um script Node decodificou
+os 1.085.466 triângulos sem nenhum erro, achando 6 regiões (padrão +
+Extrusora 1-5) — e um dado que mudou a expectativa de performance: **nenhum
+triângulo precisou de subdivisão nesse arquivo** (fator 1.00x), então o
+algoritmo de subdivisão geométrica (implementado pro caso geral, também
+portado do código-fonte) provavelmente não entra em ação na maioria dos
+arquivos reais.
+
+**O que foi implementado:**
+- `src/features/catalog/mmu-3mf.ts` — parser completo (roda no navegador,
+  usa `fflate` pra unzip): decodifica o atributo por triângulo e agrupa por
+  região numa `BufferGeometry` cada. Duas funções: `detectPaintedStates`
+  (passagem rápida, só descobre quais regiões existem — usada no upload) e
+  `parsePaintedThreeMf` (parse completo — usada no viewer).
+- `src/features/catalog/mmu-3mf-loader.ts` — `MmuPaintedThreeMFLoader`,
+  mesmo padrão do `STLLoader`/`ThreeMFLoader` já usados (`extends
+  THREE.Loader`), plugável no `useLoader` do react-three-fiber. **Bug real
+  pego no build**: `THREE.Loader<TData = unknown>` por padrão — sem
+  parametrizar `extends THREE.Loader<MmuPaintedResult, string>` o
+  TypeScript não conseguia inferir o tipo do resultado (`useLoader` lê o
+  tipo de `loadAsync`, não do callback de `.load()`).
+- Nova tabela `product_part_regions` (migração `0002_flawless_runaways.sql`,
+  só aditiva) — guarda só o rótulo e qual estado corresponde a cada região;
+  **a geometria em si nunca é armazenada**, é sempre re-parseada do arquivo
+  original no navegador.
+- Uma parte com regiões escolhe os materiais dos MESMOS já atribuídos à
+  parte (reaproveita `productPartMaterialOptions`, sem tabela nova) — uma
+  cor por região em vez de uma cor pra peça inteira.
+- Admin: `MeshUploadForm` detecta regiões ao escolher um `.3mf` (antes de
+  enviar) e mostra "Detectamos N região(ões) pintada(s)"; `confirmPartMesh`
+  grava as regiões detectadas (substitui as antigas se o arquivo for
+  trocado); `ProductPartsManager` deixa renomear cada região.
+- Loja: `ProductConfigurator` mostra uma fileira de swatches por região (em
+  vez de uma por parte) quando a parte tem regiões; `pricing.ts` soma o
+  modificador de todas as regiões escolhidas.
+- Compatibilidade: uma parte sem nenhuma região pintada continua
+  funcionando exatamente como antes (0 regiões = comportamento normal).
+
+**Testado de ponta a ponta contra o arquivo real do usuário** (não só o
+sintético) — algo raro nesta sessão, que normalmente não tem banco/Supabase
+disponível: como a geometria nunca é armazenada no banco, dava pra montar
+uma página de teste com `ProductConfigurator` recebendo um produto mockado
+apontando pro `Bulbasaur.3mf` servido estaticamente, sem precisar de
+DB/Supabase nenhum. Confirmado via Playwright: o Bulbasaur renderiza como um
+Bulbasaur de verdade (não um blob), aparecem as 6 fileiras de região
+esperadas, e clicar numa cor de uma região específica só recolore aquela
+região (testado com um cubo sintético de 2 regiões, mais fácil de verificar
+visualmente que uma malha de 1M triângulos). Tempo de carregamento completo
+da página (as duas malhas, incluindo o Bulbasaur de 20MB) em ambiente local:
+6,8s — não dá pra saber o tempo real em produção (rede real, CPU do
+navegador do cliente), mas é esperado que arquivos desse tamanho demorem
+alguns segundos pra carregar, pintados ou não — isso já seria verdade sem a
+funcionalidade de pintura.
+
+**Não validado**: arquivos exportados do **BambuStudio** (fork da
+PrusaSlicer que usa o atributo `paint_color` em vez de
+`slic3rpe:mmu_segmentation` — ambos os nomes são aceitos pelo parser, mas só
+a codificação de bits da PrusaSlicer foi confirmada contra um arquivo real;
+se o BambuStudio usar uma codificação ligeiramente diferente, isso só vai
+aparecer no primeiro teste com um arquivo de verdade de lá).
 
 ## Preferências do usuário (importante)
 

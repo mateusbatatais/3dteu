@@ -8,6 +8,8 @@ import { OBJLoader, STLLoader, ThreeMFLoader } from "three-stdlib";
 
 import { getMeshExtension } from "@/lib/supabase/storage-constants";
 
+import { MmuPaintedThreeMFLoader } from "../mmu-3mf-loader";
+
 // Um arquivo que falha ao carregar/parsear (corrompido, extensão errada por
 // dentro, etc.) não pode derrubar o preview inteiro — sem isso, o erro sobe
 // até a raiz da árvore do react-three-fiber e some TODAS as partes, não só a
@@ -35,6 +37,8 @@ export interface ViewerPart {
   meshUrl: string | null;
   color: string;
   colorSecondary?: string | null;
+  /** Presente só quando o .3mf tem regiões pintadas (MMU) — uma cor por região, em vez de uma cor pra peça inteira. */
+  regions?: Array<{ paintState: number; color: string }>;
 }
 
 // STL só descreve geometria (sem cor/material), então basta aplicar a cor
@@ -75,6 +79,23 @@ function ThreeMfPart({ meshUrl, color }: { meshUrl: string; color: string }) {
   return <primitive object={tinted} />;
 }
 
+// .3mf com regiões pintadas (MMU) — cada região é sua própria BufferGeometry
+// (ver mmu-3mf.ts/mmu-3mf-loader.ts), tingida com a cor escolhida pra ela.
+function MmuPart({ meshUrl, regions }: { meshUrl: string; regions: NonNullable<ViewerPart["regions"]> }) {
+  const { regions: loadedRegions } = useLoader(MmuPaintedThreeMFLoader, meshUrl);
+  const colorByState = useMemo(() => new Map(regions.map((r) => [r.paintState, r.color])), [regions]);
+
+  return (
+    <group>
+      {loadedRegions.map((region) => (
+        <mesh key={region.state} geometry={region.geometry}>
+          <meshStandardMaterial color={colorByState.get(region.state) ?? "#a1a1aa"} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // Usado enquanto a parte ainda não tem um arquivo 3D cadastrado no admin.
 function PlaceholderPart({ color, colorSecondary }: { color: string; colorSecondary?: string | null }) {
   return (
@@ -100,7 +121,9 @@ function Part({ part }: { part: ViewerPart }) {
 
   const extension = getMeshExtension(part.meshUrl);
   let content;
-  if (extension === "obj") {
+  if (part.regions && part.regions.length > 0) {
+    content = <MmuPart meshUrl={part.meshUrl} regions={part.regions} />;
+  } else if (extension === "obj") {
     content = <ObjPart meshUrl={part.meshUrl} color={part.color} />;
   } else if (extension === "3mf") {
     content = <ThreeMfPart meshUrl={part.meshUrl} color={part.color} />;

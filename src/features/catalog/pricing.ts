@@ -32,6 +32,35 @@ export function calculateProductPriceCents(product: Product, selection: ProductS
       throw new InvalidSelectionError(`Nenhum material selecionado para a parte "${part.name}".`);
     }
 
+    if (part.regions.length > 0) {
+      // Peça com .3mf pintado: soma o modificador do material escolhido em cada região.
+      const regionSelections = chosen.regionSelections ?? [];
+      if (regionSelections.length !== part.regions.length) {
+        throw new InvalidSelectionError(
+          `Parte "${part.name}" tem ${part.regions.length} região(ões), mas ${regionSelections.length} foram selecionadas.`,
+        );
+      }
+
+      return (
+        total +
+        part.regions.reduce((regionTotal, region) => {
+          const regionChoice = regionSelections.find((r) => r.regionId === region.id);
+          if (!regionChoice) {
+            throw new InvalidSelectionError(`Nenhum material selecionado para a região "${region.label}".`);
+          }
+
+          const material = part.availableMaterials.find((m) => m.id === regionChoice.filamentOptionId);
+          if (!material) {
+            throw new InvalidSelectionError(
+              `Material "${regionChoice.filamentOptionId}" não é uma opção válida para a parte "${part.name}".`,
+            );
+          }
+
+          return regionTotal + material.priceModifierCents;
+        }, 0)
+      );
+    }
+
     const material = part.availableMaterials.find((m) => m.id === chosen.filamentOptionId);
     if (!material) {
       throw new InvalidSelectionError(

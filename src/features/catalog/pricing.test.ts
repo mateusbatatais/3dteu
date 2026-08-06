@@ -20,7 +20,7 @@ const produtoUmaPeca: Product = {
   metaTitle: null,
   metaDescription: null,
   images: [],
-  parts: [{ id: "parte-corpo", name: "corpo", meshFileUrl: null, availableMaterials: [azul, dualAzulLaranja, madeira] }],
+  parts: [{ id: "parte-corpo", name: "corpo", meshFileUrl: null, availableMaterials: [azul, dualAzulLaranja, madeira], regions: [] }],
   sizeOptions: [
     { id: "size-p", label: "P", scaleFactor: 0.8, priceModifierCents: -300, weightModifierGrams: -10 },
     { id: "size-m", label: "M", scaleFactor: 1, priceModifierCents: 0, weightModifierGrams: 0 },
@@ -42,8 +42,36 @@ const produtoDuasPecas: Product = {
   metaDescription: null,
   images: [],
   parts: [
-    { id: "parte-corpo", name: "corpo", meshFileUrl: null, availableMaterials: [azul, madeira] },
-    { id: "parte-tampa", name: "tampa", meshFileUrl: null, availableMaterials: [azul, dualAzulLaranja] },
+    { id: "parte-corpo", name: "corpo", meshFileUrl: null, availableMaterials: [azul, madeira], regions: [] },
+    { id: "parte-tampa", name: "tampa", meshFileUrl: null, availableMaterials: [azul, dualAzulLaranja], regions: [] },
+  ],
+  sizeOptions: [{ id: "size-m", label: "M", scaleFactor: 1, priceModifierCents: 0, weightModifierGrams: 0 }],
+};
+
+const produtoPintado: Product = {
+  id: "prod-3",
+  slug: "bulbasaur-pintado",
+  name: "Bulbasaur pintado",
+  description: null,
+  basePriceCents: 5000,
+  weightGrams: 60,
+  heightCm: 6,
+  widthCm: 10,
+  lengthCm: 10,
+  metaTitle: null,
+  metaDescription: null,
+  images: [],
+  parts: [
+    {
+      id: "parte-corpo",
+      name: "corpo",
+      meshFileUrl: null,
+      availableMaterials: [azul, madeira],
+      regions: [
+        { id: "regiao-0", label: "Região padrão", paintState: 0 },
+        { id: "regiao-1", label: "Extrusora 1", paintState: 1 },
+      ],
+    },
   ],
   sizeOptions: [{ id: "size-m", label: "M", scaleFactor: 1, priceModifierCents: 0, weightModifierGrams: 0 }],
 };
@@ -113,6 +141,54 @@ describe("calculateProductPriceCents", () => {
         partSelections: [
           { partId: "parte-corpo", filamentOptionId: "mat-dual" }, // dual não é opção do corpo
           { partId: "parte-tampa", filamentOptionId: "mat-azul" },
+        ],
+      }),
+    ).toThrow(InvalidSelectionError);
+  });
+
+  it("soma o modificador de cada região selecionada num .3mf pintado", () => {
+    const preco = calculateProductPriceCents(produtoPintado, {
+      sizeId: "size-m",
+      partSelections: [
+        {
+          partId: "parte-corpo",
+          regionSelections: [
+            { regionId: "regiao-0", filamentOptionId: "mat-azul" },
+            { regionId: "regiao-1", filamentOptionId: "mat-madeira" },
+          ],
+        },
+      ],
+    });
+
+    expect(preco).toBe(5000 + 0 + 800);
+  });
+
+  it("lança erro quando faltam seleções de região", () => {
+    expect(() =>
+      calculateProductPriceCents(produtoPintado, {
+        sizeId: "size-m",
+        partSelections: [
+          {
+            partId: "parte-corpo",
+            regionSelections: [{ regionId: "regiao-0", filamentOptionId: "mat-azul" }],
+          },
+        ],
+      }),
+    ).toThrow(InvalidSelectionError);
+  });
+
+  it("lança erro quando o material de uma região não é válido para a parte", () => {
+    expect(() =>
+      calculateProductPriceCents(produtoPintado, {
+        sizeId: "size-m",
+        partSelections: [
+          {
+            partId: "parte-corpo",
+            regionSelections: [
+              { regionId: "regiao-0", filamentOptionId: "mat-azul" },
+              { regionId: "regiao-1", filamentOptionId: "mat-dual" }, // não é opção do corpo
+            ],
+          },
         ],
       }),
     ).toThrow(InvalidSelectionError);

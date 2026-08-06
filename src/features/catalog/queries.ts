@@ -1,7 +1,15 @@
 import { asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/server/db/client";
-import { categories, filamentOptions, productImages, productParts, products, sizeOptions } from "@/server/db/schema";
+import {
+  categories,
+  filamentOptions,
+  productImages,
+  productPartRegions,
+  productParts,
+  products,
+  sizeOptions,
+} from "@/server/db/schema";
 
 import type { Product } from "./types";
 
@@ -68,14 +76,17 @@ export async function getAllFilamentOptions() {
   return db.query.filamentOptions.findMany({ orderBy: [asc(filamentOptions.name)] });
 }
 
-/** Produto com partes (+ materiais atribuídos), tamanhos e imagens, para a tela de edição do admin. */
+/** Produto com partes (+ materiais atribuídos e regiões pintadas), tamanhos e imagens, para a tela de edição do admin. */
 export async function getProductWithConfigForAdmin(id: string) {
   return db.query.products.findFirst({
     where: eq(products.id, id),
     with: {
       parts: {
         orderBy: [asc(productParts.sortOrder)],
-        with: { materialOptions: true },
+        with: {
+          materialOptions: true,
+          regions: { orderBy: [asc(productPartRegions.sortOrder)] },
+        },
       },
       sizeOptions: { orderBy: [asc(sizeOptions.sortOrder)] },
       images: { orderBy: [asc(productImages.position)] },
@@ -91,6 +102,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
         orderBy: [asc(productParts.sortOrder)],
         with: {
           materialOptions: { with: { filament: true } },
+          regions: { orderBy: [asc(productPartRegions.sortOrder)] },
         },
       },
       sizeOptions: { orderBy: [asc(sizeOptions.sortOrder)] },
@@ -124,6 +136,11 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
         hexColor: filament.hexColor,
         hexColorSecondary: filament.hexColorSecondary,
         priceModifierCents: filament.priceModifierCents,
+      })),
+      regions: part.regions.map((region) => ({
+        id: region.id,
+        label: region.label,
+        paintState: region.paintState,
       })),
     })),
     sizeOptions: row.sizeOptions.map((size) => ({
