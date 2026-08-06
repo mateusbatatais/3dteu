@@ -20,7 +20,16 @@ const produtoUmaPeca: Product = {
   metaTitle: null,
   metaDescription: null,
   images: [],
-  parts: [{ id: "parte-corpo", name: "corpo", meshFileUrl: null, availableMaterials: [azul, dualAzulLaranja, madeira], regions: [] }],
+  parts: [
+    {
+      id: "parte-corpo",
+      name: "corpo",
+      meshFileUrl: null,
+      availableMaterials: [azul, dualAzulLaranja, madeira],
+      regions: [],
+      defaultMaterialId: null,
+    },
+  ],
   sizeOptions: [
     { id: "size-p", label: "P", scaleFactor: 0.8, priceModifierCents: -300, weightModifierGrams: -10 },
     { id: "size-m", label: "M", scaleFactor: 1, priceModifierCents: 0, weightModifierGrams: 0 },
@@ -42,8 +51,22 @@ const produtoDuasPecas: Product = {
   metaDescription: null,
   images: [],
   parts: [
-    { id: "parte-corpo", name: "corpo", meshFileUrl: null, availableMaterials: [azul, madeira], regions: [] },
-    { id: "parte-tampa", name: "tampa", meshFileUrl: null, availableMaterials: [azul, dualAzulLaranja], regions: [] },
+    {
+      id: "parte-corpo",
+      name: "corpo",
+      meshFileUrl: null,
+      availableMaterials: [azul, madeira],
+      regions: [],
+      defaultMaterialId: null,
+    },
+    {
+      id: "parte-tampa",
+      name: "tampa",
+      meshFileUrl: null,
+      availableMaterials: [azul, dualAzulLaranja],
+      regions: [],
+      defaultMaterialId: null,
+    },
   ],
   sizeOptions: [{ id: "size-m", label: "M", scaleFactor: 1, priceModifierCents: 0, weightModifierGrams: 0 }],
 };
@@ -71,6 +94,7 @@ const produtoPintado: Product = {
         { id: "regiao-0", label: "Região padrão", paintState: 0 },
         { id: "regiao-1", label: "Extrusora 1", paintState: 1 },
       ],
+      defaultMaterialId: null,
     },
   ],
   sizeOptions: [{ id: "size-m", label: "M", scaleFactor: 1, priceModifierCents: 0, weightModifierGrams: 0 }],

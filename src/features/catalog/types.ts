@@ -25,6 +25,8 @@ export interface ProductPart {
   availableMaterials: FilamentOption[];
   /** Vazio = peça de cor única (comportamento normal). Não-vazio = .3mf pintado, uma cor por região. */
   regions: ProductPartRegion[];
+  /** Material pré-selecionado pro cliente (e pras regiões desta parte) — null usa o primeiro da lista. */
+  defaultMaterialId: string | null;
 }
 
 export interface SizeOption {

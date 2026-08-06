@@ -1,0 +1,2 @@
+ALTER TABLE "product_parts" ADD COLUMN "default_filament_option_id" uuid;--> statement-breakpoint
+ALTER TABLE "product_parts" ADD CONSTRAINT "product_parts_default_filament_option_id_filament_options_id_fk" FOREIGN KEY ("default_filament_option_id") REFERENCES "public"."filament_options"("id") ON DELETE set null ON UPDATE no action;

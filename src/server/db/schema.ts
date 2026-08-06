@@ -99,6 +99,12 @@ export const productParts = pgTable("product_parts", {
   // futuro sem mudar o preview; stlFileUrl é sempre o arquivo original.
   meshFileUrl: text("mesh_file_url"),
   stlFileUrl: text("stl_file_url"),
+  // Pré-seleciona esse material quando o cliente abre a página do produto,
+  // em vez do primeiro material da lista (ordem arbitrária) — admin escolhe
+  // qual fica bonito por padrão. Null = usa o primeiro da lista, como antes.
+  defaultFilamentOptionId: uuid("default_filament_option_id").references(() => filamentOptions.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

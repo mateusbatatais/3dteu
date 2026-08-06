@@ -365,12 +365,13 @@ real nem contra a API da Woovi de verdade):**
   e o bucket `models` pode nem existir ainda — ver `scripts/storage-setup.sql`).
 
 **Pendente pra fechar o ciclo:**
-- Rodar as migrações `drizzle/0001_brainy_the_order.sql` e
-  `drizzle/0002_flawless_runaways.sql` contra o Supabase real (`npm run
-  db:migrate` ou colar o SQL no SQL Editor) — sem isso, nada da rodada 10
-  (Superfrete completo, imagens de produto) nem da rodada 12 (regiões
-  pintadas) funciona contra produção. As duas são só aditivas (CREATE TABLE
-  / ALTER TABLE ADD COLUMN), seguras. **Atenção pro mesmo problema da rodada
+- Rodar as migrações `drizzle/0001_brainy_the_order.sql`,
+  `drizzle/0002_flawless_runaways.sql` e `drizzle/0003_curvy_boom_boom.sql`
+  contra o Supabase real (`npm run db:migrate` ou colar o SQL no SQL Editor)
+  — sem isso, nada da rodada 10 (Superfrete completo, imagens de produto),
+  da rodada 12 (regiões pintadas) nem da rodada 13 (material padrão por
+  parte) funciona contra produção. As três são só aditivas (CREATE TABLE /
+  ALTER TABLE ADD COLUMN), seguras. **Atenção pro mesmo problema da rodada
   11**: se a 0001 já foi parcialmente aplicada antes, rodar de novo pode dar
   "already exists" num `CREATE TYPE` — nesse caso usar a versão idempotente
   (`DO $$ ... EXCEPTION WHEN duplicate_object`) já documentada na rodada 11,
@@ -708,6 +709,49 @@ PrusaSlicer que usa o atributo `paint_color` em vez de
 a codificação de bits da PrusaSlicer foi confirmada contra um arquivo real;
 se o BambuStudio usar uma codificação ligeiramente diferente, isso só vai
 aparecer no primeiro teste com um arquivo de verdade de lá).
+
+### Rodada 13: investigação de orientação (revertida) + layout compacto + material padrão
+
+Usuário reportou o Bulbasaur "deitado" numa captura de tela (provavelmente a
+miniatura pequena e cinza do admin, ambígua nesse tamanho) e pediu pra
+corrigir. Cheguei a implementar e aplicar uma rotação -90° em X (correção
+clássica de Z-up pra Y-up, comum em viewers de STL/3MF de impressão 3D) —
+mas antes de comitar, o usuário mandou uma segunda captura de tela, agora da
+loja de produção de verdade, mostrando o Bulbasaur **corretamente em pé**,
+sem essa correção. Testei os dois lados (com e sem a rotação) contra o
+arquivo real via Playwright antes de decidir: **sem rotação renderiza
+correto** (bate com a produção); a correção teria piorado, não corrigido.
+Revertida sem commitar — é o tipo de coisa que só o teste real revela; a
+"primeira" tentativa de blank/deitado no meu teste local era só o arquivo
+grande (20MB/1M triângulos) precisando de mais tempo pra carregar numa
+máquina já carregada de tantos testes nesta sessão, não um bug de eixo.
+**Lição**: não existe bug de orientação nos arquivos de impressão 3D deste
+projeto — não repetir essa hipótese sem evidência visual direta de novo.
+
+Na mesma leva, dois ajustes reais no configurador:
+- **Layout compacto**: uma parte com várias regiões pintadas (ex.: o
+  Bulbasaur com 6) agora agrupa tudo num card único com as regiões em
+  grade de 2-3 colunas (`product-configurator.tsx`), em vez de uma fileira
+  cheia por região — antes a tela crescia muito rápido com poucas regiões já.
+- **Material padrão por parte**: nova coluna `products_parts
+  .default_filament_option_id` (migração `0003_curvy_boom_boom.sql`, só
+  aditiva) — o admin marca qual material vem pré-selecionado quando o
+  cliente abre a página (rádio "Padrão" ao lado de cada checkbox em
+  "Materiais aceitos"), em vez de cair no primeiro material da lista
+  (ordem arbitrária, sem esse conceito antes). Uma parte com regiões usa o
+  mesmo padrão da parte pra todas as regiões (não dá pra definir um padrão
+  diferente por região ainda — se precisar disso, é um pedido separado).
+  A miniatura da listagem (`/produtos`) também passou a usar o material
+  padrão em vez do primeiro da lista.
+
+**Testado com dados mockados** (mesma limitação de sempre — sem banco real
+nesta sessão): confirmei via Playwright que a grade compacta renderiza
+certo, que os materiais padrão configurados (verde numa parte, madeira
+noutra) aparecem pré-selecionados tanto na loja quanto no admin (rádio
+marcado), sem erro de console.
+
+**Pendente**: rodar a migração `0003` contra o Supabase real (mesmo
+procedimento das anteriores).
 
 ## Preferências do usuário (importante)
 

@@ -246,6 +246,15 @@ export async function updateRegionLabel(productId: string, regionId: string, for
 export async function setPartMaterials(productId: string, partId: string, formData: FormData) {
   const filamentOptionIds = formData.getAll("filamentOptionId").map(String);
 
+  // O "padrão" só faz sentido se ainda estiver entre os materiais marcados
+  // (o admin pode ter desmarcado o que era padrão) — nesse caso cai pro
+  // primeiro marcado, em vez de gravar um padrão que o cliente nem veria.
+  const chosenDefault = formData.get("defaultFilamentOptionId");
+  const defaultFilamentOptionId =
+    typeof chosenDefault === "string" && filamentOptionIds.includes(chosenDefault)
+      ? chosenDefault
+      : filamentOptionIds[0] ?? null;
+
   await db.transaction(async (tx) => {
     await tx.delete(productPartMaterialOptions).where(eq(productPartMaterialOptions.productPartId, partId));
     if (filamentOptionIds.length > 0) {
@@ -253,6 +262,7 @@ export async function setPartMaterials(productId: string, partId: string, formDa
         .insert(productPartMaterialOptions)
         .values(filamentOptionIds.map((filamentOptionId) => ({ productPartId: partId, filamentOptionId })));
     }
+    await tx.update(productParts).set({ defaultFilamentOptionId }).where(eq(productParts.id, partId));
   });
 
   await revalidateProductPages(productId);

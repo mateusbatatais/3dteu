@@ -44,12 +44,13 @@ export async function getPublishedProductsForCatalog() {
     description: row.description,
     basePriceCents: row.basePriceCents,
     previewParts: row.parts.map((part) => {
-      const firstMaterial = part.materialOptions[0]?.filament;
+      const defaultMaterial = part.materialOptions.find((m) => m.filamentOptionId === part.defaultFilamentOptionId);
+      const material = defaultMaterial ?? part.materialOptions[0];
       return {
         id: part.id,
         meshUrl: part.meshFileUrl,
-        color: firstMaterial?.hexColor ?? "#a1a1aa",
-        colorSecondary: firstMaterial?.hexColorSecondary ?? null,
+        color: material?.filament.hexColor ?? "#a1a1aa",
+        colorSecondary: material?.filament.hexColorSecondary ?? null,
       };
     }),
   }));
@@ -142,6 +143,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
         label: region.label,
         paintState: region.paintState,
       })),
+      defaultMaterialId: part.defaultFilamentOptionId,
     })),
     sizeOptions: row.sizeOptions.map((size) => ({
       id: size.id,
