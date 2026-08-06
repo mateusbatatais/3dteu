@@ -41,41 +41,86 @@ export interface ViewerPart {
   regions?: Array<{ paintState: number; color: string }>;
 }
 
+// Material dual-color: um filamento com 2ª cor precisa aparecer como um
+// degradê sobre a peça de verdade, não só como uma cor sólida (a mistura das
+// duas cores não existe fisicamente até a peça ser impressa — não dá pra
+// "misturar" um meshStandardMaterial comum). Faz isso remendando o shader
+// padrão via onBeforeCompile: mistura as duas cores ao longo do eixo de
+// maior extensão da geometria (em espaço local da própria malha), preservando
+// a iluminação/PBR do MeshStandardMaterial em vez de trocar por um material
+// sem sombra.
+function buildPartMaterial(color: string, colorSecondary?: string | null, geometry?: THREE.BufferGeometry): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({ color });
+  if (!colorSecondary || !geometry) return material;
+
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (!box) return material;
+
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const axis = size.x >= size.y && size.x >= size.z ? "x" : size.y >= size.z ? "y" : "z";
+  const gradMin = box.min[axis];
+  const gradMax = Math.max(box.max[axis], gradMin + 0.0001);
+
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.colorA = { value: new THREE.Color(color) };
+    shader.uniforms.colorB = { value: new THREE.Color(colorSecondary) };
+    shader.uniforms.gradMin = { value: gradMin };
+    shader.uniforms.gradMax = { value: gradMax };
+
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vGradPosition;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvGradPosition = position;");
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying vec3 vGradPosition;\nuniform vec3 colorA;\nuniform vec3 colorB;\nuniform float gradMin;\nuniform float gradMax;",
+      )
+      .replace(
+        "vec4 diffuseColor = vec4( diffuse, opacity );",
+        `float gradT = clamp((vGradPosition.${axis} - gradMin) / (gradMax - gradMin), 0.0, 1.0);
+        vec4 diffuseColor = vec4( mix( colorA, colorB, gradT ), opacity );`,
+      );
+  };
+  material.needsUpdate = true;
+
+  return material;
+}
+
 // STL só descreve geometria (sem cor/material), então basta aplicar a cor
 // escolhida direto no material — sem precisar clonar/percorrer uma cena.
-function StlPart({ meshUrl, color }: { meshUrl: string; color: string }) {
+function StlPart({ meshUrl, color, colorSecondary }: { meshUrl: string; color: string; colorSecondary?: string | null }) {
   const geometry = useLoader(STLLoader, meshUrl);
+  const material = useMemo(() => buildPartMaterial(color, colorSecondary, geometry), [geometry, color, colorSecondary]);
 
-  return (
-    <mesh geometry={geometry}>
-      <meshStandardMaterial color={color} />
-    </mesh>
-  );
+  return <mesh geometry={geometry} material={material} />;
 }
 
 // OBJ e 3MF carregam como um grupo de objetos (podem ter várias sub-malhas,
 // e o 3MF pode até vir com cor própria embutida) — clona e percorre a árvore
 // pra forçar a cor escolhida em tudo, mantendo o mesmo comportamento do STL:
 // uma cor por parte, escolhida pelo cliente na configuração do produto.
-function retint(object: THREE.Object3D, color: string): THREE.Object3D {
+function retint(object: THREE.Object3D, color: string, colorSecondary?: string | null): THREE.Object3D {
   const clone = object.clone(true);
   clone.traverse((child) => {
     if (child instanceof THREE.Mesh) {
-      child.material = new THREE.MeshStandardMaterial({ color });
+      child.material = buildPartMaterial(color, colorSecondary, child.geometry);
     }
   });
   return clone;
 }
 
-function ObjPart({ meshUrl, color }: { meshUrl: string; color: string }) {
+function ObjPart({ meshUrl, color, colorSecondary }: { meshUrl: string; color: string; colorSecondary?: string | null }) {
   const object = useLoader(OBJLoader, meshUrl);
-  const tinted = useMemo(() => retint(object, color), [object, color]);
+  const tinted = useMemo(() => retint(object, color, colorSecondary), [object, color, colorSecondary]);
   return <primitive object={tinted} />;
 }
 
-function ThreeMfPart({ meshUrl, color }: { meshUrl: string; color: string }) {
+function ThreeMfPart({ meshUrl, color, colorSecondary }: { meshUrl: string; color: string; colorSecondary?: string | null }) {
   const object = useLoader(ThreeMFLoader, meshUrl);
-  const tinted = useMemo(() => retint(object, color), [object, color]);
+  const tinted = useMemo(() => retint(object, color, colorSecondary), [object, color, colorSecondary]);
   return <primitive object={tinted} />;
 }
 
@@ -124,12 +169,12 @@ function Part({ part }: { part: ViewerPart }) {
   if (part.regions && part.regions.length > 0) {
     content = <MmuPart meshUrl={part.meshUrl} regions={part.regions} />;
   } else if (extension === "obj") {
-    content = <ObjPart meshUrl={part.meshUrl} color={part.color} />;
+    content = <ObjPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} />;
   } else if (extension === "3mf") {
-    content = <ThreeMfPart meshUrl={part.meshUrl} color={part.color} />;
+    content = <ThreeMfPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} />;
   } else {
     // STL é o padrão — também cai aqui se a extensão vier ausente/desconhecida.
-    content = <StlPart meshUrl={part.meshUrl} color={part.color} />;
+    content = <StlPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} />;
   }
 
   // Se o arquivo falhar ao carregar, cai pro placeholder em vez de derrubar

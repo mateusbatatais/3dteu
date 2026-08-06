@@ -753,6 +753,67 @@ marcado), sem erro de console.
 **Pendente**: rodar a migração `0003` contra o Supabase real (mesmo
 procedimento das anteriores).
 
+### Rodada 14: editar material, bug do material "sólido" e gradiente dual-color no preview 3D
+
+Usuário reportou três coisas em `/admin/materiais`: (1) não tinha como
+editar um material já cadastrado, só criar/excluir; (2) não conseguia
+entender como criar um material de uma cor só; (3) o degradê de um material
+dual-color não aparecia no preview 3D, só o CSS do swatch mostrava o
+gradiente.
+
+**Causa raiz do (2), achada investigando o código antes de assumir que era
+só falta de instrução na UI**: o formulário de criação tinha os dois
+`<input type="color">` (cor + 2ª cor) sempre visíveis e sempre com um valor
+preenchido — um `<input type="color">` **nunca fica vazio** no navegador,
+então mesmo escolhendo "Cor sólida" o formulário mandava um
+`hexColorSecondary` de verdade (o valor padrão do color picker), e
+`createFilament` salvava isso sem checar o tipo. Resultado: **todo material
+"sólido" criado por esse formulário na prática virava dual-color** (o swatch
+já mostrava gradiente, e agora — depois do fix do item 3 — o preview 3D
+também mostraria), sem o usuário ter escolhido isso. Corrigido em duas
+camadas: `filament-actions.ts` agora força `hexColorSecondary: null` no
+servidor sempre que `type !== "dual_color"` (não confia no que o formulário
+manda, mesmo que o campo não devesse nem existir na UI); e o campo "2ª cor"
+só é renderizado quando o tipo selecionado é dual-color (não dá mais nem pra
+tentar preencher por acidente).
+
+**Fix do (1)**: `createFilament`/`updateFilament` (nova) trocaram de
+`FormData` crua pra um objeto tipado (`FilamentInput`), seguindo o mesmo
+padrão já usado em `OrderStatusForm` (estado controlado + `useTransition` +
+chamar a Server Action direto, sem `<form action>`) em vez do padrão mais
+antigo de `<form action={serverAction}>` com `FormData`. `FilamentForm`
+(`src/features/catalog/components/filament-form.tsx`) é compartilhado entre
+criar e editar (prop `mode`); `FilamentRow`
+(`src/features/catalog/components/filament-row.tsx`) troca a linha da
+tabela pra esse formulário (pré-preenchido) quando clica em "Editar", com
+"Cancelar" pra voltar.
+
+**Causa raiz do (3)**: pra uma peça com arquivo 3D real (STL/OBJ/3MF), o
+código só aplicava `part.color` — a `colorSecondary` só era usada no cubo
+placeholder (duas caixas empilhadas, nunca um degradê de verdade). Fix:
+`buildPartMaterial()` (`product-viewer-3d.tsx`) cria um
+`MeshStandardMaterial` normal quando não há 2ª cor, e quando há, remenda o
+shader padrão via `onBeforeCompile` pra misturar as duas cores ao longo do
+eixo de maior extensão da bounding box da própria geometria (em espaço
+local — cada malha/sub-malha tem seu próprio degradê, calculado a partir do
+seu próprio tamanho). Escolhido em vez de um material sem iluminação porque
+preserva o comportamento de PBR (reflexo do `Environment`, sombreamento)
+que as peças de cor única já tinham. `StlPart` e `retint()` (usado por
+`ObjPart`/`ThreeMfPart`) passaram a receber `colorSecondary` — antes só o
+placeholder recebia.
+
+**Testado com dados mockados** (mesma limitação de sempre — sem
+`DATABASE_URL` local): página temporária confirmou via Playwright que (a)
+trocar "Tipo" pra "Cor sólida" esconde o campo "2ª cor" (e pra "Dual-color"
+mostra), (b) clicar "Editar" numa linha dual-color abre o formulário
+pré-preenchido com nome/cor/2ª cor/adicional corretos, (c) um STL real
+(caixa de teste 10x30x10mm gerada na hora) com material dual-color mostra
+um degradê visível de verdade entre as duas cores ao longo do eixo mais
+longo — sem erro de console. Não testei o clique em "Salvar" de verdade
+(chamaria `updateFilament`/`createFilament` contra o banco, que não existe
+nesta sessão) — a lógica em si é simples (um `UPDATE`/`INSERT` com os
+mesmos campos de sempre) e já passa no build/lint/type-check.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com
