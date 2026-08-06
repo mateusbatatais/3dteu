@@ -2,15 +2,18 @@ import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addProductPart, deleteProductPart, setPartMaterials, updateRegionLabel } from "@/features/catalog/actions";
+import { addProductPart, deleteProductPart, setPartMaterials } from "@/features/catalog/actions";
 
 import { MeshUploadForm } from "./mesh-upload-form";
+import { PartRegionsPanel } from "./part-regions-panel";
 import { ProductViewer3D } from "./product-viewer-3d";
 
 interface RegionRow {
   id: string;
   label: string;
   paintState: number;
+  enabled: boolean;
+  defaultFilamentOptionId: string | null;
 }
 
 interface PartRow {
@@ -62,54 +65,43 @@ export function ProductPartsManager({
                 />
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
-                <div className="w-full max-w-40 shrink-0">
-                  <ProductViewer3D
-                    parts={[{ id: part.id, meshUrl: part.meshFileUrl, color: "#a1a1aa", colorSecondary: null }]}
-                    interactive={false}
-                  />
-                  {part.meshFileUrl ? (
-                    <a
-                      href={part.meshFileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1.5 block break-all text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
-                    >
-                      Ver arquivo enviado
-                    </a>
-                  ) : null}
-                </div>
-                <div className="flex-1">
-                  <h3 className={SECTION_LABEL_CLASS}>Arquivo 3D</h3>
-                  <div className="mt-2">
-                    <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
-                  </div>
-                </div>
-              </div>
-
               {part.regions.length > 0 ? (
-                <div className="mt-4 border-t pt-3">
-                  <h3 className={SECTION_LABEL_CLASS}>Regiões pintadas (.3mf multi-cor)</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Detectadas automaticamente no arquivo enviado. O cliente escolhe uma cor por região, entre os
-                    materiais aceitos abaixo. Renomeie pra facilitar (ex.: &ldquo;Corpo&rdquo;, &ldquo;Manchas&rdquo;).
-                  </p>
-                  <div className="mt-2 flex flex-col gap-2">
-                    {part.regions.map((region) => (
-                      <form
-                        key={region.id}
-                        action={updateRegionLabel.bind(null, productId, region.id)}
-                        className="flex items-center gap-2"
+                <div className="mt-4">
+                  <PartRegionsPanel
+                    productId={productId}
+                    partId={part.id}
+                    meshUrl={part.meshFileUrl}
+                    hasMesh={Boolean(part.meshFileUrl)}
+                    regions={part.regions}
+                    materialOptions={allMaterials.filter((m) => selectedIds.has(m.id))}
+                  />
+                </div>
+              ) : (
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <div className="w-full max-w-40 shrink-0">
+                    <ProductViewer3D
+                      parts={[{ id: part.id, meshUrl: part.meshFileUrl, color: "#a1a1aa", colorSecondary: null }]}
+                      interactive={false}
+                    />
+                    {part.meshFileUrl ? (
+                      <a
+                        href={part.meshFileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1.5 block break-all text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
                       >
-                        <Input name="label" defaultValue={region.label} className="h-8 max-w-48 text-sm" />
-                        <Button type="submit" size="sm" variant="outline">
-                          Salvar
-                        </Button>
-                      </form>
-                    ))}
+                        Ver arquivo enviado
+                      </a>
+                    ) : null}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className={SECTION_LABEL_CLASS}>Arquivo 3D</h3>
+                    <div className="mt-2">
+                      <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
+                    </div>
                   </div>
                 </div>
-              ) : null}
+              )}
 
               <div className="mt-4 border-t pt-3">
                 <h3 className={SECTION_LABEL_CLASS}>Materiais aceitos</h3>

@@ -235,12 +235,29 @@ export async function confirmPartMesh(
   }
 }
 
-export async function updateRegionLabel(productId: string, regionId: string, formData: FormData) {
-  const label = String(formData.get("label") ?? "").trim();
-  if (!label) return;
+export interface RegionSettingsInput {
+  label: string;
+  /** false = escondida da loja (ex.: ruído da segmentação MMU) — continua colorida no preview com defaultFilamentOptionId. */
+  enabled: boolean;
+  /** null = usa o padrão da parte (productParts.defaultFilamentOptionId). */
+  defaultFilamentOptionId: string | null;
+}
 
-  await db.update(productPartRegions).set({ label }).where(eq(productPartRegions.id, regionId));
+export async function updateRegionSettings(
+  productId: string,
+  regionId: string,
+  input: RegionSettingsInput,
+): Promise<ProductActionResult> {
+  const label = input.label.trim();
+  if (!label) return { error: "Nome é obrigatório." };
+
+  await db
+    .update(productPartRegions)
+    .set({ label, enabled: input.enabled, defaultFilamentOptionId: input.defaultFilamentOptionId })
+    .where(eq(productPartRegions.id, regionId));
+
   await revalidateProductPages(productId);
+  return {};
 }
 
 export async function setPartMaterials(productId: string, partId: string, formData: FormData) {

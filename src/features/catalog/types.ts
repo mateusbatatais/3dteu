@@ -15,6 +15,10 @@ export interface ProductPartRegion {
   label: string;
   /** Estado decodificado do arquivo: 0 = região padrão, 1-16 = Extrusora 1-16. */
   paintState: number;
+  /** false = detectada errado (ruído da segmentação) — some da loja, mas continua colorida no preview com defaultMaterialId. */
+  enabled: boolean;
+  /** Material pré-selecionado pra essa região — null usa o padrão da parte (ProductPart.defaultMaterialId). */
+  defaultMaterialId: string | null;
 }
 
 export interface ProductPart {

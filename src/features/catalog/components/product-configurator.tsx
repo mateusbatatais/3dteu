@@ -9,20 +9,17 @@ import { useCartStore } from "@/features/checkout/cart-store";
 import { formatPriceCents } from "@/lib/format";
 
 import { calculateProductPriceCents, InvalidSelectionError } from "../pricing";
-import type { FilamentOption, Product, ProductSelection } from "../types";
+import type { FilamentOption, Product, ProductPartRegion, ProductSelection } from "../types";
 import { ProductViewer3D, type ViewerPart } from "./product-viewer-3d";
 
 function MaterialSwatches({
   materials,
   selectedId,
   onSelect,
-  swatchSize = "default",
 }: {
   materials: FilamentOption[];
   selectedId: string | undefined;
   onSelect: (materialId: string) => void;
-  /** "sm" usado em grades (várias regiões lado a lado) pra não crescer demais. */
-  swatchSize?: "default" | "sm";
 }) {
   return (
     <div className="mt-2 flex flex-wrap gap-2">
@@ -36,7 +33,7 @@ function MaterialSwatches({
             aria-label={material.name}
             aria-pressed={isSelected}
             onClick={() => onSelect(material.id)}
-            className={`rounded-full transition-shadow ${swatchSize === "sm" ? "size-6" : "size-9"} ${
+            className={`size-9 rounded-full transition-shadow ${
               isSelected
                 ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
                 : "ring-1 ring-border hover:ring-foreground/30"
@@ -63,6 +60,15 @@ function resolveDefaultMaterialId(part: Product["parts"][number]): string {
   return part.availableMaterials[0]?.id ?? "";
 }
 
+// Mesma ideia, mas o padrão da própria região tem prioridade sobre o da
+// parte (uma região pintada pode querer uma cor diferente do resto da peça).
+function resolveRegionDefaultMaterialId(part: Product["parts"][number], region: ProductPartRegion): string {
+  if (region.defaultMaterialId && part.availableMaterials.some((m) => m.id === region.defaultMaterialId)) {
+    return region.defaultMaterialId;
+  }
+  return resolveDefaultMaterialId(part);
+}
+
 export function ProductConfigurator({ product }: { product: Product }) {
   const [sizeId, setSizeId] = useState(product.sizeOptions[0]?.id ?? "");
   const [materialByPart, setMaterialByPart] = useState<Record<string, string>>(() =>
@@ -71,10 +77,23 @@ export function ProductConfigurator({ product }: { product: Product }) {
     ),
   );
   // Uma parte com regiões (.3mf pintado) escolhe uma cor por região, não uma
-  // pra parte inteira — mas todas partem do mesmo padrão definido pra parte.
+  // pra parte inteira — cada região parte do próprio padrão (ou o da parte,
+  // se a região não tiver um específico). Inclui regiões desabilitadas
+  // também: elas não aparecem pro cliente escolher, mas continuam com uma
+  // cor fixa (o padrão) pro preview 3D.
   const [materialByRegion, setMaterialByRegion] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      product.parts.flatMap((part) => part.regions.map((region) => [region.id, resolveDefaultMaterialId(part)])),
+      product.parts.flatMap((part) =>
+        part.regions.map((region) => [region.id, resolveRegionDefaultMaterialId(part, region)]),
+      ),
+    ),
+  );
+  // Região "ativa" por parte — a paleta única embaixo da lista edita essa.
+  const [activeRegionByPart, setActiveRegionByPart] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      product.parts
+        .filter((part) => part.regions.length > 0)
+        .map((part) => [part.id, part.regions.find((r) => r.enabled)?.id ?? ""]),
     ),
   );
 
@@ -137,6 +156,7 @@ export function ProductConfigurator({ product }: { product: Product }) {
       .map((part) => {
         if (part.regions.length > 0) {
           const regionsSummary = part.regions
+            .filter((region) => region.enabled)
             .map((region) => {
               const material = part.availableMaterials.find((m) => m.id === materialByRegion[region.id]);
               return `${region.label}: ${material?.name ?? "—"}`;
@@ -204,39 +224,77 @@ export function ProductConfigurator({ product }: { product: Product }) {
           </div>
         </div>
 
-        {product.parts.map((part) =>
-          // Uma parte com várias regiões (.3mf pintado) agrupa tudo num único
-          // card com as regiões em grade de 2 colunas — sem isso, cada região
-          // vira uma fileira cheia e a tela cresce muito rápido (ex.: um
-          // arquivo com 6 regiões pintadas).
-          part.regions.length > 0 ? (
+        {product.parts.map((part) => {
+          // Uma parte com regiões (.3mf pintado) mostra uma lista com o nome
+          // + a cor atual de cada região (só as visíveis pro cliente — uma
+          // região escondida pelo admin fica com a cor padrão, mas não
+          // aparece aqui) e UMA paleta única embaixo, que edita a região
+          // selecionada na lista — evita repetir a mesma paleta de cores uma
+          // vez por região, que crescia muito rápido em arquivos com várias
+          // regiões pintadas (ex.: 6 no Bulbasaur).
+          if (part.regions.length === 0) {
+            return (
+              <div key={part.id}>
+                <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
+                <MaterialSwatches
+                  materials={part.availableMaterials}
+                  selectedId={materialByPart[part.id]}
+                  onSelect={(materialId) => setMaterialByPart((prev) => ({ ...prev, [part.id]: materialId }))}
+                />
+              </div>
+            );
+          }
+
+          const visibleRegions = part.regions.filter((region) => region.enabled);
+          const activeRegionId = activeRegionByPart[part.id];
+          const activeRegion = visibleRegions.find((region) => region.id === activeRegionId);
+
+          return (
             <div key={part.id} className="rounded-xl bg-muted/30 p-4 ring-1 ring-foreground/10">
               <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
-                {part.regions.map((region) => (
-                  <div key={region.id}>
-                    <h3 className="text-xs text-muted-foreground">{region.label}</h3>
-                    <MaterialSwatches
-                      materials={part.availableMaterials}
-                      selectedId={materialByRegion[region.id]}
-                      onSelect={(materialId) => setMaterialByRegion((prev) => ({ ...prev, [region.id]: materialId }))}
-                      swatchSize="sm"
-                    />
-                  </div>
-                ))}
+              <div className="mt-2 flex flex-col gap-1">
+                {visibleRegions.map((region) => {
+                  const material = part.availableMaterials.find((m) => m.id === materialByRegion[region.id]);
+                  const isActive = region.id === activeRegionId;
+                  return (
+                    <button
+                      key={region.id}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setActiveRegionByPart((prev) => ({ ...prev, [part.id]: region.id }))}
+                      className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+                        isActive ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-background/60"
+                      }`}
+                    >
+                      <span>{region.label}</span>
+                      <span
+                        className="size-5 shrink-0 rounded-full ring-1 ring-border"
+                        style={{
+                          background: material?.hexColorSecondary
+                            ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
+                            : (material?.hexColor ?? "#a1a1aa"),
+                        }}
+                      />
+                    </button>
+                  );
+                })}
               </div>
+
+              {activeRegion ? (
+                <div className="mt-3 border-t pt-3">
+                  <h3 className="text-xs text-muted-foreground">Cor para &ldquo;{activeRegion.label}&rdquo;</h3>
+                  <MaterialSwatches
+                    materials={part.availableMaterials}
+                    selectedId={materialByRegion[activeRegion.id]}
+                    onSelect={(materialId) =>
+                      setMaterialByRegion((prev) => ({ ...prev, [activeRegion.id]: materialId }))
+                    }
+                  />
+                </div>
+              ) : null}
             </div>
-          ) : (
-            <div key={part.id}>
-              <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
-              <MaterialSwatches
-                materials={part.availableMaterials}
-                selectedId={materialByPart[part.id]}
-                onSelect={(materialId) => setMaterialByPart((prev) => ({ ...prev, [part.id]: materialId }))}
-              />
-            </div>
-          ),
-        )}
+          );
+        })}
 
         <div className="mt-auto rounded-xl bg-muted/40 p-4">
           <p className="text-2xl font-semibold">{priceCents !== null ? formatPriceCents(priceCents) : "—"}</p>

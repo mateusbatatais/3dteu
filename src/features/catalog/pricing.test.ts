@@ -91,8 +91,8 @@ const produtoPintado: Product = {
       meshFileUrl: null,
       availableMaterials: [azul, madeira],
       regions: [
-        { id: "regiao-0", label: "Região padrão", paintState: 0 },
-        { id: "regiao-1", label: "Extrusora 1", paintState: 1 },
+        { id: "regiao-0", label: "Região padrão", paintState: 0, enabled: true, defaultMaterialId: null },
+        { id: "regiao-1", label: "Extrusora 1", paintState: 1, enabled: true, defaultMaterialId: null },
       ],
       defaultMaterialId: null,
     },

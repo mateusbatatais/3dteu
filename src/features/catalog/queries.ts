@@ -142,6 +142,8 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
         id: region.id,
         label: region.label,
         paintState: region.paintState,
+        enabled: region.enabled,
+        defaultMaterialId: region.defaultFilamentOptionId,
       })),
       defaultMaterialId: part.defaultFilamentOptionId,
     })),

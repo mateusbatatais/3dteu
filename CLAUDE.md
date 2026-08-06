@@ -366,16 +366,24 @@ real nem contra a API da Woovi de verdade):**
 
 **Pendente pra fechar o ciclo:**
 - Rodar as migrações `drizzle/0001_brainy_the_order.sql`,
-  `drizzle/0002_flawless_runaways.sql` e `drizzle/0003_curvy_boom_boom.sql`
-  contra o Supabase real (`npm run db:migrate` ou colar o SQL no SQL Editor)
-  — sem isso, nada da rodada 10 (Superfrete completo, imagens de produto),
-  da rodada 12 (regiões pintadas) nem da rodada 13 (material padrão por
-  parte) funciona contra produção. As três são só aditivas (CREATE TABLE /
-  ALTER TABLE ADD COLUMN), seguras. **Atenção pro mesmo problema da rodada
-  11**: se a 0001 já foi parcialmente aplicada antes, rodar de novo pode dar
-  "already exists" num `CREATE TYPE` — nesse caso usar a versão idempotente
-  (`DO $$ ... EXCEPTION WHEN duplicate_object`) já documentada na rodada 11,
-  não a migração crua.
+  `drizzle/0002_flawless_runaways.sql`, `drizzle/0003_curvy_boom_boom.sql` e
+  `drizzle/0004_empty_amphibian.sql` contra o Supabase real (`npm run
+  db:migrate` ou colar o SQL no SQL Editor) — sem isso, nada da rodada 10
+  (Superfrete completo, imagens de produto), da rodada 12 (regiões
+  pintadas), da rodada 13 (material padrão por parte) nem da rodada 15
+  (esconder/definir padrão por região) funciona contra produção. Todas são
+  só aditivas (CREATE TABLE / ALTER TABLE ADD COLUMN), seguras. **Atenção
+  pro mesmo problema da rodada 11**: se a 0001 já foi parcialmente aplicada
+  antes, rodar de novo pode dar "already exists" num `CREATE TYPE` — nesse
+  caso usar a versão idempotente (`DO $$ ... EXCEPTION WHEN
+  duplicate_object`) já documentada na rodada 11, não a migração crua.
+  **Rodada 15**: usuário relatou `/produtos` com "This page couldn't load"
+  em produção — causa raiz quase certa era a 0002/0003 ainda não rodadas
+  (a listagem lê `default_filament_option_id`, que só existe depois da
+  0003). Passei o SQL idempotente das duas; uma screenshot seguinte do
+  usuário já mostra a página de produto funcionando em produção, então
+  **provavelmente resolvido**, mas nenhuma confirmação explícita — e a 0004
+  (nova nesta rodada) ainda não foi nem oferecida pra rodar.
 - Testar upload de um `.3mf` pintado de verdade (o `Bulbasaur.3mf` do
   usuário) contra o Supabase real — só foi testado com o arquivo servido
   estaticamente, nunca através do fluxo de upload signed-URL de verdade.
@@ -813,6 +821,76 @@ longo — sem erro de console. Não testei o clique em "Salvar" de verdade
 (chamaria `updateFilament`/`createFilament` contra o banco, que não existe
 nesta sessão) — a lógica em si é simples (um `UPDATE`/`INSERT` com os
 mesmos campos de sempre) e já passa no build/lint/type-check.
+
+### Rodada 15: identificar/esconder/definir padrão por região + paleta única na loja
+
+Usuário mandou uma screenshot do `bulb` real em produção (6 regiões, cada
+uma repetindo a mesma paleta de 5 cores — bem verboso na tela) e pediu 3
+coisas no admin — (1) conseguir identificar visualmente qual região é qual
+antes de renomear, (2) poder esconder uma região que veio errada (ruído da
+detecção MMU), (3) escolher um material padrão por região, não só por
+parte (a rodada 13 tinha deixado isso de propósito fora do escopo) — e uma
+pergunta aberta sobre a repetição de paletas na loja. Como essa última é
+uma decisão de UX aberta, usei `AskUserQuestion` com 3 opções antes de
+implementar; o usuário escolheu **"Paleta única + lista de regiões"**
+(clicar no nome da região pra selecioná-la, depois escolher a cor numa
+paleta única compartilhada, em vez de repetir a paleta por região).
+
+**Achado ao investigar o pedido (1)**: a miniatura do admin pra uma parte
+com regiões nunca tinha usado `MmuPart` — sempre passava por
+`ThreeMfPart`/`retint()` (tingimento único cinza pra malha inteira), então
+o admin nunca via as cores reais por região, só um blob cinza. Não era só
+"falta uma feature de destacar", a miniatura em si já escondia a
+informação por completo.
+
+**Schema** (migração `0004_empty_amphibian.sql`, aditiva): duas colunas
+novas em `product_part_regions` — `enabled` (boolean, default true) e
+`default_filament_option_id` (uuid, FK pra `filament_options`, mesmo
+padrão do default por parte da rodada 13).
+
+**Admin**: `PartRegionsPanel`
+(`src/features/catalog/components/part-regions-panel.tsx`, novo) substitui
+a miniatura genérica cinza + lista de rename por um preview que realmente
+usa `MmuPart` com uma cor por região (a cor do material padrão escolhido,
+ou uma cor de uma paleta fixa só pra diferenciar visualmente enquanto
+nenhum padrão foi definido). Cada linha de região ganhou: botão
+"Destacar" (estado local `highlighted`, sem chamada de servidor — ao
+clicar, toda região que NÃO é a destacada vira cinza flat no preview,
+isolando visualmente qual pedaço do modelo corresponde àquele nome, antes
+de renomear), checkbox "Visível pro cliente" (`enabled`) e um `Select` com
+os materiais aceitos da parte pra escolher o padrão daquela região
+especificamente (fallback "Usa o padrão da parte" quando null).
+`updateRegionSettings` (substituiu `updateRegionLabel`) grava os 3 campos
+de uma vez, chamada como função tipada direto do client component
+(`useTransition` + toast), mesmo padrão do `FilamentForm` da rodada 14.
+
+**Loja**: `product-configurator.tsx` trocou a grade de "uma paleta por
+região" por uma lista de nomes (só as regiões com `enabled=true` — uma
+escondida nunca aparece aqui) com um círculo mostrando a cor atual de cada
+uma; clicar num nome marca ele como "ativo" (`activeRegionByPart`) e uma
+ÚNICA paleta aparece embaixo pra editar só a região ativa
+(`resolveRegionDefaultMaterialId`: padrão da região > padrão da parte >
+primeiro material). Uma região escondida continua contribuindo pro preço e
+pro preview 3D com sua cor padrão fixa (nunca escolhida pelo cliente) — só
+não aparece nem na lista nem no resumo do carrinho; não foi preciso mudar
+`pricing.ts`, já que o `regionSelections` enviado pro cálculo continua
+tendo uma entrada por região (visível ou não), só a UI que filtra.
+
+**Testado de ponta a ponta com o `Bulbasaur.3mf` real** (copiado pra
+`public/` temporariamente, removido depois — mesma técnica da rodada 12):
+confirmei via Playwright que (a) a miniatura do admin agora mostra cores
+reais e distintas por região (antes era um blob cinza), (b) clicar
+"Destacar" numa região isola ela mantendo sua cor real e deixa TODO o
+resto cinza — revelou inclusive que, neste arquivo real, a região que eu
+nomeei de teste como "olhos" corresponde na verdade ao corpo inteiro, não
+aos olhos (esperado — os nomes de teste eram arbitrários; o importante é
+que o destaque aponta pro pedaço certo da malha, o que confirma a
+ferramenta funcionando), (c) uma região com `enabled=false` some da lista
+clicável da loja mas continua colorida no preview 3D com o material padrão
+definido, (d) clicar numa região diferente da lista + numa cor diferente
+da paleta única recolore só o círculo daquela região (confirmado
+isoladamente: só "Extrusora 2" mudou de azul pra verde, as outras 4
+continuaram azuis) — sem nenhum erro de console em nenhum dos passos.
 
 ## Preferências do usuário (importante)
 

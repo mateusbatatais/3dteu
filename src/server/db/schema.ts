@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   integer,
   jsonb,
   numeric,
@@ -124,6 +125,16 @@ export const productPartRegions = pgTable(
     // Estado decodificado do arquivo pintado: 0 = região padrão/sem pintura, 1-16 = Extrusora 1-16.
     paintState: integer("paint_state").notNull(),
     label: text("label").notNull(),
+    // Uma região detectada errado (ruído da segmentação MMU) pode ser
+    // escondida do cliente sem precisar reenviar o arquivo — continua
+    // renderizando no preview com defaultFilamentOptionId, só não aparece
+    // como opção configurável na loja.
+    enabled: boolean("enabled").default(true).notNull(),
+    // Mesma ideia do default por parte (acima), mas por região — cai pro
+    // padrão da parte quando null.
+    defaultFilamentOptionId: uuid("default_filament_option_id").references(() => filamentOptions.id, {
+      onDelete: "set null",
+    }),
     sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -1,0 +1,3 @@
+ALTER TABLE "product_part_regions" ADD COLUMN "enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "product_part_regions" ADD COLUMN "default_filament_option_id" uuid;--> statement-breakpoint
+ALTER TABLE "product_part_regions" ADD CONSTRAINT "product_part_regions_default_filament_option_id_filament_options_id_fk" FOREIGN KEY ("default_filament_option_id") REFERENCES "public"."filament_options"("id") ON DELETE set null ON UPDATE no action;
