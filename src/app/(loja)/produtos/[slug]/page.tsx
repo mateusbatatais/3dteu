@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { ProductConfigurator } from "@/features/catalog/components/product-configurator";
 import { getProductBySlug } from "@/features/catalog/queries";
 import { decodeSelectionFromShareParam, SHARE_SELECTION_PARAM } from "@/features/catalog/selection-share";
+import { ProductReviewsSection } from "@/features/reviews/components/product-reviews-section";
+import { getProductRatingSummary } from "@/features/reviews/queries";
 
 // Ver nota em /produtos/page.tsx sobre force-dynamic.
 export const dynamic = "force-dynamic";
@@ -35,6 +37,7 @@ export default async function ProdutoPage({ params, searchParams }: PageProps<"/
   const resolvedSearchParams = await searchParams;
   const shareParam = resolvedSearchParams[SHARE_SELECTION_PARAM];
   const initialSelection = decodeSelectionFromShareParam(typeof shareParam === "string" ? shareParam : undefined);
+  const ratingSummary = await getProductRatingSummary(product.id);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -48,6 +51,14 @@ export default async function ProdutoPage({ params, searchParams }: PageProps<"/
       price: (product.basePriceCents / 100).toFixed(2),
       availability: "https://schema.org/InStock",
     },
+    aggregateRating:
+      ratingSummary.reviewCount > 0
+        ? {
+            "@type": "AggregateRating",
+            ratingValue: ratingSummary.averageRating?.toFixed(1),
+            reviewCount: ratingSummary.reviewCount,
+          }
+        : undefined,
   };
 
   return (
@@ -58,6 +69,7 @@ export default async function ProdutoPage({ params, searchParams }: PageProps<"/
       <div className="mt-8">
         <ProductConfigurator product={product} initialSelection={initialSelection} />
       </div>
+      <ProductReviewsSection productId={product.id} />
     </main>
   );
 }

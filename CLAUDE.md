@@ -367,14 +367,15 @@ real nem contra a API da Woovi de verdade):**
 **Pendente pra fechar o ciclo:**
 - Rodar as migrações `drizzle/0001_brainy_the_order.sql`,
   `drizzle/0002_flawless_runaways.sql`, `drizzle/0003_curvy_boom_boom.sql`,
-  `drizzle/0004_empty_amphibian.sql` e `drizzle/0005_solid_lucky_pierre.sql`
-  contra o Supabase real (`npm run db:migrate` ou colar o SQL no SQL
-  Editor) — sem isso, nada da rodada 10 (Superfrete completo, imagens de
-  produto), da rodada 12 (regiões pintadas), da rodada 13 (material padrão
-  por parte), da rodada 15 (esconder/definir padrão por região) nem da
-  rodada 16 (conta de cliente — `orders.customer_id`) funciona contra
-  produção. Todas são só aditivas (CREATE TABLE / ALTER TABLE ADD COLUMN),
-  seguras. **Atenção
+  `drizzle/0004_empty_amphibian.sql`, `drizzle/0005_solid_lucky_pierre.sql`
+  e `drizzle/0006_nappy_banshee.sql` contra o Supabase real (`npm run
+  db:migrate` ou colar o SQL no SQL Editor) — sem isso, nada da rodada 10
+  (Superfrete completo, imagens de produto), da rodada 12 (regiões
+  pintadas), da rodada 13 (material padrão por parte), da rodada 15
+  (esconder/definir padrão por região) nem da rodada 16 (conta de cliente —
+  `orders.customer_id` — e avaliações de produto — `product_reviews`)
+  funciona contra produção. Todas são só aditivas (CREATE TABLE / ALTER
+  TABLE ADD COLUMN), seguras. **Atenção
   pro mesmo problema da rodada 11**: se a 0001 já foi parcialmente aplicada
   antes, rodar de novo pode dar "already exists" num `CREATE TYPE` — nesse
   caso usar a versão idempotente (`DO $$ ... EXCEPTION WHEN
@@ -1024,8 +1025,49 @@ caminho.
 **Pendente**: rodar a migração `0005` contra o Supabase real (mesmo
 procedimento das anteriores — só `ALTER TABLE ADD COLUMN`, aditiva).
 
-**Ainda não implementado nesta rodada** (trabalho em andamento, retomar na
-próxima sessão se for interrompido): avaliações de produto.
+**Feature 5 (feita)**: avaliações de produto — nova tabela
+`product_reviews` (migração `0006_nappy_banshee.sql`, aditiva): nota (1-5),
+comentário opcional, `customerName` (snapshot, mesmo motivo de
+`orders.customerName` — `auth.users` não dá pra fazer join direto) e um
+índice único `(product_id, customer_id)`. **Decisão**: avaliação exige
+conta (`customerId` nunca é null) — evita review anônima/spam fácil sem
+precisar de captcha ou moderação. **Não** exige compra verificada nesta v1
+(qualquer cliente logado avalia qualquer produto) — poderia cruzar com
+`order_items` depois se virar problema de verdade, mas era escopo demais
+pro pedido original. Enviar de novo faz `onConflictDoUpdate` na mesma
+avaliação (upsert pelo índice único) em vez de duplicar — o mesmo
+formulário serve pra criar e editar.
+
+`ProductReviewsSection` (Server Component, `/produtos/[slug]`) mostra
+média + contagem (`StarRatingDisplay`, preenchimento fracionário de
+verdade via largura percentual, não só arredonda pra estrela inteira),
+lista de avaliações, e ou o formulário (`ReviewForm`, com
+`StarRatingPicker` de 1-5 discreto) — pré-preenchido se o cliente já tinha
+avaliado — ou um convite pra entrar (`/conta/entrar`) quando não há sessão.
+A checagem de sessão é best-effort com try/catch: sem isso, um Supabase
+Auth mal configurado quebraria a página do produto inteira (que hoje só
+depende do banco via Drizzle, nunca de Auth) — a seção de reviews é um
+extra, nunca pode derrubar a compra. JSON-LD do produto ganhou
+`aggregateRating` quando há pelo menos uma avaliação (rich snippet de
+verdade pro Google, não só decorativo).
+
+**Testado com dados mockados** (mesma limitação de sempre — sem
+`DATABASE_URL`/Supabase local): confirmei via Playwright que a média
+fracionária preenche a estrela proporcionalmente (4.3 preenche ~86% da 5ª
+estrela), que escolher uma nota no picker marca exatamente aquela
+quantidade de estrelas, e que a lista de avaliações + o aviso de "entre pra
+avaliar" renderizam certo — sem erro de console. Não testado o clique em
+"Enviar avaliação" de verdade (chamaria `submitProductReview` contra o
+banco, que não existe nesta sessão).
+
+**Pendente**: rodar a migração `0006` contra o Supabase real (mesmo
+procedimento das anteriores).
+
+Com isso, as 5 funcionalidades pedidas nesta rodada (notificação de pedido
+novo, busca/filtro, link compartilhável, conta de cliente, avaliações) e a
+correção de performance da listagem estão todas implementadas e commitadas
+— nenhuma foi testada de ponta a ponta contra Supabase/produção real
+(mesma limitação de toda a sessão).
 
 ## Preferências do usuário (importante)
 

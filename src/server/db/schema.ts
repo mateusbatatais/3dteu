@@ -198,6 +198,30 @@ export const productImages = pgTable("product_images", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Avaliação de um produto — exige conta (customerId nunca é null; sem
+// checkout de convidado pra isso, evita review anônima/spam fácil). Não
+// exige compra verificada nesta v1 (qualquer cliente logado pode avaliar
+// qualquer produto) — poderia cruzar com order_items no futuro se virar
+// problema de verdade. customerName é um snapshot (igual
+// orders.customerName) porque auth.users vive num schema do Supabase que o
+// Drizzle não gerencia, não dá pra fazer join direto.
+export const productReviews = pgTable(
+  "product_reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").notNull(),
+    customerName: text("customer_name").notNull(),
+    rating: integer("rating").notNull(),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("product_review_customer_unique").on(table.productId, table.customerId)],
+);
+
 // ---------------------------------------------------------------------------
 // Pedidos
 // ---------------------------------------------------------------------------
@@ -328,10 +352,15 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   parts: many(productParts),
   sizeOptions: many(sizeOptions),
   images: many(productImages),
+  reviews: many(productReviews),
 }));
 
 export const productImagesRelations = relations(productImages, ({ one }) => ({
   product: one(products, { fields: [productImages.productId], references: [products.id] }),
+}));
+
+export const productReviewsRelations = relations(productReviews, ({ one }) => ({
+  product: one(products, { fields: [productReviews.productId], references: [products.id] }),
 }));
 
 export const productPartsRelations = relations(productParts, ({ one, many }) => ({

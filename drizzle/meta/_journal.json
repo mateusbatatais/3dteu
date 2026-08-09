@@ -43,6 +43,13 @@
       "when": 1786269528806,
       "tag": "0005_solid_lucky_pierre",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786276127104,
+      "tag": "0006_nappy_banshee",
+      "breakpoints": true
     }
   ]
 }
