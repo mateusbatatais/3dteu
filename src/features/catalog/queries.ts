@@ -21,9 +21,13 @@ export async function getPublishedProducts() {
 }
 
 /**
- * Produtos publicados com o suficiente pra desenhar uma miniatura 3D real no
- * catálogo (parte + cor do primeiro material disponível), em vez do ícone
- * genérico.
+ * Produtos publicados com o suficiente pra desenhar uma miniatura no
+ * catálogo — a foto de capa quando existe, ou a cor do material padrão como
+ * fallback. Deliberadamente NÃO carrega/parseia o arquivo 3D aqui: abrir um
+ * <Canvas> react-three-fiber (WebGL + Environment HDRI) por card, um pra
+ * cada produto da grade, foi o que deixava `/produtos` lento — o preview 3D
+ * de verdade só faz sentido na página do produto (`getProductBySlug`), onde
+ * só existe uma malha por vez.
  */
 export async function getPublishedProductsForCatalog() {
   const rows = await db.query.products.findMany({
@@ -32,28 +36,29 @@ export async function getPublishedProductsForCatalog() {
     with: {
       parts: {
         orderBy: [asc(productParts.sortOrder)],
+        limit: 1,
         with: { materialOptions: { with: { filament: true } } },
       },
+      images: { orderBy: [asc(productImages.position)], limit: 1 },
     },
   });
 
-  return rows.map((row) => ({
-    id: row.id,
-    slug: row.slug,
-    name: row.name,
-    description: row.description,
-    basePriceCents: row.basePriceCents,
-    previewParts: row.parts.map((part) => {
-      const defaultMaterial = part.materialOptions.find((m) => m.filamentOptionId === part.defaultFilamentOptionId);
-      const material = defaultMaterial ?? part.materialOptions[0];
-      return {
-        id: part.id,
-        meshUrl: part.meshFileUrl,
-        color: material?.filament.hexColor ?? "#a1a1aa",
-        colorSecondary: material?.filament.hexColorSecondary ?? null,
-      };
-    }),
-  }));
+  return rows.map((row) => {
+    const part = row.parts[0];
+    const defaultMaterial = part?.materialOptions.find((m) => m.filamentOptionId === part.defaultFilamentOptionId);
+    const material = defaultMaterial ?? part?.materialOptions[0];
+
+    return {
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      description: row.description,
+      basePriceCents: row.basePriceCents,
+      coverImageUrl: row.images[0]?.url ?? null,
+      fallbackColor: material?.filament.hexColor ?? null,
+      fallbackColorSecondary: material?.filament.hexColorSecondary ?? null,
+    };
+  });
 }
 
 /** Lista todos os produtos (rascunho e publicado) para a tabela do admin. */

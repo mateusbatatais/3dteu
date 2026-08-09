@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  images: {
+    // Fotos de produto e QR code Pix vêm do Supabase Storage (domínio
+    // variável por projeto) — sem isso, next/image rejeita otimizar
+    // qualquer host que não seja o próprio app.
+    remotePatterns: [{ protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/public/**" }],
+  },
   experimental: {
     serverActions: {
       // A Vercel tem um teto de 4,5MB por requisição em qualquer Function

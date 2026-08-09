@@ -892,6 +892,61 @@ da paleta única recolore só o círculo daquela região (confirmado
 isoladamente: só "Extrusora 2" mudou de azul pra verde, as outras 4
 continuaram azuis) — sem nenhum erro de console em nenhum dos passos.
 
+### Rodada 16 (em andamento): performance do catálogo + novas funcionalidades
+
+Usuário pediu 5 funcionalidades novas em ordem de prioridade (notificação de
+pedido novo pro admin, busca/filtro no catálogo, link compartilhável da
+configuração, conta de cliente, avaliações de produto) e, antes disso,
+reportou o site "muito lento", citando especificamente `/produtos`
+("parece tá carregando o modelo e deveria ser só uma img thumb").
+
+**Causa raiz confirmada por leitura de código (não só suspeita)**:
+`/produtos` renderizava um `<ProductViewer3D>` completo — um `<Canvas>`
+react-three-fiber próprio (WebGL + luzes + `Environment` HDRI buscado por
+CDN) — **por card**, e cada um carregava e parseava o arquivo 3D de verdade
+(`getPublishedProductsForCatalog` já buscava `meshUrl` pra isso desde a
+rodada 8). Pra um produto com regiões pintadas isso significa parsear o
+`.3mf` inteiro (no caso do Bulbasaur, 20MB/1M triângulos) só pra desenhar
+uma miniatura pequena — multiplicado por N produtos na grade, todos ao
+mesmo tempo no carregamento da página. Fazia sentido a "miniatura 3D real"
+na época (rodada 8/9), mas o custo ficou claro só com mais produtos
+publicados.
+
+**Fix**: `/produtos` não usa mais `ProductViewer3D` nem depende de
+three.js — cortado da rota inteira (bundle menor, zero WebGL). A miniatura
+agora é: (1) a **foto de capa** do produto (`productImages`, já existente
+desde a rodada 10) via `next/image`, se o admin tiver subido alguma; (2) se
+não, um bloco colorido simples (CSS, sem 3D) com a cor do material padrão
+da primeira parte — sólido ou gradiente pra dual-color; (3) o ícone
+genérico de caixa só se o produto não tiver nem foto nem material ainda.
+`getPublishedProductsForCatalog` (queries.ts) parou de buscar `meshUrl` e
+todas as partes — só a primeira parte (só pra cor) e a primeira imagem
+(`limit: 1` nas duas relations). A malha 3D de verdade só é carregada onde
+faz sentido: a página do produto individual (`getProductBySlug`), que
+sempre teve isso.
+
+De brinde, configurei `next.config.ts` (`images.remotePatterns` pro
+domínio `*.supabase.co`) — não existia nenhuma config de imagem antes, por
+isso toda imagem vinda do Supabase Storage no projeto (fotos de produto, QR
+code Pix) precisava de `unoptimized` pra não quebrar. A nova miniatura já
+usa otimização de verdade (resize/WebP via `next/image`) em vez de servir o
+arquivo original.
+
+**Testado**: página mockada confirma renderização correta dos 3 estados
+(foto/cor/ícone) e **zero `<canvas>` na página** via Playwright — antes
+disso não dava pra confirmar objetivamente que o Canvas tinha sumido, só
+inferir pelo código. `next build` prova que `ProductViewer3D`/three.js não
+é mais importado por essa rota. Não testado contra uma foto real do
+Supabase (só uma URL falsa, que confirma que o `remotePattern` deixa a
+requisição passar em vez de rejeitar — o 500 que apareceu é só a
+otimização de imagem tentando buscar um host que não existe de verdade).
+
+**Ainda não implementado nesta rodada** (trabalho em andamento, retomar na
+próxima sessão se for interrompido): as 5 funcionalidades pedidas, na
+ordem combinada — notificação de pedido novo, busca/filtro no catálogo,
+link compartilhável de configuração, conta de cliente, avaliações de
+produto.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com
