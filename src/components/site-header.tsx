@@ -1,6 +1,6 @@
 "use client";
 
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, User } from "lucide-react";
 import Link from "next/link";
 
 import { useCartStore } from "@/features/checkout/cart-store";
@@ -21,6 +21,13 @@ export function SiteHeader() {
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Catálogo
+          </Link>
+          <Link
+            href="/conta"
+            aria-label="Minha conta"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <User className="size-5" />
           </Link>
           <Link
             href="/carrinho"

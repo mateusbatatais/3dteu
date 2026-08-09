@@ -209,6 +209,11 @@ export const orders = pgTable("orders", {
   customerName: text("customer_name").notNull(),
   customerEmail: text("customer_email").notNull(),
   customerPhone: text("customer_phone"),
+  // Preenchido só quando o pedido é feito com uma sessão ativa (Supabase
+  // Auth) — checkout continua funcionando 100% como convidado sem isso.
+  // Sem FK de propósito: auth.users vive num schema do Supabase que o
+  // Drizzle não gerencia (mesmo padrão de admin_users.id, acima).
+  customerId: uuid("customer_id"),
   status: orderStatusEnum("status").default("awaiting_payment").notNull(),
   deliveryMethod: deliveryMethodEnum("delivery_method").notNull(),
   shippingAddress: jsonb("shipping_address"), // null quando deliveryMethod = "pickup"

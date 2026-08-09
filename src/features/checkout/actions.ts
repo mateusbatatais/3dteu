@@ -5,6 +5,7 @@ import { getProductBySlug } from "@/features/catalog/queries";
 import { sendAdminNewOrderNotification, sendOrderConfirmationEmail } from "@/features/orders/email";
 import { wooviProvider } from "@/features/payments/woovi";
 import type { DeliveryMethod, ShippingAddress } from "@/features/shipping/types";
+import { createClient } from "@/lib/supabase/server";
 import { db } from "@/server/db/client";
 import { orderItems, orders, payments } from "@/server/db/schema";
 
@@ -105,12 +106,27 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
 
   const totalCents = resolvedItems.reduce((sum, item) => sum + item.subtotalCents, 0) + shippingCostCents;
 
+  // Vincular o pedido a uma conta é best-effort e opcional: checkout continua
+  // 100% funcional como convidado (customerId fica null) se não houver
+  // sessão ativa ou o Supabase Auth não estiver configurado.
+  let customerId: string | null = null;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    customerId = user?.id ?? null;
+  } catch (error) {
+    console.error("[supabase] falha ao checar sessão do cliente no checkout", error);
+  }
+
   const [order] = await db
     .insert(orders)
     .values({
       customerName: input.customerName.trim(),
       customerEmail: input.customerEmail.trim(),
       customerPhone: input.customerPhone?.trim() || null,
+      customerId,
       deliveryMethod: input.deliveryMethod,
       shippingAddress,
       shippingCostCents,

@@ -366,13 +366,15 @@ real nem contra a API da Woovi de verdade):**
 
 **Pendente pra fechar o ciclo:**
 - Rodar as migrações `drizzle/0001_brainy_the_order.sql`,
-  `drizzle/0002_flawless_runaways.sql`, `drizzle/0003_curvy_boom_boom.sql` e
-  `drizzle/0004_empty_amphibian.sql` contra o Supabase real (`npm run
-  db:migrate` ou colar o SQL no SQL Editor) — sem isso, nada da rodada 10
-  (Superfrete completo, imagens de produto), da rodada 12 (regiões
-  pintadas), da rodada 13 (material padrão por parte) nem da rodada 15
-  (esconder/definir padrão por região) funciona contra produção. Todas são
-  só aditivas (CREATE TABLE / ALTER TABLE ADD COLUMN), seguras. **Atenção
+  `drizzle/0002_flawless_runaways.sql`, `drizzle/0003_curvy_boom_boom.sql`,
+  `drizzle/0004_empty_amphibian.sql` e `drizzle/0005_solid_lucky_pierre.sql`
+  contra o Supabase real (`npm run db:migrate` ou colar o SQL no SQL
+  Editor) — sem isso, nada da rodada 10 (Superfrete completo, imagens de
+  produto), da rodada 12 (regiões pintadas), da rodada 13 (material padrão
+  por parte), da rodada 15 (esconder/definir padrão por região) nem da
+  rodada 16 (conta de cliente — `orders.customer_id`) funciona contra
+  produção. Todas são só aditivas (CREATE TABLE / ALTER TABLE ADD COLUMN),
+  seguras. **Atenção
   pro mesmo problema da rodada 11**: se a 0001 já foi parcialmente aplicada
   antes, rodar de novo pode dar "already exists" num `CREATE TYPE` — nesse
   caso usar a versão idempotente (`DO $$ ... EXCEPTION WHEN
@@ -983,9 +985,47 @@ numa navegação nova e confirmei que P e verde já vêm pré-selecionados
 (preço recalculado corretamente) — sem passar current-selection por props
 React nem simular nada, o link copiado de verdade foi reaberto.
 
+**Feature 4 (feita)**: conta de cliente — reaproveita 100% o Supabase Auth
+já usado pelo admin (mesmo `signInWithPassword`/`signUp`, mesmo padrão de
+formulário do `/admin/login`), sem nenhuma infra nova. Decisão importante:
+**checkout continua guest-only, sem nenhuma mudança** — `submitOrder`
+(`checkout/actions.ts`) só checa best-effort se existe uma sessão Supabase
+ativa no momento da compra e, se existir, grava `orders.customerId` (nova
+coluna, migração `0005_solid_lucky_pierre.sql`, nullable, **sem FK** —
+mesmo padrão de `admin_users.id` já usado no projeto: `auth.users` vive num
+schema do Supabase que o Drizzle não gerencia). Sem sessão (a grande
+maioria dos casos hoje), `customerId` fica null e nada muda — zero risco
+pro fluxo de checkout já validado nesta sessão.
+
+Páginas novas em `src/app/(loja)/conta/`: `entrar` e `cadastrar` (client
+components, mesmo padrão do login do admin), e `/conta` (Server Component
+protegido, lista pedidos via `getOrdersByCustomerId` + botão "Sair"). Pedido
+feito como convidado ANTES de logar não aparece em "Meus pedidos" (só
+pedidos com `customerId` preenchido) — decisão consciente de não tentar
+"reivindicar" pedidos antigos por e-mail, evita o risco de alguém ver
+pedido de outra pessoa só por saber o e-mail dela. `proxy.ts` ganhou a
+mesma proteção que `/admin` já tinha, mas pra `/conta` (exceto
+`entrar`/`cadastrar`) — sem checagem de role, qualquer sessão válida entra.
+`SiteHeader` ganhou um ícone de usuário linkando pra `/conta`.
+
+**Testado**: `/conta/entrar` e `/conta/cadastrar` renderizam certo contra o
+dev server real (sem depender de Supabase pro render inicial, só pro
+submit) — confirmado via Playwright, ícone de conta aparece no header.
+`/conta` de verdade **não pôde ser testada** (precisa de
+`NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY`, ausentes nesta sessão — o
+`createClient()` do servidor lança "Your project's URL and Key are
+required" sem eles, 500 esperado, mesma limitação de sempre com páginas que
+tocam Supabase/banco); a lista de pedidos + badges de status foi conferida
+com dados mockados (Playwright, sem erro de console). Fluxo de
+signup/login/logout de verdade contra o Supabase real também não testado
+— primeira vez que alguém tentar cadastrar uma conta é o teste real desse
+caminho.
+
+**Pendente**: rodar a migração `0005` contra o Supabase real (mesmo
+procedimento das anteriores — só `ALTER TABLE ADD COLUMN`, aditiva).
+
 **Ainda não implementado nesta rodada** (trabalho em andamento, retomar na
-próxima sessão se for interrompido): conta de cliente, avaliações de
-produto — nessa ordem.
+próxima sessão se for interrompido): avaliações de produto.
 
 ## Preferências do usuário (importante)
 

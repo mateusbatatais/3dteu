@@ -21,6 +21,15 @@ export async function getAllOrdersForAdmin() {
   });
 }
 
+/** Histórico de pedidos de uma conta — só pedidos feitos com sessão ativa (customerId preenchido). */
+export async function getOrdersByCustomerId(customerId: string) {
+  return db.query.orders.findMany({
+    where: eq(orders.customerId, customerId),
+    orderBy: [desc(orders.createdAt)],
+    with: { items: true },
+  });
+}
+
 export async function getOrderByIdForAdmin(id: string) {
   return db.query.orders.findFirst({
     where: eq(orders.id, id),

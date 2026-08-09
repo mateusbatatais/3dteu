@@ -36,6 +36,13 @@
       "when": 1786049767943,
       "tag": "0004_empty_amphibian",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786269528806,
+      "tag": "0005_solid_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }
