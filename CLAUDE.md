@@ -941,11 +941,33 @@ Supabase (só uma URL falsa, que confirma que o `remotePattern` deixa a
 requisição passar em vez de rejeitar — o 500 que apareceu é só a
 otimização de imagem tentando buscar um host que não existe de verdade).
 
+**Feature 1 (feita)**: notificação de pedido novo pro admin —
+`sendAdminNewOrderNotification` (`src/features/orders/email.ts`) reaproveita
+o Resend já configurado pra confirmação do cliente, manda pra
+`ADMIN_NOTIFICATION_EMAIL` (nova env var) com resumo dos itens + link pro
+pedido no admin. Best-effort igual ao resto do checkout (não derruba o
+pedido se falhar). Chamado em `submitOrder` logo depois do e-mail de
+confirmação do cliente.
+
+**Feature 2 (feita)**: busca/filtro no catálogo — `/produtos` agora lê
+`?q=` (nome/descrição, `ilike` case-insensitive) e `?categoria=` (slug da
+categoria) via `searchParams`, direto na query
+(`getPublishedProductsForCatalog` ganhou um parâmetro de filtros opcional).
+`CatalogFilters` (client component, `useSearchParams`/`useRouter`) escreve
+esses params na URL — busca por texto com debounce de 400ms (`router
+.replace`, não polui o histórico a cada tecla), categoria atualiza na
+hora. URL fica compartilhável/copiável com o filtro aplicado. Categoria
+que não existe (mais) retorna lista vazia em vez de ignorar o filtro
+silenciosamente. **Testado** via Playwright contra uma página mockada
+(sem banco, mesma limitação de sempre): confirma que digitar e esperar o
+debounce atualiza a URL pra `?q=...`, e escolher uma categoria soma
+`&categoria=...` preservando o `q` já digitado — sem erro de console. Não
+testado contra produtos reais (a query em si é simples e já passa
+build/type-check).
+
 **Ainda não implementado nesta rodada** (trabalho em andamento, retomar na
-próxima sessão se for interrompido): as 5 funcionalidades pedidas, na
-ordem combinada — notificação de pedido novo, busca/filtro no catálogo,
-link compartilhável de configuração, conta de cliente, avaliações de
-produto.
+próxima sessão se for interrompido): link compartilhável de configuração,
+conta de cliente, avaliações de produto — nessa ordem.
 
 ## Preferências do usuário (importante)
 

@@ -2,8 +2,10 @@ import { Box } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { Suspense } from "react";
 
-import { getPublishedProductsForCatalog } from "@/features/catalog/queries";
+import { CatalogFilters } from "@/features/catalog/components/catalog-filters";
+import { getCategories, getPublishedProductsForCatalog } from "@/features/catalog/queries";
 import { formatPriceCents } from "@/lib/format";
 
 export const metadata: Metadata = {
@@ -17,15 +19,29 @@ export const metadata: Metadata = {
 // sempre atualizado. Pode virar `revalidate` (ISR) mais pra frente.
 export const dynamic = "force-dynamic";
 
-export default async function ProdutosPage() {
-  const productList = await getPublishedProductsForCatalog();
+export default async function ProdutosPage({ searchParams }: PageProps<"/produtos">) {
+  const params = await searchParams;
+  const q = typeof params.q === "string" ? params.q : undefined;
+  const categorySlug = typeof params.categoria === "string" ? params.categoria : undefined;
+  const isFiltered = Boolean(q || categorySlug);
+
+  const [productList, categories] = await Promise.all([
+    getPublishedProductsForCatalog({ q, categorySlug }),
+    getCategories(),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-16">
       <h1 className="text-3xl font-semibold tracking-tight">Catálogo</h1>
 
+      <Suspense fallback={<div className="mt-6 h-10" />}>
+        <CatalogFilters categories={categories} />
+      </Suspense>
+
       {productList.length === 0 ? (
-        <p className="mt-2 text-muted-foreground">Nenhum produto publicado ainda.</p>
+        <p className="mt-6 text-muted-foreground">
+          {isFiltered ? "Nenhum produto encontrado com esses filtros." : "Nenhum produto publicado ainda."}
+        </p>
       ) : (
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {productList.map((product) => (

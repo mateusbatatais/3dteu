@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 
 import { db } from "@/server/db/client";
 import {
@@ -29,9 +29,24 @@ export async function getPublishedProducts() {
  * de verdade só faz sentido na página do produto (`getProductBySlug`), onde
  * só existe uma malha por vez.
  */
-export async function getPublishedProductsForCatalog() {
+export async function getPublishedProductsForCatalog(filters?: { q?: string; categorySlug?: string }) {
+  const conditions = [eq(products.status, "published")];
+
+  const q = filters?.q?.trim();
+  if (q) {
+    const term = `%${q}%`;
+    conditions.push(or(ilike(products.name, term), ilike(products.description, term))!);
+  }
+
+  if (filters?.categorySlug) {
+    const category = await db.query.categories.findFirst({ where: eq(categories.slug, filters.categorySlug) });
+    // Categoria no filtro não existe (mais) — retorna vazio em vez de ignorar o filtro.
+    if (!category) return [];
+    conditions.push(eq(products.categoryId, category.id));
+  }
+
   const rows = await db.query.products.findMany({
-    where: eq(products.status, "published"),
+    where: and(...conditions),
     orderBy: [asc(products.createdAt)],
     with: {
       parts: {
