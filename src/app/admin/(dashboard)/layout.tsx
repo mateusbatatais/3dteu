@@ -9,7 +9,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <aside className="hidden w-56 shrink-0 flex-col border-r bg-muted/20 sm:flex">
         <div className="flex h-16 items-center px-6">
           <Link href="/admin" className="font-semibold tracking-tight">
-            Fidgets admin
+            3D Teu admin
           </Link>
         </div>
         <AdminSidebarNav />

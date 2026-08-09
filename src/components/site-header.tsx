@@ -4,6 +4,7 @@ import { ShoppingCart, User } from "lucide-react";
 import Link from "next/link";
 
 import { useCartStore } from "@/features/checkout/cart-store";
+import { SiteLogo } from "./site-logo";
 
 export function SiteHeader() {
   const itemCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0));
@@ -11,9 +12,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          Fidgets
-        </Link>
+        <SiteLogo />
 
         <nav className="flex items-center gap-6">
           <Link

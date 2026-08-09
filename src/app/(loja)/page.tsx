@@ -2,6 +2,7 @@ import { Box, Palette, Truck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { RotatingTeu } from "@/components/rotating-teu";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -31,10 +32,12 @@ export default function HomePage() {
   return (
     <main className="flex flex-1 flex-col">
       <section className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 px-6 py-24 text-center">
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Fidgets sob encomenda</h1>
+        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+          Peças em 3D pra <RotatingTeu />.
+        </h1>
         <p className="max-w-xl text-lg text-muted-foreground">
-          Escolha o modelo, veja o preview em 3D e personalize cor e tamanho — impresso
-          especialmente pra você.
+          Fidgets, decoração, presentes ou qualquer ideia — escolha o modelo, veja o preview em 3D e
+          personalize cor e tamanho, impresso especialmente pra você.
         </p>
         <Button render={<Link href="/produtos" />} nativeButton={false} size="lg" className="rounded-full px-8">
           Ver catálogo

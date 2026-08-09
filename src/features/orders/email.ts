@@ -19,7 +19,7 @@ export async function sendOrderConfirmationEmail(input: {
   const trackingUrl = `${siteUrl}/pedido/${input.orderToken}`;
 
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL ?? "Fidgets <onboarding@resend.dev>",
+    from: process.env.RESEND_FROM_EMAIL ?? "3D Teu <onboarding@resend.dev>",
     to: input.customerEmail,
     subject: "Recebemos seu pedido!",
     html: `
@@ -61,7 +61,7 @@ export async function sendAdminNewOrderNotification(input: {
     .join("");
 
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL ?? "Fidgets <onboarding@resend.dev>",
+    from: process.env.RESEND_FROM_EMAIL ?? "3D Teu <onboarding@resend.dev>",
     to: adminEmail,
     subject: `Novo pedido — ${formatPriceCents(input.totalCents)}`,
     html: `

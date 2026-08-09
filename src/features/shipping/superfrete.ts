@@ -24,7 +24,7 @@ function authHeaders(token: string): HeadersInit {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
     // A Superfrete exige identificar a aplicação chamadora no User-Agent.
-    "User-Agent": "Fidgets (3dteu.vercel.app)",
+    "User-Agent": "3D Teu (3dteu.vercel.app)",
   };
 }
 

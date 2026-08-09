@@ -17,14 +17,15 @@ const geistMono = Geist_Mono({
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-const SITE_TITLE = "Fidgets sob encomenda";
-const SITE_DESCRIPTION = "Fidgets impressos em 3D sob encomenda, com cor, material e tamanho personalizáveis.";
+const SITE_TITLE = "3D Teu";
+const SITE_DESCRIPTION =
+  "Peças impressas em 3D sob encomenda — fidgets, decoração, presentes ou qualquer ideia, com cor, material e tamanho personalizáveis.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: SITE_TITLE,
-    template: "%s | Fidgets sob encomenda",
+    template: "%s | 3D Teu",
   },
   description: SITE_DESCRIPTION,
   openGraph: {

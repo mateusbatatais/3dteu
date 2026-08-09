@@ -35,14 +35,14 @@ export default async function ProductOpenGraphImage({ params }: PageProps<"/prod
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, #7c3aed, #4c1d95)",
+          background: "linear-gradient(135deg, #007cb6, #004a6e)",
           color: "white",
           padding: 80,
         }}
       >
-        <div style={{ display: "flex", fontSize: 28, opacity: 0.85 }}>Fidgets sob encomenda</div>
+        <div style={{ display: "flex", fontSize: 28, opacity: 0.85 }}>3D Teu — peças sob encomenda</div>
         <div style={{ display: "flex", fontSize: 64, fontWeight: 700, marginTop: 20, textAlign: "center" }}>
-          {product?.name ?? "Fidgets"}
+          {product?.name ?? "3D Teu"}
         </div>
         {product ? (
           <div style={{ display: "flex", fontSize: 36, marginTop: 24, opacity: 0.95 }}>

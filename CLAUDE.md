@@ -1,11 +1,12 @@
 @AGENTS.md
 
-# 3dteu — Fidgets sob encomenda
+# 3D Teu
 
-Loja de fidgets impressos em 3D sob encomenda: preview 3D do modelo, escolha de
+Loja de peças impressas em 3D sob encomenda (fidgets foi só o primeiro
+produto — desde a rodada 17 o site e a marca deixaram de ser
+fidget-específicos de propósito): preview 3D do modelo, escolha de
 cor/material/tamanho, checkout como convidado com Pix, admin para cadastrar
-produtos. Pode vender outras categorias de produto no futuro (arquitetura já
-pensada pra isso).
+produtos. Nome/logo "3D Teu" — ver rodada 17 pra detalhes do rebrand.
 
 - Repo: https://github.com/mateusbatatais/3dteu
 - Deploy: https://3dteu.vercel.app (Vercel Hobby por enquanto — trocar pro Pro
@@ -26,10 +27,14 @@ pensada pra isso).
   `admin/login` fica fora desse grupo, só dentro do `admin/layout.tsx` externo
   (bem enxuto), pra não mostrar o menu na tela de login. Nomes de grupo entre
   parênteses não aparecem na URL.
-- Cor de marca: roxo/violeta (`--primary` em `oklch(... 293)` no
-  `globals.css`) substituindo o cinza neutro puro do preset original do
-  shadcn — decisão de design, não peça de dado técnico; se o usuário definir
-  uma identidade visual própria depois, é só trocar essas variáveis.
+- Cor de marca: azul + laranja (`--primary` em `oklch(... 234)` +
+  `--brand-orange` em `oklch(... 58)`, ambos no `globals.css`) — extraídas
+  por amostragem de pixel da logo oficial (`public/logo-light.png`/
+  `logo-dark.png`) na rodada 17, substituindo o roxo/violeta genérico do
+  preset original do shadcn usado até então. `--brand-orange` é deliberado
+  como acento raro (ex.: a palavra rotativa do slogan), não entra em
+  `--primary`/`--accent` (que cobrem toda a UI) pra não pintar tudo de
+  laranja.
 - **Bug real corrigido**: `globals.css` tinha `--font-sans: var(--font-sans)`
   (circular!) em vez de `var(--font-geist-sans)` — a fonte nunca resolvia e
   o site inteiro caía no serif padrão do navegador. Isso não era só um
@@ -1068,6 +1073,90 @@ novo, busca/filtro, link compartilhável, conta de cliente, avaliações) e a
 correção de performance da listagem estão todas implementadas e commitadas
 — nenhuma foi testada de ponta a ponta contra Supabase/produção real
 (mesma limitação de toda a sessão).
+
+### Rodada 17: rebrand pra "3D Teu" (logo, cores, slogan rotativo)
+
+Usuário mandou a logo oficial nova (octopus com um carretel de filamento
+como "concha", texto "3D TEU" em azul/laranja) e pediu pra redesenhar o
+site em cima dela — o nome mudou de "Fidgets" pra "3D Teu" porque a loja
+vai vender qualquer peça impressa em 3D, não só fidgets, e o visual antigo
+(nome + roxo genérico do preset shadcn) passava a impressão errada de que
+só vendia uma coisa só.
+
+**A logo chegou colada na conversa, sem arquivo em disco** — só consegui
+processá-la de verdade porque achei os PNGs reais que o usuário tinha
+gerado em `Pictures/Screenshots/` (batendo pixel a pixel com o que foi
+colado no chat); sem isso não teria como extrair cor nem cortar o slogan.
+Encontrei duas variantes (fundo escuro e fundo claro) já prontas pros dois
+temas do site.
+
+**Slogan embutido na imagem, removido por corte de verdade** (não
+IA/inpainting — o slogan ficava numa faixa própria embaixo do logotipo,
+então um crop mecânico com `sharp` resolve sem risco de artefato): cortei
+as duas variantes na altura certa (~72% da altura original) e apliquei
+`.trim()` pra tirar a margem sobrando, gerando `public/logo-light.png`
+(547×141) e `public/logo-dark.png` (574×155) — só o octopus + "3D TEU",
+sem texto de slogan. **Limitação conhecida**: são PNGs com fundo
+texturizado embutido (não transparente) — cada variante foi pensada pra
+combinar com o tema claro/escuro do site respectivamente, mas não é um
+recorte perfeito (dá pra notar uma leve textura de fundo diferente do
+`--background` do site ao redor do logo, mais perceptível no modo escuro).
+Se algum dia o usuário tiver o arquivo fonte (vetor/camadas), dá pra gerar
+uma versão realmente transparente.
+
+**Cores extraídas por amostragem de pixel, não chute visual**: escrevi um
+script Node que escaneia a logo e agrupa pixels saturados por matiz pra
+achar o azul e o laranja dominantes de verdade (picos em `#F0840C`
+laranja e `~#1E88B8` azul, não uma média ingênua — a logo tem
+gradiente/brilho, então a média simples puxava pra um tom mais apagado
+que o real). Convertidos pra OKLCH à mão (fórmula sRGB→OKLab padrão,
+sem lib de cor disponível no projeto) pra bater com o formato que o
+`globals.css` já usa: `--primary: oklch(0.55 0.14 234)` (claro) /
+`oklch(0.72 0.12 234)` (escuro), e um `--brand-orange: oklch(0.72 0.17 58)`
+novo, exposto como `--color-brand-orange` (utilitário Tailwind
+`text-brand-orange`/`bg-brand-orange`) — usado só em destaques pontuais
+(a palavra rotativa do slogan), não em `--primary`/`--accent` (evita pintar
+a UI inteira de laranja).
+
+**Slogan rotativo** (pedido explícito do usuário — só "teu", nunca
+"tua"/"seu"/"sua" porque não combinam com a logo, que já termina em
+"TEU"): `RotatingTeu` (`src/components/rotating-teu.tsx`, client
+component) cicla por `["espaço", "negócio", "universo", "dia", "jeito",
+"projeto", "mundo"]` a cada 2,4s com fade de opacidade, montando "Teu
+___" em laranja. Vira o H1 da home: "Peças em 3D pra **Teu espaço**." (o
+resto do texto some por rotação, só a palavra final muda) — reconstrói o
+espírito do slogan estático original (`"Fidgets e Criatividade Impressos
+para Teu Espaço"`) só que dinâmico, e sem depender do texto embutido na
+imagem.
+
+`SiteLogo` (`src/components/site-logo.tsx`) renderiza as duas imagens
+sempre (`dark:hidden` / `hidden dark:block`) em vez de trocar via
+`useTheme()` client-side — evita o flash de logo errada durante a
+hidratação, já que o `next-themes` (`ThemeProvider`, já existia,
+`defaultTheme="system"`) aplica a classe `.dark` cedo o suficiente no
+`<html>` pro CSS decidir sem esperar JS rodar.
+
+**Copy generalizada** (não é só fidget) em vários lugares: H1 e subtítulo
+da home, `metadata` raiz (`título`/descrição/OG), `/produtos` (metadata),
+rodapé, sidebar do admin, card de fallback do OG image por produto
+(gradiente também trocado de roxo pra azul), remetente padrão dos e-mails
+(Resend) e User-Agent mandado pra API da Superfrete — nenhum desses é
+crítico funcionalmente, mas deixava "Fidgets" vazando em texto que o
+cliente/parceiro de API vê.
+
+**Testado**: Playwright contra o dev server real (não mockado — a home não
+depende de banco), luz e escuro via `colorScheme` do browser: confirmei
+que a logo certa aparece em cada tema, que o botão/ícones usam o azul novo,
+que a palavra rotativa troca de "Teu espaço" pra "Teu negócio" sozinha
+depois de ~2,5s, e que rodapé/header batem com a marca nova — sem erro de
+console (o único erro visto foi o de sempre, falta de `DATABASE_URL`
+local ao testar `/produtos`, não relacionado a essa mudança). `next build`
+com o lint/type-check passando confirma que nada quebrou.
+
+**Pendente**: nenhuma migração de banco nesta rodada (mudança 100%
+visual). Vale o usuário conferir a logo em produção de verdade (telas
+maiores, favicon ainda não trocado — `public/next.svg`/ícone padrão do
+Next continuam no lugar, ninguém pediu isso ainda).
 
 ## Preferências do usuário (importante)
 

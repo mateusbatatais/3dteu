@@ -39,6 +39,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-brand-orange: var(--brand-orange);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -55,18 +56,23 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.546 0.245 293);
+  /* Azul/laranja da marca 3D Teu (extraídos da logo) — substituem o roxo
+     neutro do preset original do shadcn. --brand-orange é um acento
+     deliberadamente raro (destaques pontuais tipo o slogan rotativo), não
+     entra no --primary/--accent que cobrem a UI inteira. */
+  --primary: oklch(0.55 0.14 234);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.955 0.02 293);
-  --accent-foreground: oklch(0.377 0.17 293);
+  --accent: oklch(0.955 0.02 234);
+  --accent-foreground: oklch(0.377 0.14 234);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.546 0.245 293 / 0.5);
+  --ring: oklch(0.55 0.14 234 / 0.5);
+  --brand-orange: oklch(0.72 0.17 58);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -90,18 +96,18 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.78 0.16 293);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.72 0.12 234);
+  --primary-foreground: oklch(0.145 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.3 0.06 293);
-  --accent-foreground: oklch(0.9 0.08 293);
+  --accent: oklch(0.3 0.06 234);
+  --accent-foreground: oklch(0.9 0.08 234);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.78 0.16 293 / 0.6);
+  --ring: oklch(0.72 0.12 234 / 0.6);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
