@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { ProductConfigurator } from "@/features/catalog/components/product-configurator";
 import { getProductBySlug } from "@/features/catalog/queries";
+import { decodeSelectionFromShareParam, SHARE_SELECTION_PARAM } from "@/features/catalog/selection-share";
 
 // Ver nota em /produtos/page.tsx sobre force-dynamic.
 export const dynamic = "force-dynamic";
@@ -25,11 +26,15 @@ export async function generateMetadata({ params }: PageProps<"/produtos/[slug]">
   };
 }
 
-export default async function ProdutoPage({ params }: PageProps<"/produtos/[slug]">) {
+export default async function ProdutoPage({ params, searchParams }: PageProps<"/produtos/[slug]">) {
   const { slug } = await params;
 
   const product = await getProductBySlug(slug);
   if (!product) notFound();
+
+  const resolvedSearchParams = await searchParams;
+  const shareParam = resolvedSearchParams[SHARE_SELECTION_PARAM];
+  const initialSelection = decodeSelectionFromShareParam(typeof shareParam === "string" ? shareParam : undefined);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -51,7 +56,7 @@ export default async function ProdutoPage({ params }: PageProps<"/produtos/[slug
       <h1 className="text-3xl font-semibold tracking-tight">{product.name}</h1>
       {product.description ? <p className="mt-2 text-muted-foreground">{product.description}</p> : null}
       <div className="mt-8">
-        <ProductConfigurator product={product} />
+        <ProductConfigurator product={product} initialSelection={initialSelection} />
       </div>
     </main>
   );

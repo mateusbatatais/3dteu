@@ -1,5 +1,6 @@
 "use client";
 
+import { Share2 } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -9,6 +10,7 @@ import { useCartStore } from "@/features/checkout/cart-store";
 import { formatPriceCents } from "@/lib/format";
 
 import { calculateProductPriceCents, InvalidSelectionError } from "../pricing";
+import { encodeSelectionForShareUrl, SHARE_SELECTION_PARAM } from "../selection-share";
 import type { FilamentOption, Product, ProductPartRegion, ProductSelection } from "../types";
 import { ProductViewer3D, type ViewerPart } from "./product-viewer-3d";
 
@@ -69,11 +71,37 @@ function resolveRegionDefaultMaterialId(part: Product["parts"][number], region: 
   return resolveDefaultMaterialId(part);
 }
 
-export function ProductConfigurator({ product }: { product: Product }) {
-  const [sizeId, setSizeId] = useState(product.sizeOptions[0]?.id ?? "");
+// Um id vindo de um link compartilhado só é usado se ainda for válido pra
+// esse produto — o produto pode ter mudado (material removido, etc.) desde
+// que o link foi gerado. Cada campo cai pro próprio padrão individualmente
+// em vez de descartar a configuração inteira por causa de um id só.
+function findSharedPartSelection(initialSelection: ProductSelection | null | undefined, partId: string) {
+  return initialSelection?.partSelections.find((p) => p.partId === partId);
+}
+
+export function ProductConfigurator({
+  product,
+  initialSelection,
+}: {
+  product: Product;
+  /** Vem de um link compartilhado (`?config=...`) — null/undefined usa os padrões normais. */
+  initialSelection?: ProductSelection | null;
+}) {
+  const [sizeId, setSizeId] = useState(() => {
+    const shared = initialSelection?.sizeId;
+    if (shared && product.sizeOptions.some((s) => s.id === shared)) return shared;
+    return product.sizeOptions[0]?.id ?? "";
+  });
   const [materialByPart, setMaterialByPart] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      product.parts.filter((part) => part.regions.length === 0).map((part) => [part.id, resolveDefaultMaterialId(part)]),
+      product.parts
+        .filter((part) => part.regions.length === 0)
+        .map((part) => {
+          const shared = findSharedPartSelection(initialSelection, part.id)?.filamentOptionId;
+          const materialId =
+            shared && part.availableMaterials.some((m) => m.id === shared) ? shared : resolveDefaultMaterialId(part);
+          return [part.id, materialId];
+        }),
     ),
   );
   // Uma parte com regiões (.3mf pintado) escolhe uma cor por região, não uma
@@ -83,9 +111,17 @@ export function ProductConfigurator({ product }: { product: Product }) {
   // cor fixa (o padrão) pro preview 3D.
   const [materialByRegion, setMaterialByRegion] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      product.parts.flatMap((part) =>
-        part.regions.map((region) => [region.id, resolveRegionDefaultMaterialId(part, region)]),
-      ),
+      product.parts.flatMap((part) => {
+        const sharedRegions = findSharedPartSelection(initialSelection, part.id)?.regionSelections;
+        return part.regions.map((region) => {
+          const shared = sharedRegions?.find((r) => r.regionId === region.id)?.filamentOptionId;
+          const materialId =
+            shared && part.availableMaterials.some((m) => m.id === shared)
+              ? shared
+              : resolveRegionDefaultMaterialId(part, region);
+          return [region.id, materialId];
+        });
+      }),
     ),
   );
   // Região "ativa" por parte — a paleta única embaixo da lista edita essa.
@@ -181,6 +217,16 @@ export function ProductConfigurator({ product }: { product: Product }) {
     });
 
     toast.success(`${product.name} adicionado ao carrinho.`);
+  }
+
+  function handleShare() {
+    const url = new URL(window.location.href);
+    url.searchParams.set(SHARE_SELECTION_PARAM, encodeSelectionForShareUrl(selection));
+
+    navigator.clipboard
+      .writeText(url.toString())
+      .then(() => toast.success("Link copiado! Quem abrir vê essa mesma configuração de cores."))
+      .catch(() => toast.error("Não foi possível copiar o link."));
   }
 
   return (
@@ -300,6 +346,10 @@ export function ProductConfigurator({ product }: { product: Product }) {
           <p className="text-2xl font-semibold">{priceCents !== null ? formatPriceCents(priceCents) : "—"}</p>
           <Button className="mt-4 w-full" size="lg" disabled={priceCents === null} onClick={handleAddToCart}>
             Adicionar ao carrinho
+          </Button>
+          <Button type="button" variant="outline" className="mt-2 w-full" onClick={handleShare}>
+            <Share2 className="size-4" />
+            Compartilhar essa cor
           </Button>
         </div>
       </div>

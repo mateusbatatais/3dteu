@@ -965,9 +965,27 @@ debounce atualiza a URL pra `?q=...`, e escolher uma categoria soma
 testado contra produtos reais (a query em si é simples e já passa
 build/type-check).
 
+**Feature 3 (feita)**: link compartilhável da configuração — botão
+"Compartilhar essa cor" em `ProductConfigurator` copia a URL atual da
+página com `?config=<selection em JSON>` (`src/features/catalog
+/selection-share.ts`: `encodeSelectionForShareUrl`/
+`decodeSelectionFromShareParam`) pro clipboard, via `navigator.clipboard
+.writeText` + toast. `/produtos/[slug]/page.tsx` decodifica esse param no
+servidor e passa como `initialSelection` pro configurador. Nenhum id
+(tamanho/material/região) é confiado cegamente: cada campo só usa o valor
+do link se ainda for válido pra esse produto (mesma checagem que já existia
+pros padrões do admin) — um link antigo com um material removido cai pro
+padrão daquele campo específico, não quebra a página nem descarta o resto
+da configuração. **Testado de ponta a ponta** via Playwright (com
+permissão de clipboard): selecionei tamanho P + cor verde, cliquei
+"Compartilhar", li o texto real copiado pro clipboard, abri essa URL exata
+numa navegação nova e confirmei que P e verde já vêm pré-selecionados
+(preço recalculado corretamente) — sem passar current-selection por props
+React nem simular nada, o link copiado de verdade foi reaberto.
+
 **Ainda não implementado nesta rodada** (trabalho em andamento, retomar na
-próxima sessão se for interrompido): link compartilhável de configuração,
-conta de cliente, avaliações de produto — nessa ordem.
+próxima sessão se for interrompido): conta de cliente, avaliações de
+produto — nessa ordem.
 
 ## Preferências do usuário (importante)
 
