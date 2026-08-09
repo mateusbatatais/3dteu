@@ -2,7 +2,7 @@
 
 import { calculateProductPriceCents, InvalidSelectionError } from "@/features/catalog/pricing";
 import { getProductBySlug } from "@/features/catalog/queries";
-import { sendOrderConfirmationEmail } from "@/features/orders/email";
+import { sendAdminNewOrderNotification, sendOrderConfirmationEmail } from "@/features/orders/email";
 import { wooviProvider } from "@/features/payments/woovi";
 import type { DeliveryMethod, ShippingAddress } from "@/features/shipping/types";
 import { db } from "@/server/db/client";
@@ -165,6 +165,24 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     });
   } catch (error) {
     console.error("[resend] falha ao enviar e-mail de confirmação do pedido", order.id, error);
+  }
+
+  // Idem: avisar o admin de um pedido novo é conveniência, não deve derrubar o checkout.
+  try {
+    await sendAdminNewOrderNotification({
+      orderId: order.id,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+      totalCents: order.totalCents,
+      items: resolvedItems.map((item) => ({
+        productNameSnapshot: item.productNameSnapshot,
+        quantity: item.quantity,
+        subtotalCents: item.subtotalCents,
+      })),
+    });
+  } catch (error) {
+    console.error("[resend] falha ao notificar admin sobre pedido novo", order.id, error);
   }
 
   return { orderToken: order.publicToken };

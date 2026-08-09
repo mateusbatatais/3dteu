@@ -29,3 +29,46 @@ export async function sendOrderConfirmationEmail(input: {
     `,
   });
 }
+
+/**
+ * Best-effort, igual à confirmação pro cliente: sem `RESEND_API_KEY` ou sem
+ * `ADMIN_NOTIFICATION_EMAIL` configuradas, só loga um aviso e segue (o
+ * pedido já foi criado de qualquer forma).
+ */
+export async function sendAdminNewOrderNotification(input: {
+  orderId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string | null;
+  totalCents: number;
+  items: Array<{ productNameSnapshot: string; quantity: number; subtotalCents: number }>;
+}) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL;
+  if (!apiKey || !adminEmail) {
+    console.warn(
+      "[resend] RESEND_API_KEY / ADMIN_NOTIFICATION_EMAIL não configuradas — notificação de pedido novo não enviada.",
+    );
+    return;
+  }
+
+  const resend = new Resend(apiKey);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const adminUrl = `${siteUrl}/admin/pedidos/${input.orderId}`;
+
+  const itemsHtml = input.items
+    .map((item) => `<li>${item.quantity}x ${item.productNameSnapshot} — ${formatPriceCents(item.subtotalCents)}</li>`)
+    .join("");
+
+  await resend.emails.send({
+    from: process.env.RESEND_FROM_EMAIL ?? "Fidgets <onboarding@resend.dev>",
+    to: adminEmail,
+    subject: `Novo pedido — ${formatPriceCents(input.totalCents)}`,
+    html: `
+      <p>Novo pedido de ${input.customerName} (${input.customerEmail}${input.customerPhone ? `, ${input.customerPhone}` : ""}).</p>
+      <ul>${itemsHtml}</ul>
+      <p><strong>Total: ${formatPriceCents(input.totalCents)}</strong></p>
+      <p><a href="${adminUrl}">Ver pedido no admin</a></p>
+    `,
+  });
+}
