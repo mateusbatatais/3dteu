@@ -7,9 +7,9 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      // /admin é área autenticada; /checkout e /carrinho não têm conteúdo
-      // indexável; /pedido/[token] tem dado de cliente na própria URL.
-      disallow: ["/admin", "/checkout", "/carrinho", "/pedido"],
+      // /admin e /conta são áreas autenticadas; /checkout e /carrinho não têm
+      // conteúdo indexável; /pedido/[token] tem dado de cliente na própria URL.
+      disallow: ["/admin", "/conta", "/checkout", "/carrinho", "/pedido"],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
   };
