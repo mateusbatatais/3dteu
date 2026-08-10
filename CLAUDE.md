@@ -372,13 +372,15 @@ real nem contra a API da Woovi de verdade):**
 **Pendente pra fechar o ciclo:**
 - Rodar as migrações `drizzle/0001_brainy_the_order.sql`,
   `drizzle/0002_flawless_runaways.sql`, `drizzle/0003_curvy_boom_boom.sql`,
-  `drizzle/0004_empty_amphibian.sql`, `drizzle/0005_solid_lucky_pierre.sql`
-  e `drizzle/0006_nappy_banshee.sql` contra o Supabase real (`npm run
-  db:migrate` ou colar o SQL no SQL Editor) — sem isso, nada da rodada 10
-  (Superfrete completo, imagens de produto), da rodada 12 (regiões
-  pintadas), da rodada 13 (material padrão por parte), da rodada 15
-  (esconder/definir padrão por região) nem da rodada 16 (conta de cliente —
-  `orders.customer_id` — e avaliações de produto — `product_reviews`)
+  `drizzle/0004_empty_amphibian.sql`, `drizzle/0005_solid_lucky_pierre.sql`,
+  `drizzle/0006_nappy_banshee.sql` e `drizzle/0007_tan_xavin.sql` contra o
+  Supabase real (`npm run db:migrate` ou colar o SQL no SQL Editor) — sem
+  isso, nada da rodada 10 (Superfrete completo, imagens de produto), da
+  rodada 12 (regiões pintadas), da rodada 13 (material padrão por parte),
+  da rodada 15 (esconder/definir padrão por região), da rodada 16 (conta de
+  cliente — `orders.customer_id` — e avaliações de produto —
+  `product_reviews`) nem da rodada 18 (imagem de categoria —
+  `categories.image_url`)
   funciona contra produção. Todas são só aditivas (CREATE TABLE / ALTER
   TABLE ADD COLUMN), seguras. **Atenção
   pro mesmo problema da rodada 11**: se a 0001 já foi parcialmente aplicada
@@ -1157,6 +1159,105 @@ com o lint/type-check passando confirma que nada quebrou.
 visual). Vale o usuário conferir a logo em produção de verdade (telas
 maiores, favicon ainda não trocado — `public/next.svg`/ícone padrão do
 Next continuam no lugar, ninguém pediu isso ainda).
+
+### Rodada 18: logo definitiva + favicon + SEO + home vira o catálogo + categorias
+
+Usuário mandou a logo definitiva (substitui a da rodada 17, que era um
+rascunho) e o ícone isolado (só o símbolo, pro favicon), pediu pra otimizar
+o tamanho dos arquivos, trabalhar SEO, e reformular a home — achou ela
+"vazia" e sugeriu não precisar de uma página de catálogo separada (a home
+*é* o catálogo), com categorias e mais espaço visual (imagens de fundo,
+mesmo que só placeholder por enquanto).
+
+**Logo nova é MUITO melhor que a da rodada 17 — transparência real, não
+fundo texturizado**: descobri isso checando o alpha channel de verdade
+(`sharp().raw()`) em vez de confiar no preview visual (que mostrava "fundo
+preto" — era só o viewer compondo a transparência contra um fundo escuro).
+Corner pixels vieram `[0,0,0,0]` (alpha zero de verdade) e a área da letra
+`[0,121,154,252]` — arquivo genuinamente transparente. Isso elimina de vez
+a limitação registrada na rodada 17 (duas versões claro/escuro por causa de
+fundo embutido): agora é **um arquivo só** (`public/logo.png`, 900px,
+~127KB) que funciona em cima de qualquer fundo. `SiteLogo` simplificado de
+2 `<Image>` com `dark:hidden`/`dark:block` pra 1 só.
+
+**Favicon.ico construído à mão, sem lib**: não tem `png-to-ico`/similar no
+projeto nem instalado. O formato ICO com PNGs embutidos (suportado desde
+Windows Vista) é simples o suficiente pra montar num script Node: header
+`ICONDIR` (6 bytes) + um `ICONDIRENTRY` (16 bytes) por tamanho + os PNGs
+crus concatenados. Gerei 4 tamanhos (16/32/48/64px) a partir do ícone
+trimado, validei reabrindo cada PNG embutido individualmente com `sharp`
+pra confirmar dimensão/formato antes de considerar pronto (sharp não lê
+`.ico` direto, então essa foi a forma de validar sem precisar abrir no
+Windows/browser). Também gerei `src/app/apple-icon.png` (180×180, fundo
+escuro sólido — ícone transparente fica feio no iOS, que não composita
+sobre nada) e `src/app/icon.png` (512×512, transparente, convenção do App
+Router que cobre navegadores modernos).
+
+**SEO**: JSON-LD `Organization` + `WebSite` (com `SearchAction` apontando
+pra `/?q={search_term_string}`, habilita sitelinks search box) adicionado
+no `layout.tsx` raiz — antes só existia `Product` JSON-LD por produto.
+`robots.ts` ganhou `/conta` no disallow (esquecido quando a conta de
+cliente foi implementada na rodada 16). `opengraph-image.tsx` raiz novo
+(fallback pra qualquer rota sem OG própria — antes só produto tinha).
+Categorias novas geram automaticamente uma URL própria indexável
+(`/categorias/slug`) em vez de só um filtro `?categoria=` — melhor pra SEO
+que uma URL de busca/filtro genérica.
+
+**Home vira o catálogo, /produtos vira redirect**: o catálogo inteiro
+(busca, filtro, grid de produtos — `CatalogFilters`/`ProductGrid`,
+`ProductGrid` extraído como componente novo pra ser reaproveitado também
+nas páginas de categoria) mudou de `/produtos` pra `/`. `/produtos` virou
+uma página que só faz `redirect()` (preserva link antigo/SEO em vez de
+404) — `?categoria=X` vira redirect pra `/categorias/X` (categoria é path
+agora, não query param), `?q=` é repassado como está. **Efeito colateral
+esperado**: a home passou a depender do banco (categorias + produtos),
+então ganhou `force-dynamic` e — nesta sessão sem `DATABASE_URL` — não dá
+mais pra abrir `/` local sem erro, mesma limitação que já valia pra
+`/produtos` antes.
+
+**Categorias viraram uma entidade de verdade**: antes só existiam via um
+`categoryId` que o admin escolhia num select ao editar produto — não dava
+pra CRIAR uma categoria pela UI, nem dar nome bonito/descrição/imagem.
+Nova coluna `categories.image_url` (migração `0007_tan_xavin.sql`,
+aditiva) + admin novo em `/admin/categorias` (`CategoryForm`/`CategoryRow`,
+mesmo padrão tipado + `useTransition` do `FilamentForm` da rodada 14, não
+`FormData`) com upload de imagem de capa (`CategoryImageUpload`,
+reaproveita o bucket `product-media` já existente — uma imagem por
+categoria, substitui a anterior, não é galeria). `slugify()` (usado no
+`ProductForm` também) virou `src/lib/slugify.ts` compartilhado — motivo
+real de extrair uma função de 5 linhas pra um arquivo: agora tem 2 call
+sites de verdade, deixou de ser prematuro.
+
+**Visual "não vazio" sem fotos de verdade ainda**: como o usuário disse
+"pode gerar umas imagens quaisquer que depois atualizo", e não tenho
+ferramenta de geração de imagem fotorrealista disponível, optei por
+**design abstrato deliberado com as cores da marca** em vez de tentar
+fingir fotos de produto (que ficariam obviamente falsas): círculos
+desfocados (`blur-3xl`) nas cores azul/laranja atrás do hero (ecoa o glow
+neon da própria logo) e tiles de categoria em degradê (uma paleta
+diferente por índice) quando a categoria não tem `imageUrl` ainda — o
+`CategoryImageUpload` no admin deixa trivial trocar por foto real depois,
+sem mudar nenhum componente. `/categorias/[slug]` ganhou um banner
+full-width (foto ou degradê) no topo, mesmo padrão.
+
+**Testado com dados mockados** (mesma limitação de sempre — sem
+`DATABASE_URL` local, e agora isso vale pra `/` também): confirmei via
+Playwright, luz e escuro, que o hero com os círculos de glow + os 4 tiles
+de categoria (degradês variados) + o grid de produtos (foto/cor
+sólida/dual-color/ícone genérico, os 4 estados) renderizam certo — sem
+erro de console. Também confirmei que `/produtos` e
+`/produtos?categoria=decoracao&q=vaso` redirecionam pro lugar certo (`/` e
+`/categorias/decoracao?q=vaso` respectivamente) contra o dev server real
+— isso não precisa de banco, só de `searchParams`, então pôde ser testado
+de verdade, diferente do resto.
+
+**Pendente**: rodar a migração `0007` contra o Supabase real (mesmo
+procedimento das anteriores — só `ALTER TABLE ADD COLUMN`). Cadastrar
+categorias de verdade em `/admin/categorias` (a home só mostra a seção de
+categorias se existir pelo menos uma) e, quando tiver fotos reais de
+produto/categoria, trocar os placeholders de degradê pelas fotos via
+upload — a arquitetura já foi pensada pra essa troca ser só isso, sem
+mexer em código.
 
 ## Preferências do usuário (importante)
 

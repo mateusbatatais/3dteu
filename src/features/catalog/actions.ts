@@ -8,6 +8,7 @@ import { createStorageClient, MEDIA_BUCKET, MODELS_BUCKET } from "@/lib/supabase
 import { ALLOWED_MEDIA_EXTENSIONS, ALLOWED_MESH_EXTENSIONS, type MediaExtension, type MeshExtension } from "@/lib/supabase/storage-constants";
 import { db } from "@/server/db/client";
 import {
+  categories,
   productImages,
   productPartMaterialOptions,
   productPartRegions,
@@ -29,15 +30,23 @@ function isUniqueViolation(error: unknown): boolean {
 /**
  * Qualquer mudança em tamanhos/partes/materiais/preço de um produto precisa
  * revalidar não só a tela do admin, mas também a página pública do produto
- * e a listagem — sem isso, o cliente (e o admin, ao navegar de volta pro
- * catálogo) podia continuar vendo a versão antiga.
+ * e o catálogo (agora é a própria home, ver rodada 18) — sem isso, o
+ * cliente (e o admin, ao navegar de volta) podia continuar vendo a versão
+ * antiga. Também revalida a página da categoria do produto, se tiver uma.
  */
 async function revalidateProductPages(productId: string) {
-  const [product] = await db.select({ slug: products.slug }).from(products).where(eq(products.id, productId));
+  const [product] = await db
+    .select({ slug: products.slug, categorySlug: categories.slug })
+    .from(products)
+    .leftJoin(categories, eq(products.categoryId, categories.id))
+    .where(eq(products.id, productId));
 
   revalidatePath(`/admin/produtos/${productId}`);
-  revalidatePath("/produtos");
-  if (product) revalidatePath(`/produtos/${product.slug}`);
+  revalidatePath("/");
+  if (product) {
+    revalidatePath(`/produtos/${product.slug}`);
+    if (product.categorySlug) revalidatePath(`/categorias/${product.categorySlug}`);
+  }
 }
 
 function toRow(values: ProductFormValues) {

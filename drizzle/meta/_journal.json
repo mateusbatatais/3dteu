@@ -50,6 +50,13 @@
       "when": 1786276127104,
       "tag": "0006_nappy_banshee",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786371358517,
+      "tag": "0007_tan_xavin",
+      "breakpoints": true
     }
   ]
 }

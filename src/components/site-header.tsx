@@ -16,7 +16,7 @@ export function SiteHeader() {
 
         <nav className="flex items-center gap-6">
           <Link
-            href="/produtos"
+            href="/#catalogo"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Catálogo

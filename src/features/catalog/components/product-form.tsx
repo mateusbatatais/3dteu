@@ -12,17 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+import { slugify } from "@/lib/slugify";
+
 import { createProduct, updateProduct } from "../actions";
 import { productFormSchema, type ProductFormValues } from "../schemas";
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 interface ProductFormProps {
   categories: Array<{ id: string; name: string }>;

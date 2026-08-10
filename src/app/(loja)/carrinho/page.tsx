@@ -22,7 +22,7 @@ export default function CarrinhoPage() {
         <div className="mt-16 flex flex-col items-center gap-3 text-center">
           <ShoppingCart className="size-10 text-muted-foreground/50" />
           <p className="text-muted-foreground">Seu carrinho está vazio.</p>
-          <Button render={<Link href="/produtos" />} nativeButton={false} className="mt-2">
+          <Button render={<Link href="/" />} nativeButton={false} className="mt-2">
             Ver catálogo
           </Button>
         </div>

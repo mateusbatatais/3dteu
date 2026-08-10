@@ -8,35 +8,45 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const ALL_CATEGORIES = "__all__";
 
-export function CatalogFilters({ categories }: { categories: Array<{ slug: string; name: string }> }) {
+export function CatalogFilters({
+  categories,
+  activeCategorySlug,
+}: {
+  categories: Array<{ slug: string; name: string }>;
+  /** Presente quando renderizado dentro de /categorias/[slug] — pré-seleciona no dropdown. */
+  activeCategorySlug?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentQ = searchParams.get("q") ?? "";
-  const currentCategory = searchParams.get("categoria") ?? ALL_CATEGORIES;
 
   const [q, setQ] = useState(currentQ);
   const [, startTransition] = useTransition();
 
-  function updateParams(next: Record<string, string | null>) {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(next)) {
-      if (value) params.set(key, value);
-      else params.delete(key);
-    }
-    startTransition(() => {
-      router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
-    });
-  }
-
-  // Busca por texto é debounced pra não navegar a cada tecla — categoria
-  // (Select) já é uma escolha discreta, atualiza a URL na hora.
+  // Busca por texto fica como query param na página atual (home ou
+  // categoria) — debounced pra não navegar a cada tecla.
   useEffect(() => {
     if (q === currentQ) return;
-    const timeout = setTimeout(() => updateParams({ q: q || null }), 400);
+    const timeout = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (q) params.set("q", q);
+      else params.delete("q");
+      startTransition(() => {
+        router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
+      });
+    }, 400);
     return () => clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
+
+  // Categoria é uma página própria (/categorias/slug), não um query param —
+  // melhor pra SEO (URL única e indexável por categoria). Troca de página
+  // preserva a busca por texto, se tiver uma.
+  function handleCategoryChange(value: string | null) {
+    const query = q ? `?q=${encodeURIComponent(q)}` : "";
+    router.push(!value || value === ALL_CATEGORIES ? `/${query}` : `/categorias/${value}${query}`);
+  }
 
   return (
     <div className="mt-6 flex flex-wrap gap-3">
@@ -48,10 +58,7 @@ export function CatalogFilters({ categories }: { categories: Array<{ slug: strin
         aria-label="Buscar produtos"
       />
       {categories.length > 0 ? (
-        <Select
-          value={currentCategory}
-          onValueChange={(value) => updateParams({ categoria: value === ALL_CATEGORIES ? null : value })}
-        >
+        <Select value={activeCategorySlug ?? ALL_CATEGORIES} onValueChange={handleCategoryChange}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Todas as categorias" />
           </SelectTrigger>

@@ -59,6 +59,10 @@ export const categories = pgTable("categories", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   description: text("description"),
+  // Banner da página da categoria e do tile na home — null cai num
+  // gradiente com a cor da marca (mesmo padrão já usado pra thumbnail de
+  // produto sem foto em getPublishedProductsForCatalog).
+  imageUrl: text("image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

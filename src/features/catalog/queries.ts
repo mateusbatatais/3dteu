@@ -92,6 +92,10 @@ export async function getCategories() {
   return db.query.categories.findMany({ orderBy: [asc(categories.name)] });
 }
 
+export async function getCategoryBySlug(slug: string) {
+  return db.query.categories.findFirst({ where: eq(categories.slug, slug) });
+}
+
 /** Catálogo global de materiais/filamentos, usado no admin e na atribuição por parte. */
 export async function getAllFilamentOptions() {
   return db.query.filamentOptions.findMany({ orderBy: [asc(filamentOptions.name)] });

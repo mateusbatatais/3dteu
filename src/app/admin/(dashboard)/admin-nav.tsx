@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Package, Palette, Settings, ShoppingBag } from "lucide-react";
+import { LayoutDashboard, Package, Palette, Settings, ShoppingBag, Tags } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/produtos", label: "Produtos", icon: Package },
+  { href: "/admin/categorias", label: "Categorias", icon: Tags },
   { href: "/admin/materiais", label: "Materiais", icon: Palette },
   { href: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
