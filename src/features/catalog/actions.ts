@@ -27,6 +27,13 @@ function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === "23505";
 }
 
+// order_items.product_id é "restrict" de propósito (nunca cascade) — um
+// produto que já foi comprado não pode sumir e quebrar o histórico do
+// pedido. Isso vira esse erro no Postgres em vez de deletar.
+function isForeignKeyViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: string }).code === "23503";
+}
+
 /**
  * Qualquer mudança em tamanhos/partes/materiais/preço de um produto precisa
  * revalidar não só a tela do admin, mas também a página pública do produto
@@ -102,6 +109,39 @@ export async function updateProduct(id: string, values: ProductFormValues): Prom
 
   revalidatePath("/admin/produtos");
   await revalidateProductPages(id);
+  return {};
+}
+
+/**
+ * Partes/tamanhos/imagens/materiais-por-parte/avaliações do produto somem
+ * junto (cascade no schema) — só pedidos que já incluíram esse produto
+ * impedem a exclusão (order_items.product_id é "restrict"), e nesse caso a
+ * resposta explica o porquê em vez de estourar um erro genérico.
+ */
+export async function deleteProduct(id: string): Promise<ProductActionResult> {
+  const [product] = await db
+    .select({ slug: products.slug, categorySlug: categories.slug })
+    .from(products)
+    .leftJoin(categories, eq(products.categoryId, categories.id))
+    .where(eq(products.id, id));
+
+  try {
+    await db.delete(products).where(eq(products.id, id));
+  } catch (error) {
+    if (isForeignKeyViolation(error)) {
+      return {
+        error: "Não é possível excluir: este produto já tem pedidos associados. Mude o status pra rascunho se quiser tirá-lo da loja sem apagar o histórico.",
+      };
+    }
+    return { error: "Não foi possível excluir o produto." };
+  }
+
+  revalidatePath("/admin/produtos");
+  revalidatePath("/");
+  if (product) {
+    revalidatePath(`/produtos/${product.slug}`);
+    if (product.categorySlug) revalidatePath(`/categorias/${product.categorySlug}`);
+  }
   return {};
 }
 

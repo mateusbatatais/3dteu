@@ -1319,6 +1319,47 @@ limpos nos dois casos (inteiro e fracionário). Não testado o clique em
 — a lógica em si (um SELECT pra checar se já existe tamanho + um INSERT de
 3 linhas) é simples e já passa lint/build.
 
+### Rodada 20: excluir produto (não existia)
+
+Usuário percebeu que não tinha como excluir um produto pelo admin — só
+existia excluir parte/tamanho/imagem/material/categoria, nunca o produto
+em si. Confirmado por busca no código antes de assumir: `deleteProduct`
+não existia em lugar nenhum, nem botão nem action.
+
+**Decisão de design**: `order_items.product_id` é `onDelete: "restrict"`
+de propósito (não `cascade`) — um produto que já foi comprado não pode
+sumir do banco e quebrar o histórico de pedidos antigos. Isso significa
+que `deleteProduct` precisa **capturar esse erro do Postgres (código
+`23503`, foreign key violation)** e devolver uma mensagem explicando o
+motivo real ("já tem pedidos associados, mude pra rascunho") em vez de
+deixar estourar um erro genérico — sugere a alternativa que já existe
+(`products.status = draft`) pra tirar o produto da loja sem perder
+histórico.
+
+**`ConfirmDeleteButton` ganhou suporte a retornar `{ error }`**: até agora
+toda action de exclusão no projeto (`deleteCategory`, `deleteProductPart`,
+`deleteFilament`, etc.) só tinha dois desfechos — sucesso silencioso ou
+exceção genérica ("Não foi possível excluir. Tente novamente."). Pra
+`deleteProduct` mostrar o motivo específico do bloqueio, o componente
+compartilhado passou a checar se a action devolveu `{ error }` e, se sim,
+mostra esse texto exato via toast **sem fechar o diálogo** (deixa o admin
+decidir o próximo passo, em vez de fechar como se tivesse dado certo) —
+mudança retrocompatível, as actions antigas continuam retornando `void` e
+caem no fluxo de sempre.
+
+`ProductRow` (`src/features/catalog/components/product-row.tsx`, novo)
+segue o mesmo padrão de `CategoryRow`/`FilamentRow` (client component que
+importa a action direto, em vez de receber via prop de um Server
+Component pai — mesma cautela da rodada 11 sobre cruzar essa fronteira).
+
+**Testado**: página mockada com dois `ConfirmDeleteButton` — um com action
+que resolve normalmente, outro que devolve `{ error }` — confirmei via
+Playwright que o caso de sucesso fecha o diálogo e mostra "Excluído.", e o
+caso bloqueado **mantém o diálogo aberto** e mostra a mensagem específica
+exata, não a genérica. Não testado `deleteProduct` de verdade contra o
+Postgres (sem banco nesta sessão) — a query em si (um `DELETE` simples +
+checagem do código de erro) é direta e já passa lint/build.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

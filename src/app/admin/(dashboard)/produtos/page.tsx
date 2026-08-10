@@ -1,10 +1,9 @@
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ProductRow } from "@/features/catalog/components/product-row";
 import { getAllProductsForAdmin } from "@/features/catalog/queries";
-import { formatPriceCents } from "@/lib/format";
 
 export default async function AdminProdutosPage() {
   const productList = await getAllProductsForAdmin();
@@ -33,21 +32,7 @@ export default async function AdminProdutosPage() {
           </TableHeader>
           <TableBody>
             {productList.map((product) => (
-              <TableRow key={product.id}>
-                <TableCell className="font-medium">{product.name}</TableCell>
-                <TableCell>{product.category?.name ?? "—"}</TableCell>
-                <TableCell>
-                  <Badge variant={product.status === "published" ? "default" : "secondary"}>
-                    {product.status === "published" ? "Publicado" : "Rascunho"}
-                  </Badge>
-                </TableCell>
-                <TableCell>{formatPriceCents(product.basePriceCents)}</TableCell>
-                <TableCell className="text-right">
-                  <Link href={`/admin/produtos/${product.id}`} className="text-sm underline-offset-2 hover:underline">
-                    Editar
-                  </Link>
-                </TableCell>
-              </TableRow>
+              <ProductRow key={product.id} product={product} />
             ))}
           </TableBody>
         </Table>

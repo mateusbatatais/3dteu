@@ -16,8 +16,13 @@ import {
 } from "@/components/ui/dialog";
 
 interface ConfirmDeleteButtonProps {
-  /** Server action já com os ids fixados via `.bind(null, ...)` — sem argumentos restantes. */
-  action: () => Promise<void> | void;
+  /**
+   * Server action já com os ids fixados via `.bind(null, ...)` — sem
+   * argumentos restantes. Pode devolver `{ error }` (ex.: bloqueado por uma
+   * restrição de FK) pra mostrar um motivo específico em vez do genérico
+   * "não foi possível excluir" — nesse caso o diálogo continua aberto.
+   */
+  action: () => Promise<void | { error?: string }> | void | { error?: string };
   description: string;
   label?: string;
   className?: string;
@@ -33,7 +38,11 @@ export function ConfirmDeleteButton({ action, description, label = "Excluir", cl
   function handleConfirm() {
     startTransition(async () => {
       try {
-        await action();
+        const result = await action();
+        if (result && "error" in result && result.error) {
+          toast.error(result.error);
+          return;
+        }
         setOpen(false);
         toast.success("Excluído.");
       } catch {
