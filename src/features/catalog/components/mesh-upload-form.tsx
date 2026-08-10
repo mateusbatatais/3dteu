@@ -8,7 +8,14 @@ import { createClient } from "@/lib/supabase/client";
 import { formatPriceCents } from "@/lib/format";
 import { getMeshExtension, MAX_MESH_FILE_SIZE_BYTES, MODELS_BUCKET } from "@/lib/supabase/storage-constants";
 
-import { applySuggestedPrice, applySuggestedWeight, autoGenerateSizeOptions, confirmPartMesh, createMeshUploadUrl } from "../actions";
+import {
+  applySuggestedDimensions,
+  applySuggestedPrice,
+  applySuggestedWeight,
+  autoGenerateSizeOptions,
+  confirmPartMesh,
+  createMeshUploadUrl,
+} from "../actions";
 import { measureMesh, type MeshMeasurements } from "../mesh-measure";
 import { detectPaintedStates } from "../mmu-3mf";
 import { estimatePrintWeight } from "../print-estimate";
@@ -54,6 +61,15 @@ export function MeshUploadForm({
   const [isApplyingSuggestion, startSuggestionTransition] = useTransition();
 
   const weightEstimate = measurements ? estimatePrintWeight(measurements.volumeMm3, measurements.surfaceAreaMm2) : null;
+  // Arredonda pra cima — pra uma estimativa de embalagem, é mais seguro
+  // sugerir uma caixa levemente maior do que uma que não fecha de verdade.
+  const suggestedDimensionsCm = measurements
+    ? {
+        widthCm: Math.max(1, Math.ceil(measurements.widthMm / 10)),
+        heightCm: Math.max(1, Math.ceil(measurements.heightMm / 10)),
+        lengthCm: Math.max(1, Math.ceil(measurements.depthMm / 10)),
+      }
+    : null;
   const suggestedPriceCents =
     weightEstimate && pricingSettings.pricePerGramCents
       ? Math.round(weightEstimate.weightGrams * pricingSettings.pricePerGramCents + (pricingSettings.fixedFeeCents ?? 0))
@@ -176,6 +192,20 @@ export function MeshUploadForm({
     });
   }
 
+  function handleApplyDimensions() {
+    if (!suggestedDimensionsCm) return;
+    startSuggestionTransition(async () => {
+      const result = await applySuggestedDimensions(productId, suggestedDimensionsCm);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        `Dimensões da embalagem atualizadas pra ${suggestedDimensionsCm.heightCm} × ${suggestedDimensionsCm.widthCm} × ${suggestedDimensionsCm.lengthCm} cm.`,
+      );
+    });
+  }
+
   function handleApplyPrice() {
     if (!suggestedPriceCents) return;
     startSuggestionTransition(async () => {
@@ -228,6 +258,22 @@ export function MeshUploadForm({
             className="font-medium text-primary underline-offset-2 hover:underline disabled:opacity-50"
           >
             Usar esse peso
+          </button>
+        </p>
+      ) : null}
+
+      {suggestedDimensionsCm ? (
+        <p className="text-xs text-muted-foreground">
+          Dimensões de embalagem estimadas: {suggestedDimensionsCm.heightCm} × {suggestedDimensionsCm.widthCm} ×{" "}
+          {suggestedDimensionsCm.lengthCm} cm (tamanho do próprio arquivo, sem margem extra — ajuste se a embalagem
+          real precisar ser maior).{" "}
+          <button
+            type="button"
+            disabled={isApplyingSuggestion}
+            onClick={handleApplyDimensions}
+            className="font-medium text-primary underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            Usar essas dimensões
           </button>
         </p>
       ) : null}

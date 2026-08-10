@@ -1562,6 +1562,85 @@ disso). `npm run lint`, `npx tsc --noEmit` e `npm run build` (com `.next`
 limpo) passaram limpos; `npm run test` também (10/10, suíte não afetada
 por esta rodada).
 
+### Rodada 24: bug do `min="1"` bloqueando o fluxo novo + dimensões de embalagem também viram sugestão
+
+A rodada 23 resolveu o preço, mas o usuário voltou com uma screenshot: o
+campo "Altura (cm)" mostrava o popup nativo do navegador "O valor deve ser
+maior ou igual a 1" travando o "Criar produto" mesmo com o valor em 0
+(padrão). Junto, apontou que a intenção original ("eu disse preco, mas as
+medidas tambem") não tinha sido totalmente atendida — peso/altura/
+largura/comprimento continuavam de fato obrigatórios, só que por um motivo
+diferente do preço.
+
+**Causa raiz**: `weightGrams`/`heightCm`/`widthCm`/`lengthCm` no
+`ProductForm` tinham `min="1"` no HTML (`<Input type="number" min="1"
+.../>`), mesmo o schema Zod (`optionalPositiveInt = z.coerce.number().int
+().min(0)`) já tratando 0 como "não informado" há muito tempo (rodada 10).
+Validação nativa do browser roda **antes** do JS (react-hook-form/zod)
+nem ser chamado — então mesmo um campo "opcional" no schema travava o
+submit inteiro se o input HTML declarasse um mínimo mais restritivo. Fix
+direto: os 4 `min="1"` viraram `min="0"`, batendo com o que o schema
+sempre aceitou.
+
+**O pedido maior**: "mesmo que tenha que mudar todo o fluxo, o correto é
+adicionar o arquivo logo depois de preencher o nome para que ele ja
+preencha os proximos dados" — na prática, isso já é o que a rodada 23
+entrega (nome → Criar produto → cai direto na aba Partes com uma parte
+pronta) uma vez consertado o bug acima; o que faltava era o **peso e as
+dimensões de embalagem também virarem sugestão a partir do arquivo**,
+não só o peso (rodada 22) e os tamanhos P/M/G (rodada 19). Adicionado:
+`applySuggestedDimensions` (`src/features/catalog/actions.ts`) +  bloco
+"Dimensões de embalagem estimadas: H × L × C cm" no `MeshUploadForm`,
+mesmo padrão de peso/preço (texto informativo + botão "Usar essas
+dimensões", nunca aplica sozinho). Os valores vêm do mesmo
+`measureMesh()` já usado pra medidas/peso — arredondados **pra cima**
+(`Math.ceil`), já que uma embalagem menor que o item não serve; sem
+margem extra além disso (rotulado como aproximado, o admin ajusta se a
+embalagem real precisar ser maior).
+
+**Esclarecimento sobre "a caixa é por pedido, não por produto"**: o
+usuário levantou uma dúvida de design ("nao da pra saber o tamanho da
+caixa, pois o carrinho pode ter varios itens... eu preciso saber o
+tamanho do item, no carrinho tenho que somar"). Conferindo o código
+(`src/features/checkout/shipping-quotes.ts`,
+`src/features/shipping/superfrete.ts`): a arquitetura já fazia exatamente
+isso — cada item do carrinho manda seu próprio peso/dimensão +
+quantidade pro endpoint de cotação da Superfrete (`products: items.map
+(...)`), e é a própria Superfrete quem consolida os itens numa cotação de
+frete (prática padrão de calculadora de frete multi-item, mesma coisa que
+Correios/outras transportadoras fazem). Ou seja, o campo
+`products.heightCm/widthCm/lengthCm` sempre representou o **item
+individual**, nunca "a caixa do pedido inteiro" — não precisou mudar nada
+na cotação, só faltava mesmo a origem do valor (manual → sugerido do
+arquivo).
+
+**Bug real pego durante o teste, não hipotético**: `applySuggestedWeight`
+e `applySuggestedPrice` (rodada 22) e o `applySuggestedDimensions` novo
+desta rodada faziam o `db.update(...)` **sem try/catch** — testando de
+verdade (clique no botão "Usar essas dimensões" contra o dev server real,
+sem `DATABASE_URL` local), o erro da conexão de banco vazava como uma
+exception não tratada da Server Action (`pageerror: DATABASE_URL... não
+definida`) em vez de virar um `{ error }` tratado — o botão simplesmente
+não fazia nada visível pro admin, sem toast nenhum. Corrigido envolvendo
+as três funções em try/catch (mesmo padrão já usado em
+`createProduct`/`updateProduct`/`deleteProduct` no mesmo arquivo) — só foi
+possível achar isso testando o clique de verdade contra o dev server, não
+só lendo o código ou rodando `next build`.
+
+**Testado**: via Playwright contra o formulário real (mockado, sem
+produto — modo criação): `checkValidity()` dos 4 campos com valor "0"
+agora retorna `true` (antes o de altura pelo menos retornaria `false`).
+Subi um STL de teste (cubo de 20mm) no `MeshUploadForm` real e confirmei
+o texto "Dimensões de embalagem estimadas: 2 × 2 × 2 cm" (20mm ÷ 10,
+arredondado pra cima); cliquei em "Usar essas dimensões" de verdade e,
+depois do fix do try/catch, o toast mostrou a mensagem de erro esperada
+("Não foi possível salvar as dimensões. Tente novamente.") em vez de
+travar silenciosamente — confirma tanto a UI da sugestão quanto o
+tratamento de erro, ainda que sem confirmar a gravação real no Supabase
+(sem `DATABASE_URL` nesta sessão, mesma limitação de sempre). `npm run
+lint`, `npx tsc --noEmit`, `npm run test` (10/10) e `npm run build`
+passaram limpos.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

@@ -274,17 +274,55 @@ export async function deleteProductPart(productId: string, partId: string) {
 }
 
 /**
- * Aplica uma sugestão (peso estimado a partir do volume do arquivo, ou
+ * Aplica uma sugestão (peso/dimensões estimados a partir do arquivo, ou
  * preço estimado a partir do peso) — sempre um clique explícito do admin,
- * nunca automático, já que as duas coisas afetam frete/cobrança real.
+ * nunca automático, já que essas três coisas afetam frete/cobrança real.
  */
 export async function applySuggestedWeight(productId: string, weightGrams: number): Promise<ProductActionResult> {
   if (!Number.isFinite(weightGrams) || weightGrams <= 0) return { error: "Peso inválido." };
 
-  await db
-    .update(products)
-    .set({ weightGrams: Math.round(weightGrams) })
-    .where(eq(products.id, productId));
+  try {
+    await db
+      .update(products)
+      .set({ weightGrams: Math.round(weightGrams) })
+      .where(eq(products.id, productId));
+  } catch {
+    return { error: "Não foi possível salvar o peso. Tente novamente." };
+  }
+
+  await revalidateProductPages(productId);
+  return {};
+}
+
+export interface SuggestedDimensionsCm {
+  heightCm: number;
+  widthCm: number;
+  lengthCm: number;
+}
+
+// Dimensões da embalagem por PRODUTO (não por pedido) — cada item cotado
+// separadamente na Superfrete (ver ShippingPackageItem/superfrete.ts), que
+// consolida os itens do carrinho do lado deles. Por isso faz sentido essa
+// medida vir do próprio arquivo 3D do item, não de uma "caixa do pedido"
+// calculada aqui (que dependeria dos outros itens do carrinho e não existe
+// nesse nível do código).
+export async function applySuggestedDimensions(
+  productId: string,
+  dimensions: SuggestedDimensionsCm,
+): Promise<ProductActionResult> {
+  const { heightCm, widthCm, lengthCm } = dimensions;
+  if (![heightCm, widthCm, lengthCm].every((value) => Number.isFinite(value) && value > 0)) {
+    return { error: "Dimensões inválidas." };
+  }
+
+  try {
+    await db
+      .update(products)
+      .set({ heightCm: Math.round(heightCm), widthCm: Math.round(widthCm), lengthCm: Math.round(lengthCm) })
+      .where(eq(products.id, productId));
+  } catch {
+    return { error: "Não foi possível salvar as dimensões. Tente novamente." };
+  }
 
   await revalidateProductPages(productId);
   return {};
@@ -293,7 +331,11 @@ export async function applySuggestedWeight(productId: string, weightGrams: numbe
 export async function applySuggestedPrice(productId: string, priceCents: number): Promise<ProductActionResult> {
   if (!Number.isFinite(priceCents) || priceCents <= 0) return { error: "Preço inválido." };
 
-  await db.update(products).set({ basePriceCents: Math.round(priceCents) }).where(eq(products.id, productId));
+  try {
+    await db.update(products).set({ basePriceCents: Math.round(priceCents) }).where(eq(products.id, productId));
+  } catch {
+    return { error: "Não foi possível salvar o preço. Tente novamente." };
+  }
 
   await revalidateProductPages(productId);
   return {};

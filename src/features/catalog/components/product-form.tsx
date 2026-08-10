@@ -155,27 +155,29 @@ export function ProductForm({ categories, product }: ProductFormProps) {
           Peso e dimensões da embalagem
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Opcional — usado para calcular o frete. Sem esses valores, a cotação usa um fallback de caixa pequena.
+          Opcional — usado para calcular o frete. Pode deixar em branco/0 e preencher depois na aba Partes: ao enviar
+          o arquivo 3D, o peso e as dimensões do item são estimados automaticamente e um botão aplica os dois de uma
+          vez. Sem nenhum valor, a cotação usa um fallback de caixa pequena.
         </p>
         <div className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="weightGrams">Peso (g)</Label>
-            <Input id="weightGrams" type="number" min="1" {...register("weightGrams")} />
+            <Input id="weightGrams" type="number" min="0" {...register("weightGrams")} />
             {errors.weightGrams ? <p className="text-sm text-destructive">{errors.weightGrams.message}</p> : null}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="heightCm">Altura (cm)</Label>
-            <Input id="heightCm" type="number" min="1" {...register("heightCm")} />
+            <Input id="heightCm" type="number" min="0" {...register("heightCm")} />
             {errors.heightCm ? <p className="text-sm text-destructive">{errors.heightCm.message}</p> : null}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="widthCm">Largura (cm)</Label>
-            <Input id="widthCm" type="number" min="1" {...register("widthCm")} />
+            <Input id="widthCm" type="number" min="0" {...register("widthCm")} />
             {errors.widthCm ? <p className="text-sm text-destructive">{errors.widthCm.message}</p> : null}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="lengthCm">Comprimento (cm)</Label>
-            <Input id="lengthCm" type="number" min="1" {...register("lengthCm")} />
+            <Input id="lengthCm" type="number" min="0" {...register("lengthCm")} />
             {errors.lengthCm ? <p className="text-sm text-destructive">{errors.lengthCm.message}</p> : null}
           </div>
         </div>
