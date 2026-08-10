@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { formatPriceCents } from "@/lib/format";
 
@@ -29,10 +30,15 @@ export function ProductRow({ product }: { product: ProductRowData }) {
       </TableCell>
       <TableCell>{formatPriceCents(product.basePriceCents)}</TableCell>
       <TableCell className="text-right">
-        <div className="flex justify-end gap-3">
-          <Link href={`/admin/produtos/${product.id}`} className="text-sm underline-offset-2 hover:underline">
+        <div className="flex justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            render={<Link href={`/admin/produtos/${product.id}`} />}
+            nativeButton={false}
+          >
             Editar
-          </Link>
+          </Button>
           <ConfirmDeleteButton
             action={deleteProduct.bind(null, product.id)}
             description={`Excluir o produto "${product.name}"? Partes, materiais, tamanhos, imagens e avaliações dele também somem. Não é possível excluir produtos que já têm pedidos.`}

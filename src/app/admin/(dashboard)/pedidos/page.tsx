@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAllOrdersForAdmin } from "@/features/orders/queries";
 import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from "@/features/orders/types";
@@ -41,9 +42,14 @@ export default async function AdminPedidosPage() {
                 <TableCell>{formatPriceCents(order.totalCents)}</TableCell>
                 <TableCell>{order.createdAt.toLocaleDateString("pt-BR")}</TableCell>
                 <TableCell className="text-right">
-                  <Link href={`/admin/pedidos/${order.id}`} className="text-sm underline-offset-2 hover:underline">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    render={<Link href={`/admin/pedidos/${order.id}`} />}
+                    nativeButton={false}
+                  >
                     Ver
-                  </Link>
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}

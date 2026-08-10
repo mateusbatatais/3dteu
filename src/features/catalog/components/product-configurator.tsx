@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useCartStore } from "@/features/checkout/cart-store";
 import { formatPriceCents } from "@/lib/format";
 
@@ -235,18 +236,35 @@ export function ProductConfigurator({
         <ProductViewer3D parts={viewerParts} />
 
         {product.images.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {product.images.map((url) => (
-              <Image
-                key={url}
-                src={url}
-                alt={product.name}
-                width={64}
-                height={64}
-                unoptimized
-                className="size-16 rounded-lg object-cover ring-1 ring-foreground/10"
-              />
-            ))}
+          <div className="mt-4">
+            <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Fotos e vídeos</h2>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {product.images.map((url) => (
+                <Dialog key={url}>
+                  <DialogTrigger
+                    render={
+                      <button
+                        type="button"
+                        className="overflow-hidden rounded-lg ring-1 ring-foreground/10 transition-transform hover:scale-105"
+                      />
+                    }
+                  >
+                    <Image src={url} alt={product.name} width={112} height={112} unoptimized className="size-28 object-cover" />
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-2xl" showCloseButton>
+                    <DialogTitle className="sr-only">Foto de {product.name}</DialogTitle>
+                    <Image
+                      src={url}
+                      alt={product.name}
+                      width={900}
+                      height={900}
+                      unoptimized
+                      className="h-auto max-h-[80vh] w-full rounded-lg object-contain"
+                    />
+                  </DialogContent>
+                </Dialog>
+              ))}
+            </div>
           </div>
         ) : null}
       </div>

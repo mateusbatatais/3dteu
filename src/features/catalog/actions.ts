@@ -146,27 +146,58 @@ export async function deleteProduct(id: string): Promise<ProductActionResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Tamanhos (por produto) — usadas direto como `action` de <form>, por isso
-// recebem FormData em vez de um objeto tipado.
+// Tamanhos (por produto)
 // ---------------------------------------------------------------------------
 
-export async function addSizeOption(productId: string, formData: FormData) {
-  const label = String(formData.get("label") ?? "").trim();
-  const scaleFactor = Number(formData.get("scaleFactor"));
-  const priceModifierReais = Number(formData.get("priceModifierReais") ?? 0);
-  const weightModifierGrams = Number(formData.get("weightModifierGrams") ?? 0);
+export interface SizeOptionInput {
+  label: string;
+  scaleFactor: number;
+  priceModifierReais: number;
+  weightModifierGrams: number;
+}
 
-  if (!label || !Number.isFinite(scaleFactor) || scaleFactor <= 0) return;
+function validateSizeInput(input: SizeOptionInput): string | null {
+  if (!input.label.trim()) return "Preencha o label.";
+  if (!Number.isFinite(input.scaleFactor) || input.scaleFactor <= 0) return "A escala precisa ser maior que zero.";
+  return null;
+}
+
+export async function createSizeOption(productId: string, input: SizeOptionInput): Promise<ProductActionResult> {
+  const validationError = validateSizeInput(input);
+  if (validationError) return { error: validationError };
 
   await db.insert(sizeOptions).values({
     productId,
-    label,
-    scaleFactor: scaleFactor.toString(),
-    priceModifierCents: Math.round(priceModifierReais * 100),
-    weightModifierGrams: Math.round(weightModifierGrams),
+    label: input.label.trim(),
+    scaleFactor: input.scaleFactor.toString(),
+    priceModifierCents: Math.round(input.priceModifierReais * 100),
+    weightModifierGrams: Math.round(input.weightModifierGrams),
   });
 
   await revalidateProductPages(productId);
+  return {};
+}
+
+export async function updateSizeOption(
+  productId: string,
+  sizeId: string,
+  input: SizeOptionInput,
+): Promise<ProductActionResult> {
+  const validationError = validateSizeInput(input);
+  if (validationError) return { error: validationError };
+
+  await db
+    .update(sizeOptions)
+    .set({
+      label: input.label.trim(),
+      scaleFactor: input.scaleFactor.toString(),
+      priceModifierCents: Math.round(input.priceModifierReais * 100),
+      weightModifierGrams: Math.round(input.weightModifierGrams),
+    })
+    .where(eq(sizeOptions.id, sizeId));
+
+  await revalidateProductPages(productId);
+  return {};
 }
 
 export interface AutoGenerateSizeOptionsResult {

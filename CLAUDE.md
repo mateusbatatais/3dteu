@@ -1360,6 +1360,60 @@ exata, não a genérica. Não testado `deleteProduct` de verdade contra o
 Postgres (sem banco nesta sessão) — a query em si (um `DELETE` simples +
 checagem do código de erro) é direta e já passa lint/build.
 
+### Rodada 21: botão "Editar" inconsistente, tamanho sem editar, gif escondido
+
+Três pedidos rápidos do usuário na mesma leva.
+
+**Botão "Editar" da lista de produtos era um link sublinhado, não um
+botão** — só apareceu porque coloquei o "Excluir" novo (`ConfirmDeleteButton`,
+sempre `variant="ghost"`) do lado de um `<Link>` de texto puro herdado da
+tela antiga. Auditei todo o admin antes de mexer: `CategoryRow`/
+`FilamentRow` já usavam `<Button size="sm" variant="outline">` pro Editar
+— esse é o padrão real do projeto, não o link. Ajustei `ProductRow`
+(produtos) e o "Ver" de `/admin/pedidos` (mesma família de ação, mesma
+inconsistência) pra usar esse mesmo botão.
+
+**Tamanhos (P/M/G) nunca tiveram edição, só criar/excluir** — igual o
+gap que existia pra produto antes da rodada 20. Segui exatamente o padrão
+já usado em Categoria/Material: `SizeForm`/`SizeRow` novos, e
+`addSizeOption` (FormData crua) virou `createSizeOption`/
+`updateSizeOption` (objeto tipado, `ProductActionResult` com erro).
+
+**Bug real pego durante o teste, não hipotético**: a primeira versão de
+`ProductSizesManager` (que é um Server Component) tinha
+`<SizeForm onSubmit={(input) => createSizeOption(productId, input)} />` —
+uma função-closure criada no servidor sendo passada pra um Client
+Component. Isso **não é o mesmo bug da rodada 11** (aquele era passar uma
+*referência de componente*), mas é da mesma família: só uma Server Action
+"pura" ou `.bind()` em cima dela sobrevive a essa fronteira — uma arrow
+function que fecha sobre uma variável não. Rodando a página mockada de
+verdade (não só build) o erro apareceu na hora: "Event handlers cannot be
+passed to Client Component props." Troquei pra
+`createSizeOption.bind(null, productId)` (mesmo truque de sempre usado em
+todo `ConfirmDeleteButton` do projeto) e sumiu. **Auditei os outros dois
+lugares com a mesma sintaxe** (`category-row.tsx`, `filament-row.tsx`) —
+esses estão OK porque o closure é criado dentro de um Client Component
+("use client" no topo do arquivo), nunca atravessa a fronteira. Lição:
+esse padrão (`onSubmit={(input) => alguméAction(idExtra, input)}`) só é
+seguro dentro de um arquivo "use client" — num Server Component precisa
+ser `.bind()`.
+
+**Galeria de fotos/gifs da página do produto era pequena demais**
+(`size-16`, 64px) e sem nenhum destaque — fácil de não perceber do lado do
+preview 3D grande. Aumentada pra `size-28` (112px), ganhou um label
+"Fotos e vídeos" acima, e cada thumbnail agora abre um lightbox (`Dialog`
+já usado no projeto, reaproveitado) com a imagem em tamanho grande
+(`max-h-[80vh]`) ao clicar — resolve tanto "pequeno demais" quanto "não dá
+pra ver direito".
+
+**Testado**: página mockada confirmou (a) Editar/Excluir lado a lado com
+o mesmo estilo de botão nas duas telas, (b) clicar Editar num tamanho abre
+o form pré-preenchido com os valores exatos, salvar/cancelar funcionam,
+(c) clicar numa miniatura da galeria abre o lightbox com a imagem grande
+— sem erro de console em nenhum caso, incluindo a checagem explícita do
+bug de Server/Client que só apareceu rodando de verdade, não no
+`next build`.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com
