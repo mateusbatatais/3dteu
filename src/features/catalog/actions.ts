@@ -265,6 +265,32 @@ export async function deleteProductPart(productId: string, partId: string) {
   await revalidateProductPages(productId);
 }
 
+/**
+ * Aplica uma sugestão (peso estimado a partir do volume do arquivo, ou
+ * preço estimado a partir do peso) — sempre um clique explícito do admin,
+ * nunca automático, já que as duas coisas afetam frete/cobrança real.
+ */
+export async function applySuggestedWeight(productId: string, weightGrams: number): Promise<ProductActionResult> {
+  if (!Number.isFinite(weightGrams) || weightGrams <= 0) return { error: "Peso inválido." };
+
+  await db
+    .update(products)
+    .set({ weightGrams: Math.round(weightGrams) })
+    .where(eq(products.id, productId));
+
+  await revalidateProductPages(productId);
+  return {};
+}
+
+export async function applySuggestedPrice(productId: string, priceCents: number): Promise<ProductActionResult> {
+  if (!Number.isFinite(priceCents) || priceCents <= 0) return { error: "Preço inválido." };
+
+  await db.update(products).set({ basePriceCents: Math.round(priceCents) }).where(eq(products.id, productId));
+
+  await revalidateProductPages(productId);
+  return {};
+}
+
 // ---------------------------------------------------------------------------
 // Upload de STL em duas etapas: o arquivo NUNCA passa pelo servidor Next.js.
 // Vercel Functions (inclusive Server Actions) têm um teto de 4,5MB por

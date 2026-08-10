@@ -1,7 +1,7 @@
 "use client";
 
-import { Component, Suspense, useMemo, type ReactNode } from "react";
-import { Canvas, useLoader } from "@react-three/fiber";
+import { Component, Suspense, useEffect, useMemo, type ReactNode } from "react";
+import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { Bounds, Environment, OrbitControls, RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 import { OBJLoader, STLLoader, ThreeMFLoader } from "three-stdlib";
@@ -182,17 +182,38 @@ function Part({ part }: { part: ViewerPart }) {
   return <MeshErrorBoundary fallback={placeholder}>{content}</MeshErrorBoundary>;
 }
 
+// Expõe o <canvas> de verdade do WebGL pro componente pai (via callback) —
+// usado só quando o admin quer capturar a vista atual como foto (ver
+// PartThumbnailCapture). `useThree` só funciona dentro do <Canvas>, por
+// isso precisa ser um filho dele, não algo que o pai consiga pegar direto.
+function CanvasCaptureBridge({ onReady }: { onReady: (canvas: HTMLCanvasElement) => void }) {
+  const { gl } = useThree();
+  useEffect(() => {
+    onReady(gl.domElement);
+  }, [gl, onReady]);
+  return null;
+}
+
 export function ProductViewer3D({
   parts,
   interactive = true,
+  onCanvasReady,
 }: {
   parts: ViewerPart[];
   /** false = sem controles de câmera; usado nas miniaturas do catálogo. */
   interactive?: boolean;
+  /** Recebe o <canvas> real do WebGL — usado pra capturar a vista atual como foto (`canvas.toDataURL()`). */
+  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
 }) {
   return (
     <div className="aspect-square w-full overflow-hidden rounded-xl bg-muted/30 ring-1 ring-foreground/10">
-      <Canvas camera={{ position: [2.5, 2, 2.5], fov: 40 }}>
+      <Canvas
+        camera={{ position: [2.5, 2, 2.5], fov: 40 }}
+        // preserveDrawingBuffer é necessário pra toDataURL() funcionar (por
+        // padrão o WebGL limpa o buffer depois de cada frame) — só liga
+        // quando alguém realmente vai capturar, custa um pouco de performance.
+        gl={{ preserveDrawingBuffer: Boolean(onCanvasReady) }}
+      >
         <ambientLight intensity={0.7} />
         <directionalLight position={[3, 5, 2]} intensity={1} />
         <Suspense fallback={null}>
@@ -205,6 +226,7 @@ export function ProductViewer3D({
           </Bounds>
           <Environment preset="city" />
         </Suspense>
+        {onCanvasReady ? <CanvasCaptureBridge onReady={onCanvasReady} /> : null}
         {/* makeDefault registra os controles no estado global do r3f — sem isso o
         Bounds não os enxerga e não ajusta o maxDistance, então um objeto maior
         que a distância fixa antiga (6) ficava com a câmera grudada nele. */}

@@ -11,6 +11,11 @@ export const storeSettingsSchema = z.object({
   neighborhood: z.string().trim().min(2, "Informe o bairro."),
   city: z.string().trim().min(2, "Informe a cidade."),
   state: z.string().trim().length(2, "Use a sigla do estado (ex.: SP)."),
+  // Usados só pra sugerir preço base ao cadastrar produto — 0 é tratado
+  // como "sem sugestão configurada ainda" (mesmo padrão de
+  // optionalPositiveInt em catalog/schemas.ts).
+  pricePerGramReais: z.coerce.number().min(0),
+  fixedFeeReais: z.coerce.number().min(0),
 });
 
 export type StoreSettingsFormValues = z.infer<typeof storeSettingsSchema>;

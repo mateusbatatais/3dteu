@@ -373,14 +373,16 @@ real nem contra a API da Woovi de verdade):**
 - Rodar as migrações `drizzle/0001_brainy_the_order.sql`,
   `drizzle/0002_flawless_runaways.sql`, `drizzle/0003_curvy_boom_boom.sql`,
   `drizzle/0004_empty_amphibian.sql`, `drizzle/0005_solid_lucky_pierre.sql`,
-  `drizzle/0006_nappy_banshee.sql` e `drizzle/0007_tan_xavin.sql` contra o
+  `drizzle/0006_nappy_banshee.sql`, `drizzle/0007_tan_xavin.sql` e
+  `drizzle/0008_rapid_chamber.sql` contra o
   Supabase real (`npm run db:migrate` ou colar o SQL no SQL Editor) — sem
   isso, nada da rodada 10 (Superfrete completo, imagens de produto), da
   rodada 12 (regiões pintadas), da rodada 13 (material padrão por parte),
   da rodada 15 (esconder/definir padrão por região), da rodada 16 (conta de
   cliente — `orders.customer_id` — e avaliações de produto —
-  `product_reviews`) nem da rodada 18 (imagem de categoria —
-  `categories.image_url`)
+  `product_reviews`), da rodada 18 (imagem de categoria —
+  `categories.image_url`) nem da rodada 22 (`store_settings.price_per_gram_cents`/
+  `fixed_fee_cents`, usados pra sugerir preço a partir do peso estimado)
   funciona contra produção. Todas são só aditivas (CREATE TABLE / ALTER
   TABLE ADD COLUMN), seguras. **Atenção
   pro mesmo problema da rodada 11**: se a 0001 já foi parcialmente aplicada
@@ -1413,6 +1415,101 @@ o form pré-preenchido com os valores exatos, salvar/cancelar funcionam,
 — sem erro de console em nenhum caso, incluindo a checagem explícita do
 bug de Server/Client que só apareceu rodando de verdade, não no
 `next build`.
+
+### Rodada 22: peso/preço estimados a partir do arquivo 3D + captura de thumbnail no admin
+
+Usuário pediu três coisas de uma vez: "é possivel prever mais ou menos o
+peso, considerando um impressao fdm com configuracoes padrao? uma sugestão
+de preco tambem seria legal.. outra coisa, sera que posso escolher a thumb
+ao adicionar o stl? esta sempre ficando em uma posicao ruim".
+
+**Peso estimado**: `measureMesh()` (`src/features/catalog/mesh-measure.ts`,
+antes só devolvia largura/altura/profundidade) passou a calcular também
+**volume e área de superfície reais da malha** — não da bounding box —
+percorrendo cada triângulo (STL: geometria pura; OBJ/3MF: todas as
+sub-malhas de todo o grupo, com `matrixWorld` aplicado por vértice, senão a
+escala/posição de cada objeto dentro do arquivo seria ignorada). Volume via
+soma de tetraedros a partir da origem (`Σ pA·(pB×pC) / 6` por triângulo,
+técnica padrão pra sólidos fechados — resultado abrupto se a malha tiver
+furos, mas isso já seria um arquivo problemático pra imprimir de qualquer
+jeito); área via soma de `0.5 * |aresta1 × aresta2|`. **Validado com números
+exatos antes de qualquer UI**: um cubo STL de 20mm deu `volumeMm3: 8000` e
+`surfaceAreaMm2: 2400` (valores analíticos exatos); um box OBJ de
+10×30×20mm deu `6000`/`2200` — só depois de achar e corrigir um bug de
+winding order no meu próprio arquivo OBJ de teste (a área bateu de cara,
+winding-independent; o volume só bateu depois de eu regerar a ordem dos
+vértices copiando a mesma ordem já validada no gerador de STL).
+
+`src/features/catalog/print-estimate.ts` (novo) pega esse volume/área e
+estima o peso assumindo **configurações padrão de fatiador FDM**: parede de
+1,2mm (~3 perímetros), preenchimento 20%, densidade do PLA 1,24g/cm³. A
+conta decompõe o volume em casca (área × espessura da parede) + o restante
+do interior só parcialmente (20%) — não trata o modelo como sólido maciço,
+que superestimaria muito o peso. Tudo documentado como constantes com
+comentário explicando a escolha, e o resultado sempre rotulado como
+aproximado ("FDM, PLA, preenchimento 20%") — não é uma medição, é a mesma
+lógica que qualquer calculadora de peso de STL de terceiros usa.
+
+**Sugestão de preço**: `store_settings` ganhou duas colunas opcionais,
+`price_per_gram_cents` e `fixed_fee_cents` (migração
+`drizzle/0008_rapid_chamber.sql`, só aditiva), editáveis numa nova seção
+"Sugestão de preço" em `/admin/configuracoes`. Quando as duas (ou só o
+preço por grama) estão configuradas, o preço sugerido é
+`peso_estimado_g × preço_por_grama + taxa_fixa`.
+
+**Padrão "sugere, nunca aplica sozinho"** (igual peso e preço): cada valor
+aparece como texto informativo com um botão próprio
+("Usar esse peso"/"Usar esse preço"), cada um com seu próprio
+`useTransition` **separado do fluxo de upload** — o admin sempre confirma
+antes de qualquer coisa que mexe em preço real cobrado do cliente. Ações
+novas: `applySuggestedWeight`/`applySuggestedPrice`
+(`src/features/catalog/actions.ts`), ambas gravam um valor arredondado e
+revalidam as páginas do produto. Isso é deliberadamente mais cauteloso que
+a auto-geração de tamanhos P/M/G da rodada 19 (essa sim aplica sozinha,
+mas só quando o produto ainda não tem nenhum tamanho — um default de risco
+bem menor).
+
+**Escolher o ângulo da thumbnail**: o preview 3D pequeno e não-interativo
+dentro do card de cada parte no admin (`ProductPartsManager`,
+`PartRegionsPanel`) sempre nascia numa posição de câmera fixa — às vezes
+mostrando um ângulo ruim da peça, sem jeito de ajustar. Trocado por
+`PartThumbnailCapture` (novo,
+`src/features/catalog/components/part-thumbnail-capture.tsx`): o mesmo
+`ProductViewer3D`, mas **interativo** (o admin arrasta/gira/dá zoom com o
+`OrbitControls` que já existia) e com um botão "Usar este ângulo como
+foto" que fotografa o `<canvas>` de verdade (`canvas.toBlob("image/png")`)
+e sobe pra galeria do produto reaproveitando 100% o pipeline de upload
+direto já usado por `ProductImagesManager`
+(`createProductImageUploadUrl`/`confirmProductImage`, sem passar pelo
+servidor). `ProductViewer3D` ganhou um `onCanvasReady?: (canvas) => void`
+opcional — só quando presente é que `gl={{ preserveDrawingBuffer: true }}`
+é ligado no `<Canvas>` (o WebGL limpa o buffer a cada frame por padrão, e
+isso custa memória, então só liga quando alguém realmente vai capturar).
+Um componente interno novo, `CanvasCaptureBridge`, usa `useThree()` (só
+funciona dentro do `<Canvas>`) pra pegar `gl.domElement` e repassar pro
+componente pai via callback num `useEffect`. Aproveitei a troca pra também
+usar a cor do **material padrão de verdade da parte**
+(`part.defaultFilamentOptionId` → busca em `allMaterials`) em vez do cinza
+`#a1a1aa` fixo de antes — a foto capturada já sai com uma cor real, não
+placeholder.
+
+**Testado de ponta a ponta o que dava pra testar sem banco** (mesma
+limitação de sempre): página temporária renderizando `PartThumbnailCapture`
+com um cubo STL de 20mm gerado na hora, servido estaticamente. Via
+Playwright: comparei um screenshot do `<canvas>` antes/depois de simular um
+arrasto do mouse — a imagem mudou, confirmando que a rotação funciona de
+verdade (não só que os controles existem). Cliquei no botão de captura de
+verdade: a ação chega até `createStorageClient()` no servidor e falha com
+uma mensagem clara ("NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+não configuradas") mostrada num toast — confirma que a falta de credenciais
+nesta máquina é tratada com uma falha limpa (`try/catch` já existente em
+`createProductImageUploadUrl`), não um crash, mas **não confirma o upload
+de verdade contra o Supabase real**, que só o usuário pode testar. Sem
+erros de console em nenhum passo. `npm run lint`, `npx tsc --noEmit` e
+`npm run build` (com `.next` limpo, pra não pegar um erro de tipo obsoleto
+apontando pra uma rota temporária já apagada) passaram limpos; `npm run
+test` também (10/10, suíte de `pricing.test.ts`, não afetada por esta
+rodada).
 
 ## Preferências do usuário (importante)
 

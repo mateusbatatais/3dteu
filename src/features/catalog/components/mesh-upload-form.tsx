@@ -5,11 +5,13 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { formatPriceCents } from "@/lib/format";
 import { getMeshExtension, MAX_MESH_FILE_SIZE_BYTES, MODELS_BUCKET } from "@/lib/supabase/storage-constants";
 
-import { autoGenerateSizeOptions, confirmPartMesh, createMeshUploadUrl } from "../actions";
-import { measureMeshDimensionsMm, type MeshDimensionsMm } from "../mesh-measure";
+import { applySuggestedPrice, applySuggestedWeight, autoGenerateSizeOptions, confirmPartMesh, createMeshUploadUrl } from "../actions";
+import { measureMesh, type MeshMeasurements } from "../mesh-measure";
 import { detectPaintedStates } from "../mmu-3mf";
+import { estimatePrintWeight } from "../print-estimate";
 
 const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
   stl: "model/stl",
@@ -21,14 +23,21 @@ function formatMegabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+interface PricingSettings {
+  pricePerGramCents: number | null;
+  fixedFeeCents: number | null;
+}
+
 export function MeshUploadForm({
   productId,
   partId,
   hasMesh,
+  pricingSettings,
 }: {
   productId: string;
   partId: string;
   hasMesh: boolean;
+  pricingSettings: PricingSettings;
 }) {
   const inputId = useId();
   const [file, setFile] = useState<File | null>(null);
@@ -40,16 +49,22 @@ export function MeshUploadForm({
   // que o próprio admin acabou de escolher, antes de qualquer upload.
   const [detectedStates, setDetectedStates] = useState<number[] | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
-  // Medida da bounding box do arquivo — usada pra sugerir os 3 tamanhos
-  // (P/M/G) automaticamente se o produto ainda não tiver nenhum.
-  const [dimensionsMm, setDimensionsMm] = useState<MeshDimensionsMm | null>(null);
+  // Medidas + volume do arquivo — usadas pra sugerir tamanhos, peso e preço.
+  const [measurements, setMeasurements] = useState<MeshMeasurements | null>(null);
+  const [isApplyingSuggestion, startSuggestionTransition] = useTransition();
+
+  const weightEstimate = measurements ? estimatePrintWeight(measurements.volumeMm3, measurements.surfaceAreaMm2) : null;
+  const suggestedPriceCents =
+    weightEstimate && pricingSettings.pricePerGramCents
+      ? Math.round(weightEstimate.weightGrams * pricingSettings.pricePerGramCents + (pricingSettings.fixedFeeCents ?? 0))
+      : null;
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     setSuccess(false);
     setError(null);
     setDetectedStates(null);
-    setDimensionsMm(null);
+    setMeasurements(null);
 
     if (!selected) {
       setFile(null);
@@ -76,7 +91,7 @@ export function MeshUploadForm({
     }
 
     setFile(selected);
-    measureMeshDimensionsMm(selected, extension).then(setDimensionsMm);
+    measureMesh(selected, extension).then(setMeasurements);
 
     if (extension === "3mf") {
       setIsDetecting(true);
@@ -133,8 +148,8 @@ export function MeshUploadForm({
 
       // 4) Sugere P/M/G a partir da medida do arquivo — só cria se o
       // produto ainda não tiver nenhum tamanho (nunca sobrescreve ajuste manual).
-      if (dimensionsMm) {
-        const mainDimensionMm = Math.max(dimensionsMm.widthMm, dimensionsMm.heightMm, dimensionsMm.depthMm);
+      if (measurements) {
+        const mainDimensionMm = Math.max(measurements.widthMm, measurements.heightMm, measurements.depthMm);
         const sizeResult = await autoGenerateSizeOptions(productId, mainDimensionMm);
         if (sizeResult.created && sizeResult.labels) {
           toast.success(`Tamanhos criados a partir do arquivo: ${sizeResult.labels.join(", ")}.`);
@@ -143,8 +158,33 @@ export function MeshUploadForm({
 
       setFile(null);
       setDetectedStates(null);
-      setDimensionsMm(null);
       setSuccess(true);
+      // Mantém a medida (e a sugestão de peso/preço) visível depois do envio
+      // — o admin ainda pode querer clicar "usar" nelas.
+    });
+  }
+
+  function handleApplyWeight() {
+    if (!weightEstimate) return;
+    startSuggestionTransition(async () => {
+      const result = await applySuggestedWeight(productId, weightEstimate.weightGrams);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Peso do produto atualizado pra ~${Math.round(weightEstimate.weightGrams)}g.`);
+    });
+  }
+
+  function handleApplyPrice() {
+    if (!suggestedPriceCents) return;
+    startSuggestionTransition(async () => {
+      const result = await applySuggestedPrice(productId, suggestedPriceCents);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Preço base do produto atualizado pra ${formatPriceCents(suggestedPriceCents)}.`);
     });
   }
 
@@ -169,11 +209,41 @@ export function MeshUploadForm({
         </p>
       ) : null}
 
-      {dimensionsMm ? (
+      {measurements ? (
         <p className="text-xs text-muted-foreground">
-          Medidas detectadas: {(dimensionsMm.widthMm / 10).toFixed(1)} × {(dimensionsMm.heightMm / 10).toFixed(1)} ×{" "}
-          {(dimensionsMm.depthMm / 10).toFixed(1)} cm — usadas pra sugerir os tamanhos, se o produto ainda não tiver
+          Medidas detectadas: {(measurements.widthMm / 10).toFixed(1)} × {(measurements.heightMm / 10).toFixed(1)} ×{" "}
+          {(measurements.depthMm / 10).toFixed(1)} cm — usadas pra sugerir os tamanhos, se o produto ainda não tiver
           nenhum.
+        </p>
+      ) : null}
+
+      {weightEstimate ? (
+        <p className="text-xs text-muted-foreground">
+          Peso estimado: ~{Math.round(weightEstimate.weightGrams)}g ({weightEstimate.assumptionLabel} — aproximado,
+          ajuste se usar outra configuração).{" "}
+          <button
+            type="button"
+            disabled={isApplyingSuggestion}
+            onClick={handleApplyWeight}
+            className="font-medium text-primary underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            Usar esse peso
+          </button>
+        </p>
+      ) : null}
+
+      {suggestedPriceCents ? (
+        <p className="text-xs text-muted-foreground">
+          Preço sugerido: {formatPriceCents(suggestedPriceCents)} (peso estimado × preço por grama, configurado em
+          Configurações da loja).{" "}
+          <button
+            type="button"
+            disabled={isApplyingSuggestion}
+            onClick={handleApplyPrice}
+            className="font-medium text-primary underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            Usar esse preço
+          </button>
         </p>
       ) : null}
 

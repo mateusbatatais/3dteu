@@ -28,12 +28,23 @@ export async function updateStoreSettings(values: StoreSettingsFormValues): Prom
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
+  // pricePerGramReais/fixedFeeReais são do formulário (reais) — a tabela
+  // guarda centavos, como todo valor monetário do projeto; 0 vira null
+  // ("sem sugestão configurada ainda"), mesmo padrão de weightGrams etc.
+  // em catalog/actions.ts.
+  const { pricePerGramReais, fixedFeeReais, ...addressFields } = parsed.data;
+  const row = {
+    ...addressFields,
+    pricePerGramCents: pricePerGramReais > 0 ? Math.round(pricePerGramReais * 100) : null,
+    fixedFeeCents: fixedFeeReais > 0 ? Math.round(fixedFeeReais * 100) : null,
+  };
+
   await db
     .insert(storeSettings)
-    .values({ id: "default", ...parsed.data })
+    .values({ id: "default", ...row })
     .onConflictDoUpdate({
       target: storeSettings.id,
-      set: { ...parsed.data, updatedAt: new Date() },
+      set: { ...row, updatedAt: new Date() },
     });
 
   revalidatePath("/admin/configuracoes");

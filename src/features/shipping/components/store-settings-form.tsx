@@ -24,6 +24,8 @@ interface StoreSettingsFormProps {
     neighborhood: string | null;
     city: string | null;
     state: string | null;
+    pricePerGramCents: number | null;
+    fixedFeeCents: number | null;
   } | null;
 }
 
@@ -48,6 +50,8 @@ export function StoreSettingsForm({ settings }: StoreSettingsFormProps) {
       neighborhood: settings?.neighborhood ?? "",
       city: settings?.city ?? "",
       state: settings?.state ?? "",
+      pricePerGramReais: settings?.pricePerGramCents ? settings.pricePerGramCents / 100 : 0,
+      fixedFeeReais: settings?.fixedFeeCents ? settings.fixedFeeCents / 100 : 0,
     },
   });
 
@@ -127,6 +131,24 @@ export function StoreSettingsForm({ settings }: StoreSettingsFormProps) {
           <Label htmlFor="state">UF</Label>
           <Input id="state" maxLength={2} {...register("state")} />
           {errors.state ? <p className="text-sm text-destructive">{errors.state.message}</p> : null}
+        </div>
+      </div>
+
+      <div className="mt-2 border-t pt-4">
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Sugestão de preço</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Usados só pra sugerir um preço base ao cadastrar um produto, a partir do peso estimado do arquivo 3D — o
+          admin sempre confirma antes de aplicar, nunca é automático.
+        </p>
+        <div className="mt-2 grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="pricePerGramReais">Preço por grama (R$)</Label>
+            <Input id="pricePerGramReais" type="number" step="0.01" min="0" {...register("pricePerGramReais")} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="fixedFeeReais">Taxa fixa por peça (R$)</Label>
+            <Input id="fixedFeeReais" type="number" step="0.01" min="0" {...register("fixedFeeReais")} />
+          </div>
         </div>
       </div>
 

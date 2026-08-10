@@ -326,6 +326,11 @@ export const storeSettings = pgTable("store_settings", {
   neighborhood: text("neighborhood"),
   city: text("city"),
   state: text("state"),
+  // Usados só pra sugerir um preço base ao cadastrar produto (a partir do
+  // peso estimado do arquivo 3D) — nunca aplicados automaticamente, o
+  // admin sempre confirma clicando. Null = sem sugestão de preço ainda.
+  pricePerGramCents: integer("price_per_gram_cents"),
+  fixedFeeCents: integer("fixed_fee_cents"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

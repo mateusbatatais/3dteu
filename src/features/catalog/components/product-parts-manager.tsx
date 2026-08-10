@@ -6,7 +6,7 @@ import { addProductPart, deleteProductPart, setPartMaterials } from "@/features/
 
 import { MeshUploadForm } from "./mesh-upload-form";
 import { PartRegionsPanel } from "./part-regions-panel";
-import { ProductViewer3D } from "./product-viewer-3d";
+import { PartThumbnailCapture } from "./part-thumbnail-capture";
 
 interface RegionRow {
   id: string;
@@ -34,14 +34,21 @@ interface MaterialOption {
 
 const SECTION_LABEL_CLASS = "text-xs font-medium tracking-wide text-muted-foreground uppercase";
 
+interface PricingSettings {
+  pricePerGramCents: number | null;
+  fixedFeeCents: number | null;
+}
+
 export function ProductPartsManager({
   productId,
   parts,
   allMaterials,
+  pricingSettings,
 }: {
   productId: string;
   parts: PartRow[];
   allMaterials: MaterialOption[];
+  pricingSettings: PricingSettings;
 }) {
   return (
     <div>
@@ -54,6 +61,7 @@ export function ProductPartsManager({
       <div className="mt-3 flex flex-col gap-4">
         {parts.map((part) => {
           const selectedIds = new Set(part.materialOptions.map((m) => m.filamentOptionId));
+          const defaultMaterial = allMaterials.find((m) => m.id === part.defaultFilamentOptionId);
           return (
             <div key={part.id} className="max-w-2xl rounded-xl bg-card p-4 ring-1 ring-foreground/10">
               <div className="flex items-center justify-between">
@@ -74,30 +82,30 @@ export function ProductPartsManager({
                     hasMesh={Boolean(part.meshFileUrl)}
                     regions={part.regions}
                     materialOptions={allMaterials.filter((m) => selectedIds.has(m.id))}
+                    pricingSettings={pricingSettings}
                   />
                 </div>
               ) : (
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
-                  <div className="w-full max-w-40 shrink-0">
-                    <ProductViewer3D
-                      parts={[{ id: part.id, meshUrl: part.meshFileUrl, color: "#a1a1aa", colorSecondary: null }]}
-                      interactive={false}
-                    />
-                    {part.meshFileUrl ? (
-                      <a
-                        href={part.meshFileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1.5 block break-all text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
-                      >
-                        Ver arquivo enviado
-                      </a>
-                    ) : null}
-                  </div>
+                  <PartThumbnailCapture
+                    productId={productId}
+                    meshUrl={part.meshFileUrl}
+                    part={{
+                      id: part.id,
+                      meshUrl: part.meshFileUrl,
+                      color: defaultMaterial?.hexColor ?? "#a1a1aa",
+                      colorSecondary: defaultMaterial?.hexColorSecondary ?? null,
+                    }}
+                  />
                   <div className="flex-1">
                     <h3 className={SECTION_LABEL_CLASS}>Arquivo 3D</h3>
                     <div className="mt-2">
-                      <MeshUploadForm productId={productId} partId={part.id} hasMesh={Boolean(part.meshFileUrl)} />
+                      <MeshUploadForm
+                        productId={productId}
+                        partId={part.id}
+                        hasMesh={Boolean(part.meshFileUrl)}
+                        pricingSettings={pricingSettings}
+                      />
                     </div>
                   </div>
                 </div>

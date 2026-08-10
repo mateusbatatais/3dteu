@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { updateRegionSettings, type RegionSettingsInput } from "@/features/catalog/actions";
 
 import { MeshUploadForm } from "./mesh-upload-form";
-import { ProductViewer3D, type ViewerPart } from "./product-viewer-3d";
+import { PartThumbnailCapture } from "./part-thumbnail-capture";
+import type { ViewerPart } from "./product-viewer-3d";
 
 // Só pra diferenciar visualmente as regiões no admin antes de qualquer
 // material padrão ser escolhido — não tem relação com materiais reais.
@@ -30,6 +31,11 @@ interface MaterialOption {
   hexColor: string | null;
 }
 
+interface PricingSettings {
+  pricePerGramCents: number | null;
+  fixedFeeCents: number | null;
+}
+
 export function PartRegionsPanel({
   productId,
   partId,
@@ -37,6 +43,7 @@ export function PartRegionsPanel({
   hasMesh,
   regions,
   materialOptions,
+  pricingSettings,
 }: {
   productId: string;
   partId: string;
@@ -44,6 +51,7 @@ export function PartRegionsPanel({
   hasMesh: boolean;
   regions: RegionRow[];
   materialOptions: MaterialOption[];
+  pricingSettings: PricingSettings;
 }) {
   const [highlighted, setHighlighted] = useState<number | null>(null);
 
@@ -62,23 +70,11 @@ export function PartRegionsPanel({
   return (
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <div className="w-full max-w-40 shrink-0">
-          <ProductViewer3D parts={[previewPart]} interactive={false} />
-          {meshUrl ? (
-            <a
-              href={meshUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1.5 block break-all text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
-            >
-              Ver arquivo enviado
-            </a>
-          ) : null}
-        </div>
+        <PartThumbnailCapture productId={productId} part={previewPart} meshUrl={meshUrl} />
         <div className="flex-1">
           <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Arquivo 3D</h3>
           <div className="mt-2">
-            <MeshUploadForm productId={productId} partId={partId} hasMesh={hasMesh} />
+            <MeshUploadForm productId={productId} partId={partId} hasMesh={hasMesh} pricingSettings={pricingSettings} />
           </div>
         </div>
       </div>
