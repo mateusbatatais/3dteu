@@ -129,6 +129,49 @@ export async function addSizeOption(productId: string, formData: FormData) {
   await revalidateProductPages(productId);
 }
 
+export interface AutoGenerateSizeOptionsResult {
+  created: boolean;
+  labels?: string[];
+}
+
+function labelForCm(mm: number): string {
+  const rounded = Math.round((mm / 10) * 2) / 2; // arredonda pro 0,5cm mais próximo
+  return `${rounded.toFixed(1).replace(/\.0$/, "")}cm`;
+}
+
+/**
+ * Só cria tamanhos se o produto ainda não tiver nenhum — nunca sobrescreve
+ * um ajuste manual do admin. `mainDimensionMm` vem da bounding box do
+ * arquivo 3D recém-enviado (medida no navegador, ver mesh-measure.ts) e
+ * vira o tamanho "M" (100%); P e G são 50%/150% dela. O rótulo é
+ * arredondado pro 0,5cm mais próximo só pra ficar um número bonito — o
+ * scaleFactor de verdade aplicado na malha continua exato.
+ */
+export async function autoGenerateSizeOptions(
+  productId: string,
+  mainDimensionMm: number,
+): Promise<AutoGenerateSizeOptionsResult> {
+  if (!Number.isFinite(mainDimensionMm) || mainDimensionMm <= 0) return { created: false };
+
+  const existing = await db
+    .select({ id: sizeOptions.id })
+    .from(sizeOptions)
+    .where(eq(sizeOptions.productId, productId))
+    .limit(1);
+  if (existing.length > 0) return { created: false };
+
+  const sizes = [
+    { label: labelForCm(mainDimensionMm * 0.5), scaleFactor: "0.5", sortOrder: 0 },
+    { label: labelForCm(mainDimensionMm), scaleFactor: "1", sortOrder: 1 },
+    { label: labelForCm(mainDimensionMm * 1.5), scaleFactor: "1.5", sortOrder: 2 },
+  ];
+
+  await db.insert(sizeOptions).values(sizes.map((size) => ({ productId, ...size })));
+
+  await revalidateProductPages(productId);
+  return { created: true, labels: sizes.map((s) => s.label) };
+}
+
 export async function deleteSizeOption(productId: string, sizeId: string) {
   await db.delete(sizeOptions).where(eq(sizeOptions.id, sizeId));
   await revalidateProductPages(productId);

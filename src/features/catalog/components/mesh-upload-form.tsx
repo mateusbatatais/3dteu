@@ -1,12 +1,14 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { getMeshExtension, MAX_MESH_FILE_SIZE_BYTES, MODELS_BUCKET } from "@/lib/supabase/storage-constants";
 
-import { confirmPartMesh, createMeshUploadUrl } from "../actions";
+import { autoGenerateSizeOptions, confirmPartMesh, createMeshUploadUrl } from "../actions";
+import { measureMeshDimensionsMm, type MeshDimensionsMm } from "../mesh-measure";
 import { detectPaintedStates } from "../mmu-3mf";
 
 const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
@@ -38,12 +40,16 @@ export function MeshUploadForm({
   // que o próprio admin acabou de escolher, antes de qualquer upload.
   const [detectedStates, setDetectedStates] = useState<number[] | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
+  // Medida da bounding box do arquivo — usada pra sugerir os 3 tamanhos
+  // (P/M/G) automaticamente se o produto ainda não tiver nenhum.
+  const [dimensionsMm, setDimensionsMm] = useState<MeshDimensionsMm | null>(null);
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     setSuccess(false);
     setError(null);
     setDetectedStates(null);
+    setDimensionsMm(null);
 
     if (!selected) {
       setFile(null);
@@ -70,6 +76,7 @@ export function MeshUploadForm({
     }
 
     setFile(selected);
+    measureMeshDimensionsMm(selected, extension).then(setDimensionsMm);
 
     if (extension === "3mf") {
       setIsDetecting(true);
@@ -124,8 +131,19 @@ export function MeshUploadForm({
         return;
       }
 
+      // 4) Sugere P/M/G a partir da medida do arquivo — só cria se o
+      // produto ainda não tiver nenhum tamanho (nunca sobrescreve ajuste manual).
+      if (dimensionsMm) {
+        const mainDimensionMm = Math.max(dimensionsMm.widthMm, dimensionsMm.heightMm, dimensionsMm.depthMm);
+        const sizeResult = await autoGenerateSizeOptions(productId, mainDimensionMm);
+        if (sizeResult.created && sizeResult.labels) {
+          toast.success(`Tamanhos criados a partir do arquivo: ${sizeResult.labels.join(", ")}.`);
+        }
+      }
+
       setFile(null);
       setDetectedStates(null);
+      setDimensionsMm(null);
       setSuccess(true);
     });
   }
@@ -148,6 +166,14 @@ export function MeshUploadForm({
       {file ? (
         <p className="text-xs text-muted-foreground">
           Selecionado: {file.name} ({formatMegabytes(file.size)})
+        </p>
+      ) : null}
+
+      {dimensionsMm ? (
+        <p className="text-xs text-muted-foreground">
+          Medidas detectadas: {(dimensionsMm.widthMm / 10).toFixed(1)} × {(dimensionsMm.heightMm / 10).toFixed(1)} ×{" "}
+          {(dimensionsMm.depthMm / 10).toFixed(1)} cm — usadas pra sugerir os tamanhos, se o produto ainda não tiver
+          nenhum.
         </p>
       ) : null}
 

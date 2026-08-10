@@ -48,7 +48,10 @@ export function ProductSizesManager({ productId, sizes }: { productId: string; s
           </TableBody>
         </Table>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">Nenhum tamanho cadastrado ainda.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Nenhum tamanho cadastrado ainda. Dica: envie o arquivo 3D de uma parte primeiro (aba Partes) — 3 tamanhos
+          (P/M/G) são sugeridos automaticamente a partir da medida do arquivo. Se precisar de mais, adicione abaixo.
+        </p>
       )}
 
       <form

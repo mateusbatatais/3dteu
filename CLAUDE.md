@@ -1259,6 +1259,66 @@ produto/categoria, trocar os placeholders de degradê pelas fotos via
 upload — a arquitetura já foi pensada pra essa troca ser só isso, sem
 mexer em código.
 
+**Pós-rodada 18**: usuário reportou a home quebrando em produção
+("This page couldn't load", erro React #441) — causa raiz confirmada com
+uma query de diagnóstico que ele mesmo rodou: `categories.image_url`
+(migração 0007) já tinha sido aplicada, mas `orders.customer_id`
+(migração 0005) e a tabela `product_reviews` (migração 0006) não. Isso é
+mais sério do que parece à primeira vista: **não é só a home** —
+`orders.customer_id` quebra qualquer checkout de verdade (o INSERT do
+pedido inclui essa coluna incondicionalmente) e `product_reviews` quebra
+a página de QUALQUER produto (`ProductReviewsSection` roda em toda
+`/produtos/[slug]`). Passei o SQL idempotente das duas.
+
+### Rodada 19: medida automática do arquivo 3D vira sugestão de tamanho (P/M/G)
+
+Usuário perguntou se dava pra extrair as medidas do arquivo 3D enviado, e
+uma vez confirmado que sim, pediu pra usar isso pra melhorar o fluxo de
+cadastro: hoje o admin cria tamanhos (aba Tamanhos) meio às cegas, sem
+saber o tamanho real do arquivo. Proposta dele: subir o arquivo primeiro,
+o sistema mede e usa como o tamanho "M" (100%), gerando automaticamente
+mais dois — 50% e 150% — com valores arredondados.
+
+**Resposta à pergunta técnica**: sim, dá — os mesmos loaders já usados no
+preview 3D (`STLLoader`/`OBJLoader`/`ThreeMFLoader` do three-stdlib) geram
+uma geometria da qual dá pra calcular a bounding box (`THREE.Box3`) sem
+precisar de nada novo no servidor nem de biblioteca adicional. STL/OBJ/3MF
+não têm unidade explícita — assumido milímetro, convenção universal de
+fatiadores.
+
+**Implementado**: `measureMeshDimensionsMm()`
+(`src/features/catalog/mesh-measure.ts`) roda no navegador, no arquivo que
+o admin acabou de escolher (mesmo padrão de "ler antes de subir" já usado
+pra detectar regiões pintadas) — devolve largura/altura/profundidade em
+mm. `MeshUploadForm` mostra essas medidas assim que o arquivo é
+selecionado, e depois do upload confirmado chama `autoGenerateSizeOptions`
+(`catalog/actions.ts`): se o produto **ainda não tiver nenhum tamanho**,
+cria P (50%), M (100% — o valor medido) e G (150%), com o rótulo
+arredondado pro 0,5cm mais próximo pra ficar um número limpo (ex.: 8,37cm
+medido vira rótulo "8.5cm") — o `scaleFactor` de verdade aplicado na malha
+continua exato (0.5/1/1.5), só o texto mostrado é arredondado. Nunca
+sobrescreve tamanhos que o admin já tenha criado manualmente — a checagem
+"já existe algum tamanho?" acontece no servidor, não no cliente, pra valer
+mesmo se o admin voltar depois. `ProductSizesManager` ganhou uma dica de
+texto explicando esse fluxo quando a lista de tamanhos está vazia — não
+precisou reestruturar as Tabs (Info/Tamanhos/Partes/Imagens) pra isso, já
+que a automação funciona independente da ordem em que o admin navega
+entre elas.
+
+**Testado com arquivos reais gerados na hora** (não só teoria): criei um
+STL de 10×30×15mm e um OBJ de 20×40×20mm, selecionei cada um via
+Playwright (`setInputFiles`, dispara o `<input type="file">` de verdade,
+não é mock) e confirmei que o texto exibido bate **exatamente** com as
+dimensões reais dos arquivos (ex.: "1.0 × 3.0 × 1.5 cm" pro STL de
+10×30×15mm) — sem erro de console. A função de arredondamento
+(`labelForCm`) foi conferida à parte com alguns valores fracionários
+(83,7mm → P "4cm", M "8.5cm", G "12.5cm") pra confirmar que produz números
+limpos nos dois casos (inteiro e fracionário). Não testado o clique em
+"Confirmar envio" de ponta a ponta contra o banco real (chamaria
+`autoGenerateSizeOptions` contra o Supabase, que não existe nesta sessão)
+— a lógica em si (um SELECT pra checar se já existe tamanho + um INSERT de
+3 linhas) é simples e já passa lint/build.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com
