@@ -143,6 +143,10 @@ export function ProductForm({ categories, product }: ProductFormProps) {
       <div className="flex flex-col gap-2">
         <Label htmlFor="basePriceReais">Preço base (R$)</Label>
         <Input id="basePriceReais" type="number" step="0.01" min="0" {...register("basePriceReais")} />
+        <p className="text-xs text-muted-foreground">
+          Pode deixar 0 por enquanto — na aba Partes, depois de enviar o arquivo 3D, dá pra usar o preço sugerido a
+          partir do peso estimado. Só precisa ser maior que zero pra publicar o produto.
+        </p>
         {errors.basePriceReais ? <p className="text-sm text-destructive">{errors.basePriceReais.message}</p> : null}
       </div>
 

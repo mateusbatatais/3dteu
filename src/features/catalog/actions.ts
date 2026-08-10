@@ -83,6 +83,11 @@ export async function createProduct(values: ProductFormValues): Promise<ProductA
   try {
     const [row] = await db.insert(products).values(toRow(parsed.data)).returning({ id: products.id });
     productId = row.id;
+    // Já cria a primeira parte ("corpo") — sem isso o admin precisava de um
+    // passo manual extra ("Adicionar parte") antes de conseguir enviar
+    // qualquer arquivo 3D. O caso comum (peça única) já sai pronto pra
+    // upload; produtos multi-peça continuam podendo adicionar mais partes.
+    await db.insert(productParts).values({ productId, name: "corpo" });
   } catch (error) {
     return {
       error: isUniqueViolation(error) ? "Já existe um produto com esse slug." : "Não foi possível salvar o produto.",
@@ -90,7 +95,10 @@ export async function createProduct(values: ProductFormValues): Promise<ProductA
   }
 
   revalidatePath("/admin/produtos");
-  redirect(`/admin/produtos/${productId}`);
+  // Manda direto pra aba de Partes — o fluxo esperado é subir o arquivo 3D
+  // primeiro (as medidas/peso/preço sugeridos vêm dele), não preencher tudo
+  // manualmente antes.
+  redirect(`/admin/produtos/${productId}?tab=partes`);
 }
 
 export async function updateProduct(id: string, values: ProductFormValues): Promise<ProductActionResult> {

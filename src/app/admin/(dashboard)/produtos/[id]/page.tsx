@@ -8,8 +8,18 @@ import { ProductSizesManager } from "@/features/catalog/components/product-sizes
 import { getAllFilamentOptions, getCategories, getProductWithConfigForAdmin } from "@/features/catalog/queries";
 import { getStoreSettings } from "@/features/shipping/queries";
 
-export default async function EditarProdutoPage({ params }: PageProps<"/admin/produtos/[id]">) {
+const TAB_VALUES = ["info", "tamanhos", "partes", "imagens"] as const;
+
+export default async function EditarProdutoPage({
+  params,
+  searchParams,
+}: PageProps<"/admin/produtos/[id]">) {
   const { id } = await params;
+  const resolvedSearchParams = await searchParams;
+  const requestedTab = resolvedSearchParams?.tab;
+  const initialTab = TAB_VALUES.includes(requestedTab as (typeof TAB_VALUES)[number])
+    ? (requestedTab as (typeof TAB_VALUES)[number])
+    : "info";
 
   const [product, categories, allMaterials, storeSettings] = await Promise.all([
     getProductWithConfigForAdmin(id),
@@ -29,7 +39,10 @@ export default async function EditarProdutoPage({ params }: PageProps<"/admin/pr
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Editar produto</h1>
 
-      <Tabs defaultValue="info" className="mt-6">
+      {/* defaultValue vem de ?tab= — createProduct manda o admin direto pra
+      "partes" (o fluxo esperado é subir o arquivo 3D primeiro), sem isso a
+      aba Info sempre reabriria por padrão mesmo vindo desse redirect. */}
+      <Tabs defaultValue={initialTab} className="mt-6">
         <TabsList>
           <TabsTrigger value="info">Info</TabsTrigger>
           <TabsTrigger value="tamanhos">Tamanhos</TabsTrigger>

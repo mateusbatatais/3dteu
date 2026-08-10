@@ -1511,6 +1511,57 @@ apontando pra uma rota temporária já apagada) passaram limpos; `npm run
 test` também (10/10, suíte de `pricing.test.ts`, não afetada por esta
 rodada).
 
+### Rodada 23: preço deixa de ser obrigatório na criação — fluxo vira "sobe o STL primeiro"
+
+Usuário apontou uma inconsistência criada pela própria rodada 22: "quando
+crio um novo produto, tenho que preencher tudo antes de inserir o stl...
+ai nao faz sentido. o correto é enviar o stl para ja preencher as medidas
+automaticamente". Investigando o fluxo de criação de verdade, o problema
+não era "preencher tudo" (a maioria dos campos já era opcional desde antes
+— peso/dimensões, SEO, categoria, descrição) — eram duas travas concretas:
+(1) `basePriceReais` exigia `> 0` no schema (`z.coerce.number().positive()`),
+então não dava pra criar o produto sem já saber um preço, mesmo a intenção
+sendo justamente descobrir o preço a partir do arquivo (rodada 22); (2)
+mesmo criando o produto, a aba Partes começava sem nenhuma parte — só
+depois de um passo manual extra ("Adicionar parte") é que o formulário de
+upload de STL aparecia. As duas travas juntas obrigavam preencher preço
+(um valor ainda desconhecido) e clicar em mais uma tela antes de sequer
+poder enviar o arquivo que geraria esse preço.
+
+**Fix**: `basePriceReais` agora aceita 0 na criação
+(`z.coerce.number().min(0, ...)`), mas o schema virou
+`z.object({...}).refine(...)` que **só exige preço > 0 se `status ===
+"published"`** — dá pra salvar um rascunho com preço zerado, mas não pra
+publicar um produto de graça sem querer. `createProduct`
+(`src/features/catalog/actions.ts`) passou a criar a primeira parte
+("corpo") automaticamente junto com o produto, e a redirecionar pra
+`/admin/produtos/[id]?tab=partes` em vez de cair na aba Info — a página de
+edição (`src/app/admin/(dashboard)/produtos/[id]/page.tsx`) lê
+`?tab=` de `searchParams` e usa como `defaultValue` das `Tabs` (validado
+contra uma lista fixa de valores aceitos, não confia cegamente no query
+param). Resultado: o fluxo de criação vira nome → Criar produto → cai
+direto na aba Partes com uma parte já pronta pra receber o arquivo →
+enviar o STL já preenche medidas/peso/preço sugeridos (rodadas 19 e 22)
+sem nenhum passo manual extra. Produtos multi-peça continuam podendo
+adicionar mais partes do jeito de sempre. `ProductForm` ganhou uma frase
+de ajuda abaixo do campo de preço explicando que pode ficar em 0 por
+enquanto e só precisa ser preenchido de verdade pra publicar.
+
+**Testado**: a validação em si (schema `productFormSchema`) foi conferida
+isoladamente rodando `safeParse` via `tsx` — rascunho com preço 0 passa,
+publicado com preço 0 falha com a mensagem certa no campo certo
+(`path: ["basePriceReais"]`). Via Playwright contra o formulário real
+(mockado, sem produto — modo criação): confirmei que o campo de preço já
+nasce com valor "0" e que submeter como rascunho com preço 0 **não**
+mostra nenhum erro de validação client-side (a chamada ao servidor em si
+não pôde ser exercida de ponta a ponta — sem `DATABASE_URL` local, a
+Server Action real fica pendurada tentando abrir conexão em vez de falhar
+rápido, então o clique em "Criar produto" contra o dev server real trava
+a aba em vez de retornar erro; matei o processo do dev server depois
+disso). `npm run lint`, `npx tsc --noEmit` e `npm run build` (com `.next`
+limpo) passaram limpos; `npm run test` também (10/10, suíte não afetada
+por esta rodada).
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com
