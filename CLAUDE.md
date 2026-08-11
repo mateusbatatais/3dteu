@@ -2091,6 +2091,144 @@ Fase 4 (pedido de modelo customizado via IA — `⏸ aguardando decisão de
 custo/cobrança`, não avança sozinha) e Fase 5 (modelo 3D animado na home —
 `💤 bloqueada`, esperando o usuário fornecer o arquivo).
 
+### Rodada 32: Fase 4 — pedido de modelo customizado via IA (Meshy)
+
+Usuário confirmou as 3 decisões que travavam a Fase 4 desde a rodada 27
+(recomendado em todas): **Meshy** como provedor, **1 geração grátis por
+cliente por dia** como guardrail contra abuso, **taxa de modelagem
+customizada com valor fixo** (não calculada a partir do crédito real
+gasto). Dado o tamanho da feature (tabela nova, API paga externa, novo
+caminho de pedido, config nova no admin), entrei em plan mode antes de
+escrever qualquer código — o plano final foi salvo e aprovado antes da
+implementação (arquitetura resumida abaixo).
+
+**Decisão central de arquitetura**: em vez de mexer em `orders`/
+`orderItems`/`submitOrder` (o caminho mais crítico e testado do site), a
+confirmação de um modelo customizado **cria um produto oculto de
+verdade** (`products.status = "draft"`, já 100% invisível em `/`,
+`/produtos`, sitemap — `getPublishedProductsForCatalog`/`getProductBySlug`
+já filtram por `published`) usando as MESMAS server actions que o admin já
+usa pra cadastrar produto (`createProductDraft`, `createProductPart`,
+`setPartMaterials`, `createSizeOption`). O pedido em si (`orders`+
+`orderItems`) é criado direto dentro da action de confirmação — não
+reaproveita `submitOrder`, já que a fórmula de preço é outra (material +
+energia + pós-processamento + margem + taxa de IA, não base + modificador
+de tamanho). O best-effort de Woovi + e-mails é replicado (copiado dos
+mesmos 3 blocos try/catch de `submitOrder`, curtos demais pra valer a pena
+abstrair em cima de dois formatos de pedido diferentes). Resultado: o
+pedido final aparece em `/admin/pedidos`, `/pedido/[token]`, recebe Pix e
+e-mail — **zero mudança no código de pedidos existente**. O produto oculto
+por trás é editável/visualizável em `/admin/produtos/[id]` como qualquer
+produto (preview 3D, arquivo pra baixar) — interface que já existia, zero
+código novo de admin só pra "ver o modelo customizado".
+
+**Schema** (migração `0011_damp_ser_duncan.sql`, só aditiva, gerou limpo
+sem TTY — nada mudou de nome desta vez, ao contrário da Fase 1): tabela
+`custom_model_requests` (customerId sem FK, mesmo padrão de
+`orders.customerId`; `photoUrls` jsonb; enum de status
+pending/generating/ready/failed/confirmed; `meshFileUrl`/`thumbnailUrl` já
+re-hospedados; `weightGrams`/`width|height|depthMm` medidos no servidor;
+`productId`/`orderId` preenchidos só quando confirmado) +
+`storeSettings.customModelFeeCents` (nova seção "Modelo customizado via
+IA" em `/admin/configuracoes`, mesmo padrão dos outros campos da
+calculadora de preço).
+
+**`measureMesh` virou reaproveitável no servidor** (refactor pequeno,
+`src/features/catalog/mesh-measure.ts`): extraí `measureMeshFromBuffer(
+buffer, extension)` — toda a lógica de volume/área já era pura (só
+`THREE`/`three-stdlib` sobre um `ArrayBuffer`, nenhuma API de DOM), só a
+linha `file.arrayBuffer()` era browser-only. `measureMesh(file, extension)`
+virou um wrapper de uma linha; os 2 call sites existentes
+(`mesh-upload-form.tsx`, `new-product-form.tsx`) não mudaram. Isso é o que
+garante que o **peso/preço do modelo customizado nunca confia num valor
+vindo do cliente** — é sempre medido a partir do STL baixado da Meshy, no
+servidor, mesmo princípio já usado em todo o resto do checkout. Reconferido
+com o mesmo cubo de teste de 20mm das rodadas 19/22 via script `tsx`
+temporário: `volumeMm3` ≈ 8000, `surfaceAreaMm2` = 2400 — bate exatamente
+com o resultado documentado antes do refactor.
+
+**Cliente Meshy** (`src/features/custom-models/meshy.ts`) — mesmo padrão
+de `payments/woovi.ts`: lança erro se `MESHY_API_KEY` não estiver
+configurada, sem abstração de "Provider" genérica (só faz sentido pra
+Woovi/Superfrete, que têm mais de uma implementação cogitada). Sempre usa
+`POST /multi-image-to-3d` (aceita 1-4 fotos, funciona igual com 1 só —
+evita manter dois endpoints), pedindo `target_formats: ["stl"]` e
+`should_texture: false` (a peça é pintada depois com o material físico
+escolhido, textura da IA não serve pra nada aqui). **Nunca testado contra
+a API real** nesta sessão (sem `MESHY_API_KEY` disponível) — implementado
+contra a documentação oficial (docs.meshy.ai), mesma ressalva já registrada
+pra Woovi/Superfrete: o formato exato de request/response só se confirma
+no primeiro uso real.
+
+**Server actions** (`src/features/custom-models/actions.ts`): `submitCustomModelRequest`
+(guardrail de 1/dia — primeiro rate-limit do projeto, uma query `COUNT`
+simples, não vale generalizar ainda), `getCustomModelRequestStatus`
+(chamada em loop client-side a cada 4s enquanto `generating` — poll simples
+em vez de webhook, a Meshy suporta os dois mas webhook exigiria
+infraestrutura nova pra um volume que não justifica; ao suceder, baixa
+STL+thumbnail, mede, re-hospeda, tudo num único try/catch que vira
+`status: "failed"` em qualquer etapa que falhar), `getCustomModelPriceEstimate`
++ `getCustomModelShippingQuotes` (preço/frete ao vivo antes de confirmar),
+`confirmCustomModelRequest` (recalcula tudo do zero no servidor — preço e
+frete — antes de criar produto+pedido). `getCustomModelShippingQuotes`
+NÃO reaproveita `resolveShippingQuotes` (que resolve por `productSlug` via
+`getProductBySlug`, só produtos `published`) — o produto oculto ainda nem
+existe nesse ponto do fluxo; monta o item de frete direto a partir do
+peso/dimensão já medidos na request.
+
+**Reuso identificado e aplicado durante a implementação** (além do já
+citado): `ColorSwatches`/`MaterialTypeDescription` (antes privados de
+`product-configurator.tsx`) viraram exportados pra a tela de confirmação
+do modelo customizado usar o mesmo seletor de cor + texto explicativo da
+loja normal, sem duplicar JSX. `getAllMaterialColorsForConfigurator` (novo
+em `catalog/queries.ts`) devolve o catálogo de cores no formato aninhado
+`MaterialColor[]` (com `type.description`) que o configurador espera —
+diferente de `getAllMaterialColorsForAdmin` (achatado, pensado pra
+listar/marcar cores no admin). `getOrderPublicToken` (novo, mínimo, em
+`orders/queries.ts`) resolve só o token público de um pedido — usado pra
+linkar de volta ao reabrir uma request já confirmada.
+
+**Bug pego rodando de verdade, não hipotético**: a rota
+`/conta/modelo-3d/[id]/page.tsx` usa `PageProps<"/conta/modelo-3d/[id]">`
+(convenção de rotas tipadas do Next 16) — `npx tsc --noEmit` acusou erro
+porque os tipos de rota gerados (`.next/types/`) ainda não conheciam a
+rota nova. Resolvido com `npx next typegen` (comando dedicado, não precisa
+de build completo) antes de type-checar — vale lembrar disso em qualquer
+sessão futura que adicione uma rota `[param]` nova e rode `tsc` antes de
+qualquer `next dev`/`next build`.
+
+**Testado**: Playwright contra o dev server real com uma página mockada
+(`dev-preview-temp`, removida depois) cobrindo os 5 estados/telas —
+formulário de novo pedido (validação client-side bloqueando submit sem
+descrição/sem foto, adicionar/remover foto, dropzone), e as 4 telas de
+status (`generating` com spinner, `failed` com mensagem+link "tentar de
+novo", `ready` com preview 3D real de um STL de teste + seletor de cor
+mudando a descrição do material ao clicar + toggle de entrega revelando os
+campos de endereço, `confirmed` com link pro pedido) — zero erros de
+console em todos os casos. A mensagem "Sessão expirada" aparecendo no
+preço/frete da tela `ready` é esperada (sem Supabase Auth configurado
+localmente, mesma limitação de sempre) — confirma que a checagem de sessão
+funciona (bloqueia sem sessão) em vez de vazar dado de outro cliente.
+`npm run lint`, `npx tsc --noEmit`, `npm run test` (10/10) e `npm run
+build` (com `.next` limpo) passaram limpos.
+
+**Não testado** (mesma limitação de sempre — sem `MESHY_API_KEY` nem
+`DATABASE_URL`/Supabase real nesta sessão): o fluxo de ponta a ponta contra
+a API real da Meshy (formato exato de request/response, tempo real de
+geração, comportamento de erro por falta de crédito) e a gravação real no
+Supabase (upload de foto, criação do produto oculto, do pedido, cobrança
+Woovi). Primeira vez que o usuário testar isso em produção é o teste real
+— vai precisar: (1) criar conta na Meshy e configurar `MESHY_API_KEY` na
+Vercel (nunca colar a chave no chat — configurar direto no painel), (2)
+rodar `scripts/storage-custom-models-setup.sql` no Supabase (cria o bucket
+`custom-model-photos`), (3) rodar a migração `0011` contra o banco real,
+(4) preencher a "Taxa de modelagem customizada" em `/admin/configuracoes`
+(sem isso, a confirmação de pedido customizado fica bloqueada com uma
+mensagem clara, não quebra).
+
+**Ainda não iniciado**: Fase 5 (modelo 3D animado na home) — `💤
+bloqueada`, esperando o usuário fornecer o arquivo do modelo.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

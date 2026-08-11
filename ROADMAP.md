@@ -162,8 +162,9 @@ texto exato cadastrado — sem erro de console.
 
 ## Fase 4 — Pedido de modelo customizado via IA (imagem → 3D)
 
-**Status: ⏸ aguardando decisão** (a qualidade já está validada por você —
-o que falta é fechar o modelo de custo/cobrança).
+**Status: ✅ feito** (decisões confirmadas: Meshy como provedor, 1 geração
+grátis por cliente/dia, taxa de modelagem customizada com valor fixo — ver
+implementação mais abaixo, depois da pesquisa original).
 
 Pesquisei as opções reais disponíveis hoje (2026): existem várias APIs
 comerciais de imagem-pra-3D que já exportam direto em STL pronto pra
@@ -240,6 +241,36 @@ Sources:
 - [3D AI Studio API - Developer Platform for 3D Model Generation](https://www.3daistudio.com/Platform)
 - [AI 3D Model Generation API - Text to 3D and Image to 3D | Hyper3D](https://hyper3d.ai/features/api)
 - [Neural4D API - Best Text-to-3D & Image-to-3D API for Developers](https://www.neural4d.com/api)
+
+### Implementado
+
+Fluxo completo de ponta a ponta: `/conta/modelo-3d` (formulário — descrição
++ 1 a 4 fotos, mesmo padrão de dropzone+upload direto pro Supabase Storage
+já usado no admin) → `submitCustomModelRequest` chama a Meshy
+(`multi-image-to-3d`, sempre pedindo `target_formats: ["stl"]` — o mesmo
+formato que o projeto já sabe carregar/medir, zero código de viewer novo)
+→ `/conta/modelo-3d/[id]` faz polling (a cada 4s) enquanto gera, e quando
+pronto baixa o STL + thumbnail da Meshy e re-hospeda nos buckets já
+existentes (`models`/`product-media` — as URLs da Meshy expiram) →
+`measureMeshFromBuffer` (extraído de `measureMesh`, mesma lógica de
+volume/peso já usada no admin, agora reaproveitável no servidor) mede o
+arquivo de verdade, nunca confiando em nenhum valor vindo do cliente →
+cliente escolhe material/cor (mesmo catálogo Material→Tipo→Cor da Fase 1,
+reaproveitando `ColorSwatches`/`MaterialTypeDescription` do configurador) e
+vê o preço ao vivo (`estimateMaterialCost` + a taxa fixa de modelagem
+customizada nova) → ao confirmar, um produto oculto (`status: "draft"`,
+100% invisível no catálogo público) é criado com as MESMAS server actions
+que o admin usa pra cadastrar produto, e o pedido é criado direto — aparece
+normalmente em `/admin/pedidos`, `/pedido/[token]`, recebe Pix da Woovi e
+e-mail de confirmação sem nenhuma mudança no código de pedidos existente.
+Guardrail de 1 geração grátis por cliente por dia (primeiro rate-limit do
+projeto). Admin ganhou um link "Ver produto" em cada item de
+`/admin/pedidos/[id]`, dando acesso ao preview 3D + arquivo STL pra
+imprimir qualquer pedido (customizado ou não) sem nenhuma tela nova.
+
+Ver a rodada correspondente no `CLAUDE.md` pra detalhes completos de
+arquitetura, arquivos alterados e o que foi (e não pôde ser) testado nesta
+sessão.
 
 ---
 

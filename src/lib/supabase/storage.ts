@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-export { MEDIA_BUCKET, MODELS_BUCKET } from "./storage-constants";
+export { CUSTOM_MODEL_PHOTOS_BUCKET, MEDIA_BUCKET, MODELS_BUCKET } from "./storage-constants";
 
 /**
  * Cliente com a service role key, só para uso em Server Actions/rotas de

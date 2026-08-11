@@ -58,6 +58,19 @@ export const adminRoleEnum = pgEnum("admin_role", ["admin", "editor"]);
 
 export const shipmentStatusEnum = pgEnum("shipment_status", ["pending", "purchased", "error"]);
 
+// Fase 4 do ROADMAP.md: pedido de modelo 3D customizado via IA (Meshy).
+// pending = criado, ainda não chamou a Meshy; generating = task enviada;
+// ready = malha gerada e re-hospedada, cliente pode escolher material e
+// confirmar; failed = a Meshy falhou (crédito, moderação, etc.); confirmed
+// = virou um pedido de verdade (ver productId/orderId abaixo).
+export const customModelRequestStatusEnum = pgEnum("custom_model_request_status", [
+  "pending",
+  "generating",
+  "ready",
+  "failed",
+  "confirmed",
+]);
+
 // ---------------------------------------------------------------------------
 // Catálogo
 // ---------------------------------------------------------------------------
@@ -404,6 +417,38 @@ export const shipments = pgTable("shipments", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Fase 4 do ROADMAP.md: cliente sobe 1-4 fotos, o servidor chama a Meshy
+// (image-to-3d) e, se o cliente confirmar depois de ver o preview, isso
+// vira um pedido de verdade — ver src/features/custom-models. Sem FK pra
+// auth.users (mesmo padrão de orders.customerId): esse schema fica num
+// schema do Supabase que o Drizzle não gerencia.
+export const customModelRequests = pgTable("custom_model_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  customerId: uuid("customer_id").notNull(),
+  description: text("description").notNull(),
+  photoUrls: jsonb("photo_urls").notNull(), // string[] — URLs públicas no bucket custom-model-photos
+  status: customModelRequestStatusEnum("status").default("pending").notNull(),
+  meshyTaskId: text("meshy_task_id"),
+  // Arquivo/preview gerados pela Meshy são re-hospedados nos buckets já
+  // existentes (models/product-media) assim que a task termina — a URL da
+  // Meshy em si expira depois de um tempo.
+  meshFileUrl: text("mesh_file_url"),
+  thumbnailUrl: text("thumbnail_url"),
+  // Medidos no servidor a partir do STL baixado da Meshy (measureMeshFromBuffer)
+  // — nunca confiados do cliente, já que alimentam o cálculo do preço final.
+  weightGrams: numeric("weight_grams", { precision: 10, scale: 2 }),
+  widthMm: numeric("width_mm", { precision: 10, scale: 2 }),
+  heightMm: numeric("height_mm", { precision: 10, scale: 2 }),
+  depthMm: numeric("depth_mm", { precision: 10, scale: 2 }),
+  consumedCredits: integer("consumed_credits"),
+  errorMessage: text("error_message"),
+  // Preenchidos só quando o cliente confirma o pedido (status vira "confirmed").
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+  orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // Configuração da loja
 // ---------------------------------------------------------------------------
@@ -441,6 +486,11 @@ export const storeSettings = pgTable("store_settings", {
   energyPriceCentsPerKwh: integer("energy_price_cents_per_kwh"),
   printerPowerWatts: integer("printer_power_watts"),
   profitMarginPercent: numeric("profit_margin_percent", { precision: 5, scale: 2 }),
+  // Fase 4 do ROADMAP.md: somada por cima do custo de material calculado
+  // (estimateMaterialCost) num pedido de modelo customizado via IA — cobre
+  // o crédito gasto na geração + o trabalho extra de acompanhar o pedido.
+  // Null = confirmação de modelo customizado fica bloqueada até configurar.
+  customModelFeeCents: integer("custom_model_fee_cents"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -553,4 +603,9 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
 
 export const paymentsRelations = relations(payments, ({ one }) => ({
   order: one(orders, { fields: [payments.orderId], references: [orders.id] }),
+}));
+
+export const customModelRequestsRelations = relations(customModelRequests, ({ one }) => ({
+  product: one(products, { fields: [customModelRequests.productId], references: [products.id] }),
+  order: one(orders, { fields: [customModelRequests.orderId], references: [orders.id] }),
 }));

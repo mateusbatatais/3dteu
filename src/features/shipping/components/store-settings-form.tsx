@@ -28,6 +28,7 @@ interface StoreSettingsFormProps {
     energyPriceCentsPerKwh: number | null;
     printerPowerWatts: number | null;
     profitMarginPercent: string | null;
+    customModelFeeCents: number | null;
   } | null;
 }
 
@@ -56,6 +57,7 @@ export function StoreSettingsForm({ settings }: StoreSettingsFormProps) {
       energyPriceReaisPerKwh: settings?.energyPriceCentsPerKwh ? settings.energyPriceCentsPerKwh / 100 : 0,
       printerPowerWatts: settings?.printerPowerWatts ?? 0,
       profitMarginPercent: settings?.profitMarginPercent ? Number(settings.profitMarginPercent) : 0,
+      customModelFeeReais: settings?.customModelFeeCents ? settings.customModelFeeCents / 100 : 0,
     },
   });
 
@@ -167,6 +169,20 @@ export function StoreSettingsForm({ settings }: StoreSettingsFormProps) {
             <Label htmlFor="fixedFeeReais">Taxa fixa por peça (R$)</Label>
             <Input id="fixedFeeReais" type="number" step="0.01" min="0" {...register("fixedFeeReais")} />
           </div>
+        </div>
+      </div>
+
+      <div className="mt-2 border-t pt-4">
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Modelo customizado via IA
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Somada por cima do preço calculado quando um cliente confirma um pedido de modelo 3D customizado (Fase 4 do
+          ROADMAP.md) — cobre o crédito de IA gasto na geração.
+        </p>
+        <div className="mt-2 flex flex-col gap-2 sm:max-w-52">
+          <Label htmlFor="customModelFeeReais">Taxa de modelagem customizada (R$)</Label>
+          <Input id="customModelFeeReais" type="number" step="0.01" min="0" {...register("customModelFeeReais")} />
         </div>
       </div>
 

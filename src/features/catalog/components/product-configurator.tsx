@@ -16,7 +16,7 @@ import { encodeSelectionForShareUrl, SHARE_SELECTION_PARAM } from "../selection-
 import type { MaterialColor, Product, ProductPartRegion, ProductSelection } from "../types";
 import { ProductViewer3D, type ViewerPart } from "./product-viewer-3d";
 
-function ColorSwatches({
+export function ColorSwatches({
   colors,
   selectedId,
   onSelect,
@@ -58,7 +58,7 @@ function ColorSwatches({
 // (ex.: "Cristal: translúcida, ótima pra decoração") — texto livre que o
 // admin escreve por Tipo em /admin/materiais. Sem descrição cadastrada,
 // não mostra nada (não força um texto genérico).
-function MaterialTypeDescription({ color }: { color: MaterialColor | undefined }) {
+export function MaterialTypeDescription({ color }: { color: MaterialColor | undefined }) {
   if (!color?.type.description) return null;
 
   return (

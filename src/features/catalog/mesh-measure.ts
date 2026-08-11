@@ -56,14 +56,17 @@ function accumulateVolumeAndArea(object: THREE.Object3D, acc: { volume: number; 
 }
 
 /**
- * Mede a bounding box + volume + área de superfície do arquivo 3D direto no
- * navegador, no arquivo que o admin acabou de escolher — mesma técnica (ler
- * antes de subir) já usada em detectPaintedStates. STL/OBJ/3MF não têm
- * unidade explícita; assume milímetros, convenção universal de fatiadores.
+ * Núcleo puro da medição — só depende de `THREE`/`three-stdlib` sobre um
+ * `ArrayBuffer`, nenhuma API de DOM. Extraído de `measureMesh` (abaixo)
+ * pra também rodar no servidor: o fluxo de modelo customizado via IA (Fase
+ * 4 do ROADMAP.md) mede o STL baixado da Meshy no servidor, nunca confia
+ * num peso/dimensão vindo do cliente pra calcular preço.
  */
-export async function measureMesh(file: File, extension: MeshExtension): Promise<MeshMeasurements | null> {
+export async function measureMeshFromBuffer(
+  buffer: ArrayBuffer,
+  extension: MeshExtension,
+): Promise<MeshMeasurements | null> {
   try {
-    const buffer = await file.arrayBuffer();
     const box = new THREE.Box3();
     const acc = { volume: 0, area: 0 };
 
@@ -99,4 +102,14 @@ export async function measureMesh(file: File, extension: MeshExtension): Promise
   } catch {
     return null;
   }
+}
+
+/**
+ * Mede a bounding box + volume + área de superfície do arquivo 3D direto no
+ * navegador, no arquivo que o admin acabou de escolher — mesma técnica (ler
+ * antes de subir) já usada em detectPaintedStates. STL/OBJ/3MF não têm
+ * unidade explícita; assume milímetros, convenção universal de fatiadores.
+ */
+export async function measureMesh(file: File, extension: MeshExtension): Promise<MeshMeasurements | null> {
+  return measureMeshFromBuffer(await file.arrayBuffer(), extension);
 }

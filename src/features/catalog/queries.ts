@@ -14,7 +14,7 @@ import {
   sizeOptions,
 } from "@/server/db/schema";
 
-import type { Product } from "./types";
+import type { MaterialColor, Product } from "./types";
 
 export async function getPublishedProducts() {
   return db.query.products.findMany({
@@ -165,6 +165,39 @@ export async function getAllMaterialColorsForAdmin() {
         postProcessingFeeCents: material.postProcessingFeeCents,
         pricePerKgCents: type.pricePerKgCents,
         printSpeedValue: type.printSpeedValue,
+      })),
+    ),
+  );
+}
+
+/**
+ * Todas as cores do catálogo no formato `MaterialColor[]` usado pelo
+ * configurador (`ColorSwatches`/`MaterialTypeDescription`) — diferente de
+ * `getAllMaterialColorsForAdmin` (achatado, pensado pra listar/marcar cores
+ * no admin), esta preserva o objeto `type` aninhado com `description`.
+ * Usada fora do contexto de uma parte de produto específica — hoje só pelo
+ * fluxo de modelo customizado via IA (Fase 4 do ROADMAP.md), que não tem um
+ * produto de catálogo por trás até o pedido ser confirmado.
+ */
+export async function getAllMaterialColorsForConfigurator(): Promise<MaterialColor[]> {
+  const catalog = await getMaterialCatalog();
+  return catalog.flatMap((material) =>
+    material.types.flatMap((type) =>
+      type.colors.map((color) => ({
+        id: color.id,
+        name: color.name,
+        hexColor: color.hexColor,
+        hexColorSecondary: color.hexColorSecondary,
+        materialName: material.name,
+        printProcess: material.printProcess,
+        postProcessingFeeCents: material.postProcessingFeeCents,
+        type: {
+          id: type.id,
+          name: type.name,
+          pricePerKgCents: type.pricePerKgCents,
+          printSpeedValue: Number(type.printSpeedValue),
+          description: type.description,
+        },
       })),
     ),
   );

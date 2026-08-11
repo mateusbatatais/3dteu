@@ -19,6 +19,10 @@ export const storeSettingsSchema = z.object({
   energyPriceReaisPerKwh: z.coerce.number().min(0),
   printerPowerWatts: z.coerce.number().min(0),
   profitMarginPercent: z.coerce.number().min(0),
+  // Fase 4 do ROADMAP.md: somada por cima do preço calculado num pedido de
+  // modelo customizado via IA — 0 é tratado como "ainda não configurado"
+  // (bloqueia a confirmação desse tipo de pedido até o admin preencher).
+  customModelFeeReais: z.coerce.number().min(0),
 });
 
 export type StoreSettingsFormValues = z.infer<typeof storeSettingsSchema>;

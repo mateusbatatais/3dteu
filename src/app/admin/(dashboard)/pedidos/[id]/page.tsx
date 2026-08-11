@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
@@ -76,7 +77,15 @@ export default async function AdminPedidoPage({ params }: PageProps<"/admin/pedi
             <li key={item.id} className="flex items-center justify-between py-2">
               <div>
                 <p>{item.productNameSnapshot}</p>
-                <p className="text-sm text-muted-foreground">Quantidade: {item.quantity}</p>
+                <p className="text-sm text-muted-foreground">
+                  Quantidade: {item.quantity} ·{" "}
+                  <Link
+                    href={`/admin/produtos/${item.productId}`}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    Ver produto
+                  </Link>
+                </p>
               </div>
               <p>{formatPriceCents(item.subtotalCents)}</p>
             </li>

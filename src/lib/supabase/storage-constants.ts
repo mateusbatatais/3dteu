@@ -40,3 +40,10 @@ export function getMediaExtension(filename: string): MediaExtension | null {
   const ext = filename.toLowerCase().split(".").pop();
   return (ALLOWED_MEDIA_EXTENSIONS as readonly string[]).includes(ext ?? "") ? (ext as MediaExtension) : null;
 }
+
+// Fase 4 do ROADMAP.md: fotos que o cliente sobe pra pedir um modelo 3D
+// customizado via IA — bucket separado do de mídia da loja (product-media)
+// porque é conteúdo enviado por cliente, não curado pelo admin. Precisa ser
+// público: a Meshy busca a foto pela URL.
+export const CUSTOM_MODEL_PHOTOS_BUCKET = "custom-model-photos";
+export const MAX_CUSTOM_MODEL_PHOTO_BYTES = 10 * 1024 * 1024;

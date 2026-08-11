@@ -30,6 +30,14 @@ export async function getOrdersByCustomerId(customerId: string) {
   });
 }
 
+/** Só o token público — usado pra linkar de volta pro pedido a partir de um
+ * contexto que já validou posse por outro caminho (ex.: uma request de
+ * modelo customizado confirmada, ver src/features/custom-models). */
+export async function getOrderPublicToken(id: string) {
+  const [row] = await db.select({ publicToken: orders.publicToken }).from(orders).where(eq(orders.id, id));
+  return row?.publicToken ?? null;
+}
+
 export async function getOrderByIdForAdmin(id: string) {
   return db.query.orders.findFirst({
     where: eq(orders.id, id),

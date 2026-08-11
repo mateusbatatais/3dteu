@@ -34,6 +34,14 @@ export default async function ContaPage() {
         <LogoutButton />
       </div>
 
+      <Link
+        href="/conta/modelo-3d"
+        className="mt-6 inline-block rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition-shadow hover:shadow-md"
+      >
+        <p className="font-medium">Pedir modelo 3D customizado</p>
+        <p className="text-sm text-muted-foreground">Mande fotos do que você quer imprimir — a IA gera um preview.</p>
+      </Link>
+
       <h2 className="mt-10 text-lg font-medium">Meus pedidos</h2>
       {orderList.length === 0 ? (
         <p className="mt-2 text-muted-foreground">

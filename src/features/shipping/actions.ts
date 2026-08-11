@@ -31,13 +31,21 @@ export async function updateStoreSettings(values: StoreSettingsFormValues): Prom
   // Campos *Reais são do formulário (reais) — a tabela guarda centavos, como
   // todo valor monetário do projeto; 0 vira null ("ainda não configurado"),
   // mesmo padrão de weightGrams etc. em catalog/actions.ts.
-  const { fixedFeeReais, energyPriceReaisPerKwh, printerPowerWatts, profitMarginPercent, ...addressFields } = parsed.data;
+  const {
+    fixedFeeReais,
+    energyPriceReaisPerKwh,
+    printerPowerWatts,
+    profitMarginPercent,
+    customModelFeeReais,
+    ...addressFields
+  } = parsed.data;
   const row = {
     ...addressFields,
     fixedFeeCents: fixedFeeReais > 0 ? Math.round(fixedFeeReais * 100) : null,
     energyPriceCentsPerKwh: energyPriceReaisPerKwh > 0 ? Math.round(energyPriceReaisPerKwh * 100) : null,
     printerPowerWatts: printerPowerWatts > 0 ? Math.round(printerPowerWatts) : null,
     profitMarginPercent: profitMarginPercent > 0 ? profitMarginPercent.toString() : null,
+    customModelFeeCents: customModelFeeReais > 0 ? Math.round(customModelFeeReais * 100) : null,
   };
 
   await db
