@@ -276,29 +276,50 @@ sessão.
 
 ## Fase 5 — Modelo 3D animado na home
 
-**Status: 💤 aguardando o arquivo** — tecnicamente já dá pra responder a
-pergunta "seria FBX?": **não, use GLB** (glTF binário). É o formato padrão
-de fato pra 3D em tempo real na web — arquivo bem menor que FBX, PBR
-nativo, e o projeto já usa `@react-three/drei`, cujo `useGLTF` +
-`useAnimations` foi feito exatamente pra isso (carrega o modelo E toca as
-animações embutidas nele, com Suspense/cache de graça). Não precisa
-instalar nenhuma dependência nova.
+**Status: 💤 espaço reservado, aguardando os 2 arquivos** — usuário decidiu
+por 2 modelos (impressora FDM + impressora de resina/SLA) em vez de 1.
+Formato ideal confirmado: **GLB** (glTF binário), não FBX — arquivo bem
+menor, PBR nativo, e o projeto já usa `@react-three/drei`, cujo `useGLTF` +
+`useAnimations` foi feito exatamente pra isso. Se só sobrar um FBX (ex.:
+baixado de um site como Sketchfab), dá pra converter no Blender
+(importar o FBX → exportar como glTF Binary, marcando "Include
+Animations") sem precisar mudar nada no código depois.
 
-Se o arquivo que você tem é FBX: o caminho mais simples é abrir no Blender
-(gratuito) → importar o FBX → exportar como glTF Binary (.glb), marcando
-"Include Animations" — preserva a animação. Se o arquivo já vier de um
-fatiador/scanner sem animação nenhuma (só a peça parada), a "animação de
-impressora imprimindo" provavelmente precisa ser feita à parte (Blender de
-novo, ou keyframes direto no react-three-fiber caso seja algo simples tipo
-girar/aparecer progressivamente).
+**Implementado nesta rodada**: `AnimatedModelViewer`
+(`src/components/animated-model-viewer.tsx`) — componente novo, carrega um
+GLB via `useGLTF`, toca o primeiro clipe de animação embutido em loop via
+`useAnimations`, com `Bounds fit clip` (sem `observe` — ver comentário no
+código, `observe` com conteúdo animado entra num loop de reenquadramento
+que trava o WebGL) pra funcionar em qualquer escala de arquivo, e um Error
+Boundary dedicado (mesmo princípio do `MeshErrorBoundary` do
+`ProductViewer3D`) que mostra um placeholder "Em breve" em vez de quebrar
+enquanto o arquivo não existe. Seção nova "Como imprimimos" na home,
+com 2 slots lado a lado apontando pra `/animatedfile1/model.glb` (FDM) e
+`/animatedfile2/model.glb` (resina) — pastas já criadas em `public/`, cada
+uma com um `LEIA-ME.txt` explicando o nome/formato esperado do arquivo.
+Usuário só precisa soltar o `model.glb` de cada impressora dentro da pasta
+certa — nenhuma mudança de código necessária depois disso.
 
-**Quando o arquivo chegar**, preciso saber:
-- Tem animação embutida de verdade (keyframes no próprio arquivo), ou é só
-  a geometria estática e a "animação de imprimir" é uma ideia ainda a
-  desenhar?
+**Testado**: gerei um GLB sintético (um cubo com uma animação de posição
+real, via `GLTFExporter` do three-stdlib) só pra confirmar o caminho feliz
+— Playwright confirmou o modelo carregando, enquadrado corretamente e a
+animação tocando de verdade (frames do canvas mudando ao longo do tempo).
+Achei e corrigi um bug real nesse processo: a primeira versão colocava o
+`Suspense` por fora do `<Canvas>` inteiro (em vez de por dentro, como o
+`ProductViewer3D` já fazia) — isso deixava o carregamento assíncrono
+instável o bastante pra derrubar o contexto WebGL de vez em quando
+("THREE.WebGLRenderer: Context Lost"), reproduzido de verdade em testes
+locais antes da correção. Também testado o caminho de erro (arquivo
+ausente = 404) — mostra o placeholder "Em breve" sem quebrar a seção,
+inclusive com outro slot carregando normal ao lado.
+
+**Quando os arquivos chegarem**, ainda preciso saber:
+- Cada um já tem animação embutida de verdade (keyframes no próprio
+  arquivo), ou é só a geometria estática e a "animação de imprimir"
+  precisa ser desenhada à parte?
 - Tamanho do arquivo — se for pesado (muitos MB), vale rodar por uma
-  ferramenta de compressão (`gltf-transform`, Draco/Meshopt) antes de subir
-  pro site, pra não pesar o carregamento da home.
+  ferramenta de compressão (`gltf-transform`, Draco/Meshopt) antes de
+  colocar na pasta, pra não pesar o carregamento da home.
 
 ---
 

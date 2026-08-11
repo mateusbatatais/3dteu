@@ -2229,6 +2229,103 @@ mensagem clara, não quebra).
 **Ainda não iniciado**: Fase 5 (modelo 3D animado na home) — `💤
 bloqueada`, esperando o usuário fornecer o arquivo do modelo.
 
+### Rodada 33: Fase 5 — espaço reservado na home pra 2 impressoras animadas
+
+Usuário mandou um embed do Sketchfab pedindo pra baixar o FBX — expliquei
+que não dá: baixar exige login na conta do Sketchfab e aceite de licença
+na hora (sem conector configurado pra isso), e o embed só serve pra tocar
+o viewer, não expõe o arquivo original. Perguntou então onde gerar um
+modelo animado via IA (queria uma impressora FDM e uma de resina/SLA
+imprimindo algo). Pesquisei e a resposta é direta: **nenhuma ferramenta de
+IA hoje faz esse tipo de animação bem** — Meshy, Mootion, 3D AI Studio
+fazem animação por rig + biblioteca de movimentos prontos, e isso é só pra
+personagens orgânicos (biped/quadrúpede/criatura); o FAQ da própria Meshy
+confirma que corpos "não-padrão" (o exemplo deles é literalmente uma
+centopeia) precisam de trabalho manual no Blender — uma impressora com
+bico se movendo e uma peça crescendo por baixo é exatamente esse caso.
+Sugeri como alternativas: achar um modelo já animado por um humano (tipo
+o do Sketchfab, conferindo licença/download), gerar o modelo estático via
+IA e animar manualmente no Blender (tutorial de nível iniciante pra um
+efeito desses), ou simplificar pra um modelo estático girando.
+
+Usuário decidiu seguir com 2 arquivos (FDM + resina) que ele mesmo vai
+conseguir por fora, e pediu pra eu **reservar o espaço no site** enquanto
+isso — pastas `animatedfile1`/`animatedfile2` pra ele colocar os arquivos
+depois — e perguntou qual formato usar (glTF, GLB ou FBX).
+
+**Resposta técnica**: GLB (glTF binário) é o formato certo pra 3D na web —
+arquivo único (geometria+textura+animação embutidos), suporte nativo no
+three.js via `useGLTF`/`useAnimations` do `@react-three/drei` (já
+instalado, zero dependência nova), carrega muito mais rápido que FBX. FBX
+é formato de DCC (Blender/Maya/Unity/Unreal), não pra runtime web — dá pra
+converter FBX→GLB no Blender (importar + exportar como glTF Binary,
+marcando "Include Animations") sem perder a animação.
+
+**Implementado**: `AnimatedModelViewer`
+(`src/components/animated-model-viewer.tsx`, novo) — carrega um GLB via
+`useGLTF`, toca o primeiro clipe de animação embutido em loop via
+`useAnimations` (mesmo par de hooks documentado oficialmente pelo drei pra
+isso), com `Bounds fit clip` pra funcionar em qualquer escala de arquivo
+(sem depender de adivinhar a escala real do modelo) e um Error Boundary
+dedicado (mesmo princípio do `MeshErrorBoundary` já usado em
+`ProductViewer3D`) que mostra um placeholder "Em breve" (ícone de
+impressora + texto) em vez de quebrar enquanto o arquivo ainda não existe.
+Pastas `public/animatedfile1/` e `public/animatedfile2/` criadas, cada uma
+com um `LEIA-ME.txt` explicando pra colocar um arquivo `model.glb` ali —
+nome fixo de propósito, pra não precisar de nenhuma mudança de código
+depois que o usuário soltar os arquivos de verdade. Nova seção "Como
+imprimimos" na home (`src/app/(loja)/page.tsx`), entre os cards de
+destaque e a lista de categorias, com os 2 slots lado a lado.
+
+**Bug real pego rodando de verdade, não hipotético** (achado só depois de
+gerar um GLB sintético — um cubo com uma animação de posição real, via
+`GLTFExporter` do three-stdlib — só pra ter algo de verdade pra testar o
+caminho feliz, não só o caminho de erro): a primeira versão do componente
+colocava `<Suspense>` **por fora do `<Canvas>` inteiro**, envolvendo o
+Canvas junto com o Error Boundary, pra poder mostrar o placeholder em
+HTML puro no lugar do canvas inteiro enquanto carrega. Isso parecia certo
+na teoria, mas rodando de verdade contra um arquivo real (não só o 404),
+o carregamento assíncrono (`useGLTF` + `Environment`) deixava o contexto
+WebGL instável o bastante pra cair sozinho de vez em quando —
+`THREE.WebGLRenderer: Context Lost` no console, canvas em branco,
+reproduzido de forma consistente em testes locais repetidos. Comparei com
+o `ProductViewer3D` (que já funciona hoje) e a diferença real era essa:
+lá, o `<Suspense>` fica **dentro** do `<Canvas>` (em volta só de
+`Bounds`+`Environment`, com fallback `null`), e o Error Boundary é que
+fica por fora — nunca o Suspense por fora do Canvas inteiro. Corrigido
+movendo o `Suspense` pra dentro do Canvas (fallback `null`, mesmo padrão),
+mantendo só o Error Boundary por fora pro placeholder em HTML — a captura
+de erro continua funcionando igual (confirmado: falha catch continua
+funcionando não importa onde o Suspense esteja, é o rejeitar da promise
+de carregamento que sobe pro Error Boundary, não o estado de pending).
+Reconfirmado limpo em 3 execuções seguidas depois do fix, contra o mesmo
+arquivo real.
+
+Outro detalhe já corrigido antes de virar problema: `Bounds` com a prop
+`observe` (que reobserva/reenquadra a câmera toda vez que o conteúdo
+muda) NÃO pode ser usado aqui, porque o conteúdo está **animando o tempo
+todo** (a peça se move a cada frame) — isso faria o `observe` disparar um
+reenquadramento contínuo, caríssimo e instável. Usei só `fit clip` (sem
+`observe`): enquadra uma vez no carregamento e não mexe mais depois,
+mesmo com a peça se movendo.
+
+**Testado**: Playwright contra o dev server real com um GLB sintético de
+verdade (não só teoria) — confirmei visualmente que o cubo de teste
+aparece enquadrado corretamente, iluminado (reflexo do `Environment`
+visível), e a animação tocando (screenshots do canvas em momentos
+diferentes têm bytes diferentes, confirmando movimento real, não só um
+frame estático). Testado lado a lado com o outro slot ainda sem arquivo
+(404 de propósito): o slot com arquivo carrega normal, o slot sem arquivo
+mostra "Em breve" — sem nenhum erro não-tratado no console em nenhum dos
+dois casos, e sem afetar um ao outro. `npm run lint`, `npx tsc --noEmit`,
+`npm run test` (10/10) e `npm run build` (com `.next` limpo) passaram
+limpos.
+
+**Pendente**: usuário ainda precisa conseguir os 2 arquivos de verdade
+(impressora FDM e impressora de resina/SLA, animadas) e colocar como
+`model.glb` dentro de `public/animatedfile1/` e `public/animatedfile2/`
+respectivamente — nenhuma mudança de código necessária depois disso.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

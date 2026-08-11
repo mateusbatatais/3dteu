@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { AnimatedModelViewer } from "@/components/animated-model-viewer";
 import { RotatingTeu } from "@/components/rotating-teu";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -76,6 +77,23 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               </CardHeader>
             </Card>
           ))}
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-5xl px-6 py-16">
+        <h2 className="text-2xl font-semibold tracking-tight">Como imprimimos</h2>
+        <p className="mt-1 text-muted-foreground">
+          Duas tecnologias, cada uma melhor pra um tipo de peça (ver diferença de material no configurador).
+        </p>
+        <div className="mt-6 grid gap-6 sm:grid-cols-2">
+          <div>
+            <AnimatedModelViewer src="/animatedfile1/model.glb" label="Impressora FDM" />
+            <p className="mt-2 text-center text-sm font-medium">Impressora FDM</p>
+          </div>
+          <div>
+            <AnimatedModelViewer src="/animatedfile2/model.glb" label="Impressora de resina (SLA)" />
+            <p className="mt-2 text-center text-sm font-medium">Impressora de resina (SLA)</p>
+          </div>
         </div>
       </section>
 

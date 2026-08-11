@@ -1,0 +1,11 @@
+Coloque aqui o arquivo animado da impressora de resina (SLA), nomeado
+exatamente:
+
+    model.glb
+
+Formato ideal: GLB (glTF binário) — é o que o site carrega
+(src/components/animated-model-viewer.tsx aponta pra "/animatedfile2/model.glb").
+Se você só conseguir um .fbx, converta pra .glb antes (Blender: importar o
+.fbx e exportar como glTF Binary (.glb), ou um conversor online tipo
+FBX2glTF) — não precisa mudar nada no código depois de trocar o arquivo,
+o site já está esperando por ele.
