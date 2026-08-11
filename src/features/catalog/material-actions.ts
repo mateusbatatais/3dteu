@@ -71,6 +71,7 @@ export interface MaterialInput {
   printProcess: MaterialPrintProcess;
   allowsDualColor: boolean;
   postProcessingFeeReais: number;
+  dualColorFeeReais: number;
 }
 
 function materialRow(input: MaterialInput) {
@@ -79,6 +80,9 @@ function materialRow(input: MaterialInput) {
     printProcess: input.printProcess,
     allowsDualColor: input.allowsDualColor,
     postProcessingFeeCents: Math.round(input.postProcessingFeeReais * 100),
+    // Nunca confia só na UI escondendo o campo quando allowsDualColor é
+    // false — mesma cautela já usada com hexColorSecondary (rodada 14).
+    dualColorFeeCents: input.allowsDualColor ? Math.round(input.dualColorFeeReais * 100) : 0,
   };
 }
 

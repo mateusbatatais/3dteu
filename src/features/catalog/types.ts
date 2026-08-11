@@ -20,6 +20,8 @@ export interface MaterialColor {
   materialName: string; // "Resina" | "Plástico" — pro texto explicativo (Fase 3) e diferenciação visual (Fase 2)
   printProcess: MaterialPrintProcess;
   postProcessingFeeCents: number;
+  /** Taxa fixa somada ao preço ao vivo quando esta cor é dual-color (hexColorSecondary preenchido). */
+  dualColorFeeCents: number;
   /** 1 = opaco (padrão). Menor que 1 deixa a peça translúcida no preview 3D — pra resina tipo "Cristal". */
   opacity: number;
   type: MaterialTypeInfo;
@@ -47,6 +49,11 @@ export interface ProductPart {
   regions: ProductPartRegion[];
   /** Cor pré-selecionada pro cliente (e pras regiões desta parte) — null usa a primeira da lista. */
   defaultMaterialColorId: string | null;
+  /** Peso só desta peça, medido do próprio arquivo 3D dela — null até o
+   * admin confirmar um upload depois que esta coluna passou a existir.
+   * Alimenta o preço ao vivo por material/cor (pricing.ts); sem isso, a
+   * peça não contribui com nenhum ajuste de preço (cai pro preço-âncora). */
+  weightGrams: number | null;
 }
 
 export interface SizeOption {

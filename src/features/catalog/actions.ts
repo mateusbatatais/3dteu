@@ -408,12 +408,21 @@ function defaultRegionLabel(paintState: number): string {
  * um arquivo normal. Substitui completamente as regiões da parte: um novo
  * upload troca o arquivo inteiro, então as regiões antigas não fazem
  * sentido mais (podem nem existir no arquivo novo).
+ *
+ * `weightGrams`: peso estimado só desta peça (medido no navegador a partir
+ * do próprio arquivo, ver mesh-measure.ts/print-estimate.ts) — alimenta o
+ * preço ao vivo por material/cor (pricing.ts). Também recalcula
+ * `products.weightGrams` (usado na cotação de frete) como a SOMA do peso de
+ * todas as peças do produto que já têm peso próprio — antes, cada upload
+ * sobrescrevia o peso do produto com o peso de UMA peça só, apagando a
+ * contribuição das outras em produtos multi-peça.
  */
 export async function confirmPartMesh(
   productId: string,
   partId: string,
   path: string,
   paintStates?: number[],
+  weightGrams?: number,
 ): Promise<ConfirmMeshResult> {
   try {
     const storage = createStorageClient();
@@ -424,7 +433,11 @@ export async function confirmPartMesh(
     await db.transaction(async (tx) => {
       await tx
         .update(productParts)
-        .set({ meshFileUrl: publicUrl, stlFileUrl: publicUrl })
+        .set({
+          meshFileUrl: publicUrl,
+          stlFileUrl: publicUrl,
+          ...(weightGrams !== undefined ? { weightGrams: Math.round(weightGrams) } : {}),
+        })
         .where(eq(productParts.id, partId));
 
       await tx.delete(productPartRegions).where(eq(productPartRegions.productPartId, partId));
@@ -438,6 +451,17 @@ export async function confirmPartMesh(
             sortOrder: index,
           })),
         );
+      }
+
+      if (weightGrams !== undefined) {
+        const parts = await tx.query.productParts.findMany({
+          where: eq(productParts.productId, productId),
+          columns: { weightGrams: true },
+        });
+        const totalWeightGrams = parts.reduce((sum, part) => sum + (part.weightGrams ?? 0), 0);
+        if (totalWeightGrams > 0) {
+          await tx.update(products).set({ weightGrams: totalWeightGrams }).where(eq(products.id, productId));
+        }
       }
     });
 

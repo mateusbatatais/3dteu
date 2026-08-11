@@ -13,6 +13,9 @@ do que já foi feito.
 
 ## ✅ Feito recentemente
 
+- **Fase 1c completa** (preço ao vivo por material/cor, reverte a decisão
+  de preço fixo da Fase 1) — ver detalhes na seção da própria fase, mais
+  abaixo. Falta rodar a migração `0013_quiet_timeslip.sql` em produção.
 - **Fase 2 completa** (diferenciação visual Resina/Plástico no preview 3D)
   — ver detalhes na seção da própria fase, mais abaixo.
 - **Fase 1b completa** (recomendar material por categoria) — ver detalhes
@@ -57,18 +60,14 @@ margem%) + taxa_fixa_da_loja`. Config de energia/potência/margem nova em
 admin escolher qual Tipo usar como referência e aplicar o preço sugerido
 com um clique (nunca automático).
 
-**Decisão importante que NÃO segue o pedido original ao pé da letra**: o
-preço do produto (`basePriceCents`) continua sendo um valor único, fixo,
-que o admin define (com a ajuda da calculadora) — a cor que o cliente
-escolhe no configurador da loja **não recalcula o preço ao vivo**. Antes
-cada cor tinha um "adicional" manual; agora esse conceito foi removido
-(preço vive no Tipo, não na Cor) e não foi substituído por um recálculo ao
-vivo, porque isso exigiria rastrear o peso de CADA peça individualmente
-(hoje só existe o peso agregado do produto todo) — escopo bem maior que o
-pedido original, que era uma calculadora pra ajudar a PRECIFICAR, não um
-motor de preço dinâmico por cliente. Se isso for importante (ex.: cliente
-pode escolher entre um PLA barato e uma Resina cara pra mesma peça, hoje
-pagando o mesmo preço pelos dois), me avisa que vira uma sub-fase nova.
+**Decisão revertida na Fase 1c (ver seção abaixo)**: esta fase original
+decidiu deliberadamente que `basePriceCents` seria um valor único, sem
+recálculo ao vivo por cor — o usuário reportou isso como bug depois
+("Estou selecionando diferentes materiais e o preço não está mudando") e
+confirmou explicitamente que queria o recálculo ao vivo. A Fase 1c
+implementa isso por cima do que já existe aqui (Tipo→preço/kg continua a
+mesma fonte de dado, só passou a alimentar também o preço do cliente, não
+só a calculadora do admin).
 
 **Migração**: `drizzle/0009_tiny_zeigeist.sql` — cria as 3 tabelas novas +
 enum, e reaponta as colunas que hoje referenciam `filament_options` pra
@@ -79,6 +78,52 @@ de rodar). `filament_options` e o enum antigo (`filament_type`) ficam
 futura depois de confirmar que está tudo certo. Ainda **não rodada em
 produção** — mesmo procedimento de sempre (rodar o SQL no editor do
 Supabase ou `npm run db:migrate`).
+
+---
+
+## Fase 1c — Preço ao vivo por material/cor (reverte a Fase 1)
+
+**Status: ✅ feito** (falta rodar a migração `0013_quiet_timeslip.sql` em
+produção).
+
+Reverte a decisão de "preço fixo" da Fase 1: o preço agora muda ao vivo no
+configurador conforme o material/cor escolhido, pelo custo REAL de cada
+peça (peso próprio × preço/kg + energia + pós-processamento), não um valor
+opinativo por Tipo. Duas colunas novas: `product_parts.weight_grams` (peso
+só daquela peça, medido do arquivo 3D dela) e
+`materials.dual_color_fee_cents` (taxa fixa quando a cor escolhida é
+dual-color).
+
+**Modelo: delta sobre o material padrão, não custo absoluto** —
+`basePriceCents` continua sendo o preço-âncora (o que o admin definiu
+assumindo o material PADRÃO de cada peça); o preço ao vivo só diverge dele
+pelo delta de custo real quando o cliente escolhe algo diferente do
+padrão. Isso garante que a config padrão sempre resulta EXATAMENTE no
+preço já cadastrado — zero risco de quebrar preço de produto existente.
+Sem margem reaplicada sobre o delta (se o admin quiser margem embutida na
+diferença de material, já pode inflar `pricePerKgCents` um pouco, mesma
+alavanca da calculadora do admin).
+
+**Simplificação documentada**: o tempo de impressão pro componente de
+energia sempre usa peso/velocidade (mesmo pra resina, que fisicamente
+escala com altura) — não existe altura por PEÇA no schema (só por produto
+inteiro), e a calculadora do admin (`estimateMaterialCost`, inalterada)
+continua com a fórmula mais precisa (altura/velocidade pra resina) porque
+opera sobre o produto inteiro. Peça com regiões pintadas (.3mf MMU) divide
+o peso igualmente entre as regiões (sem dado melhor disponível).
+
+**Limitação real, sem solução automática**: peças cadastradas ANTES desta
+migração ficam com `weight_grams: null` até o admin reenviar/reconfirmar o
+mesmo arquivo 3D — sem isso, a peça não contribui com nenhum ajuste de
+preço (cai pro preço-âncora, nunca quebra, só fica "sem a funcionalidade
+extra" até ser reconfirmada).
+
+**Fix lateral encontrado nesta rodada**: `applySuggestedWeight` (usado
+desde a rodada 22) sobrescrevia `products.weightGrams` com o peso de UMA
+peça só a cada upload — em produto multi-peça, reconfirmar uma peça
+apagava a contribuição das outras. Corrigido: `confirmPartMesh` agora
+recalcula o agregado do produto como a SOMA do peso de todas as peças que
+já têm peso próprio.
 
 ---
 

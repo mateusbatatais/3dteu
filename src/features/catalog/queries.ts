@@ -164,6 +164,7 @@ export async function getAllMaterialColorsForAdmin() {
         // precisar de uma segunda query só pra isso.
         printProcess: material.printProcess,
         postProcessingFeeCents: material.postProcessingFeeCents,
+        dualColorFeeCents: material.dualColorFeeCents,
         pricePerKgCents: type.pricePerKgCents,
         printSpeedValue: type.printSpeedValue,
       })),
@@ -193,6 +194,7 @@ export async function getAllMaterialColorsForConfigurator(): Promise<MaterialCol
         materialName: material.name,
         printProcess: material.printProcess,
         postProcessingFeeCents: material.postProcessingFeeCents,
+        dualColorFeeCents: material.dualColorFeeCents,
         type: {
           id: type.id,
           name: type.name,
@@ -357,6 +359,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
         materialName: color.type.material.name,
         printProcess: color.type.material.printProcess,
         postProcessingFeeCents: color.type.material.postProcessingFeeCents,
+        dualColorFeeCents: color.type.material.dualColorFeeCents,
         type: {
           id: color.type.id,
           name: color.type.name,
@@ -373,6 +376,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
         defaultMaterialColorId: region.defaultMaterialColorId,
       })),
       defaultMaterialColorId: part.defaultMaterialColorId,
+      weightGrams: part.weightGrams,
     })),
     sizeOptions: row.sizeOptions.map((size) => ({
       id: size.id,

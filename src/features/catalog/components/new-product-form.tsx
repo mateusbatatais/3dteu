@@ -21,7 +21,6 @@ import {
 
 import {
   applySuggestedDimensions,
-  applySuggestedWeight,
   autoGenerateSizeOptions,
   confirmPartMesh,
   createMeshUploadUrl,
@@ -330,7 +329,16 @@ export function NewProductForm({
               if (uploadError) {
                 toast.error(`Produto criado, mas o arquivo da peça "${part.name}" falhou ao enviar: ${uploadError.message}.`);
               } else {
-                const confirmed = await confirmPartMesh(productId, partId, prepared.path, part.detectedStates ?? undefined);
+                const partWeightGrams = part.measurements
+                  ? estimatePrintWeight(part.measurements.volumeMm3, part.measurements.surfaceAreaMm2).weightGrams
+                  : undefined;
+                const confirmed = await confirmPartMesh(
+                  productId,
+                  partId,
+                  prepared.path,
+                  part.detectedStates ?? undefined,
+                  partWeightGrams,
+                );
                 if (confirmed.error) toast.error(`Arquivo da peça "${part.name}" enviado, mas não confirmado: ${confirmed.error}`);
               }
             }
@@ -344,11 +352,11 @@ export function NewProductForm({
       }
 
       if (aggregatePhysicalProps) {
-        setProgressLabel("Aplicando peso e dimensões estimados...");
-        await Promise.all([
-          applySuggestedWeight(productId, aggregatePhysicalProps.weightGrams),
-          applySuggestedDimensions(productId, aggregatePhysicalProps),
-        ]);
+        // Peso já foi gravado por peça em cada confirmPartMesh acima (que
+        // também recalcula o agregado do produto) — só falta a dimensão da
+        // embalagem, que continua sendo por produto (maior medida entre as peças).
+        setProgressLabel("Aplicando dimensões estimadas...");
+        await applySuggestedDimensions(productId, aggregatePhysicalProps);
 
         const firstMeasuredPart = parts.find((p) => p.measurements);
         if (firstMeasuredPart?.measurements) {

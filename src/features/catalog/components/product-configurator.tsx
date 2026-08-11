@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useCartStore } from "@/features/checkout/cart-store";
 import { formatPriceCents } from "@/lib/format";
 
+import type { EnergyPricingConfig } from "../print-estimate";
 import { calculateProductPriceCents, InvalidSelectionError } from "../pricing";
 import { encodeSelectionForShareUrl, SHARE_SELECTION_PARAM } from "../selection-share";
 import type { MaterialColor, Product, ProductPartRegion, ProductSelection } from "../types";
@@ -147,10 +148,14 @@ function findSharedPartSelection(initialSelection: ProductSelection | null | und
 export function ProductConfigurator({
   product,
   initialSelection,
+  pricingConfig = null,
 }: {
   product: Product;
   /** Vem de um link compartilhado (`?config=...`) — null/undefined usa os padrões normais. */
   initialSelection?: ProductSelection | null;
+  /** Energia/potência da loja — null quando a loja ainda não configurou isso
+   * (o preço ao vivo continua funcionando, só sem o componente de energia). */
+  pricingConfig?: EnergyPricingConfig | null;
 }) {
   const [sizeId, setSizeId] = useState(() => {
     const shared = initialSelection?.sizeId;
@@ -218,12 +223,12 @@ export function ProductConfigurator({
 
   const priceCents = useMemo(() => {
     try {
-      return calculateProductPriceCents(product, selection);
+      return calculateProductPriceCents(product, selection, pricingConfig);
     } catch (error) {
       if (error instanceof InvalidSelectionError) return null;
       throw error;
     }
-  }, [product, selection]);
+  }, [product, selection, pricingConfig]);
 
   const viewerParts: ViewerPart[] = product.parts.map((part) => {
     if (part.regions.length > 0) {

@@ -6,6 +6,7 @@ import { getProductBySlug } from "@/features/catalog/queries";
 import { decodeSelectionFromShareParam, SHARE_SELECTION_PARAM } from "@/features/catalog/selection-share";
 import { ProductReviewsSection } from "@/features/reviews/components/product-reviews-section";
 import { getProductRatingSummary } from "@/features/reviews/queries";
+import { getStoreSettings } from "@/features/shipping/queries";
 
 // Ver nota em /produtos/page.tsx sobre force-dynamic.
 export const dynamic = "force-dynamic";
@@ -39,6 +40,17 @@ export default async function ProdutoPage({ params, searchParams }: PageProps<"/
   const initialSelection = decodeSelectionFromShareParam(typeof shareParam === "string" ? shareParam : undefined);
   const ratingSummary = await getProductRatingSummary(product.id);
 
+  // Preço ao vivo por material/cor precisa da config de energia da loja —
+  // é um extra (só afeta o componente de energia do delta, não o de
+  // material), nunca pode derrubar a página do produto se a query falhar
+  // ou a tabela ainda não tiver essa config preenchida (mesma cautela da
+  // rodada 25 com getStoreSettings noutra página).
+  const storeSettings = await getStoreSettings().catch(() => null);
+  const pricingConfig =
+    storeSettings?.energyPriceCentsPerKwh != null && storeSettings?.printerPowerWatts != null
+      ? { energyPriceCentsPerKwh: storeSettings.energyPriceCentsPerKwh, printerPowerWatts: storeSettings.printerPowerWatts }
+      : null;
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -67,7 +79,7 @@ export default async function ProdutoPage({ params, searchParams }: PageProps<"/
       <h1 className="text-3xl font-semibold tracking-tight">{product.name}</h1>
       {product.description ? <p className="mt-2 text-muted-foreground">{product.description}</p> : null}
       <div className="mt-8">
-        <ProductConfigurator product={product} initialSelection={initialSelection} />
+        <ProductConfigurator product={product} initialSelection={initialSelection} pricingConfig={pricingConfig} />
       </div>
       <ProductReviewsSection productId={product.id} />
     </main>

@@ -2552,17 +2552,104 @@ atualizado; quem já rodou até a 0011 só precisa da linha nova
 (`ALTER TABLE "material_colors" ADD COLUMN IF NOT EXISTS "opacity"
 numeric(3, 2) DEFAULT '1' NOT NULL;`).
 
-**Ainda não iniciado (grande, aguardando esta ser a próxima rodada)**: o
-usuário confirmou explicitamente ("Sim, calcular ao vivo por
-material/cor") que quer reverter a decisão da Fase 1 (rodada 28) de preço
-fixo por produto — o preço deve mudar ao vivo conforme o cliente troca de
-material/cor no configurador, não só ao trocar tamanho. Isso é uma mudança
-de arquitetura maior (precisa de peso/altura por PARTE, não só agregado
-por produto; conceito de taxa extra por dual-color; recalcular
-`calculateProductPriceCents` incluindo o custo do material de cada parte
-selecionada) — nada implementado ainda, planejar com cuidado antes de
-mexer, dado que envolve a mesma fórmula de preço já usada no checkout de
-verdade.
+### Rodada 37 (Fase 1c): preço ao vivo por material/cor — reverte a Fase 1
+
+Usuário confirmou explicitamente ("Sim, calcular ao vivo por
+material/cor") reverter a decisão da Fase 1 (rodada 28) de preço fixo por
+produto. Antes de implementar, usei `EnterPlanMode` (mudança de
+arquitetura, mexe em pricing.ts/checkout/schema) e perguntei qual modelo
+usar, dado que não existia peso por PEÇA (só agregado do produto) — 3
+opções com trade-off explícito de precisão vs. esforço/migração. Usuário
+escolheu a mais precisa: **cálculo real por peso, peça a peça**, mesmo
+custando uma migração nova + precisar reconfirmar upload de peças já
+cadastradas.
+
+**Modelo implementado — delta sobre o material padrão, não custo
+absoluto**: `basePriceCents` continua sendo o preço-âncora que o admin
+define assumindo o material PADRÃO de cada peça; o preço ao vivo é
+`basePriceCents + size.priceModifierCents + Σ por peça (custo do material
+ESCOLHIDO − custo do material PADRÃO)`. Isso garante que a configuração
+padrão sempre resulta EXATAMENTE no preço já cadastrado (zero risco de
+mudar preço de produto existente) — só diverge quando o cliente escolhe
+algo diferente do padrão. Sem margem reaplicada sobre o delta (mesma
+alavanca da calculadora do admin: se quiser margem embutida, infla
+`pricePerKgCents`).
+
+**Schema** (migração `0013_quiet_timeslip.sql`, aditiva, gerada limpa —
+sem risco de rename ambíguo como a 0009 da Fase 1): `product_parts
+.weight_grams` (peso só daquela peça) e `materials.dual_color_fee_cents`
+(taxa fixa quando a cor escolhida é dual-color).
+
+**`print-estimate.ts`** ganhou `estimatePartRawCostCents` — irmã mais
+simples de `estimateMaterialCost` (que continua intocada, só usada pela
+calculadora do admin), pro cálculo AO VIVO por peça. Diferença
+deliberada: sempre trata `printSpeedValue` como g/hora (mesmo pra resina,
+que fisicamente escala com altura) — não existe altura por PEÇA no
+schema, só por produto inteiro, e a calculadora do admin já cobre esse
+caso com mais precisão. Aproximação documentada, mesmo espírito de
+`estimatePrintWeight` já assumir sempre FDM/PLA/20% infill.
+
+**`pricing.ts`**: `calculateProductPriceCents` ganhou um 3º parâmetro
+opcional `pricingConfig` (energia/potência da loja, default `null` —
+degrade gracioso: sem ele, ainda soma delta de material+pós-processamento
++dual-color, só sem o componente de energia). Peça com `weightGrams: null`
+contribui 0, nunca quebra. Peça com regiões pintadas (.3mf MMU) divide o
+peso igualmente entre elas (sem dado melhor disponível). Resolução de cor
+padrão duplicada aqui (mesma lógica de `product-configurator.tsx`) porque
+esta função precisa rodar em qualquer lado (servidor, testes) sem
+depender de um Client Component.
+
+**Threading do `pricingConfig`**: página do produto
+(`produtos/[slug]/page.tsx`) busca `getStoreSettings().catch(() => null)`
+(mesma cautela da rodada 25) e passa pro `ProductConfigurator`;
+`checkout/actions.ts`'s `submitOrder` busca a mesma config uma vez (fora
+do loop de itens) pra bater exatamente com o preço que o cliente viu.
+
+**Popular peso por peça + fix lateral de bug real**: `confirmPartMesh`
+ganhou um `weightGrams?` opcional — quando presente, grava na peça E
+recalcula `products.weightGrams` (usado no frete) como a SOMA do peso de
+todas as peças que já têm peso próprio. Isso corrigiu um bug lateral que
+já existia desde a rodada 22: `applySuggestedWeight` sobrescrevia o peso
+do PRODUTO com o peso de UMA peça só a cada upload — em produto
+multi-peça, reconfirmar uma peça apagava a contribuição das outras.
+`MeshUploadForm` e `NewProductForm` (fluxo de criação) passaram a medir o
+peso de cada peça localmente (já tinham a lógica, só não persistiam por
+peça) e não chamam mais `applySuggestedWeight` separadamente (redundante
+agora que `confirmPartMesh` já recalcula o agregado).
+
+**Admin — taxa dual-color**: campo novo "Taxa dual-color (R$/peça)" em
+`MaterialForm` (`material-manager.tsx`), só visível quando "Permite
+dual-color" está marcado — mesmo padrão do campo de pós-processamento.
+Reforçado no servidor (`materialRow()` em `material-actions.ts`): nunca
+confia só na UI escondendo o campo, grava `0` se `allowsDualColor` for
+false, mesma cautela já registrada na rodada 14 pro `hexColorSecondary`.
+
+**Testado com rigor**: `pricing.test.ts` reescrito com 13 testes,
+incluindo contas feitas à mão pra cada cenário (delta de material sem/com
+energia, taxa dual-color isolada, peça sem peso contribuindo zero, região
+pintada) — todos passaram de primeira contra a implementação. Depois,
+verificado via Playwright contra dois `ProductConfigurator` mockados
+(espelhando os mesmos fixtures do teste unitário, pra cross-checar o
+mesmo número já verificado): confirmei que o preço exibido bate
+EXATAMENTE com a conta à mão em 5 cenários (padrão R$25,00; dual-color
+R$30,00; madeira sem energia R$31,40; madeira com energia R$31,47; e
+trocar de volta pro padrão retorna a R$25,00 exato, provando que o modelo
+delta funciona nos dois sentidos sem deriva) — zero erros de console.
+`npm run lint`, `npx tsc --noEmit`, `npm run test` (13/13) e `npm run
+build` (`.next` limpo) passaram limpos.
+
+**Pendente**: rodar a migração `0013` contra o Supabase real — SQL
+combinado 0001-0013 atualizado em
+`scripts/pending-migrations-0001-a-0013.sql` (renomeado de `...-0012.sql`
+da rodada 36). Peças já cadastradas antes desta migração ficam com
+`weight_grams: null` até o admin reenviar/reconfirmar o mesmo arquivo 3D
+— não dá pra retroagir sem reprocessar o arquivo original; documentado no
+ROADMAP.md (Fase 1c). Não testado contra o Supabase real (mesma limitação
+de sempre — sem `DATABASE_URL` nesta sessão): a lógica de
+`confirmPartMesh` recalculando o agregado do produto (transação com
+`SELECT` + `UPDATE`) é direta e já passa lint/build/type-check, mas o
+primeiro teste de verdade é o usuário reenviando um arquivo de uma peça de
+produto multi-peça em produção.
 
 ## Preferências do usuário (importante)
 

@@ -135,6 +135,13 @@ export const productParts = pgTable("product_parts", {
   defaultMaterialColorId: uuid("default_filament_option_id").references(() => materialColors.id, {
     onDelete: "set null",
   }),
+  // Peso só desta peça (não o agregado do produto) — medido a partir do
+  // próprio arquivo 3D dela (measureMesh/estimatePrintWeight), gravado
+  // junto da confirmação do upload. Null até a peça ter um arquivo
+  // confirmado (nunca retroagido pra peças que já tinham arquivo antes
+  // desta coluna existir — precisa reenviar o mesmo arquivo uma vez).
+  // Alimenta o cálculo de preço ao vivo por material/cor (pricing.ts).
+  weightGrams: integer("weight_grams"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -209,6 +216,10 @@ export const materials = pgTable("materials", {
   // não escala com o peso da peça como o custo de material, por isso é uma
   // taxa fixa por peça, não por grama. Normalmente só Resina tem valor > 0.
   postProcessingFeeCents: integer("post_processing_fee_cents").default(0).notNull(),
+  // Taxa fixa por peça/região quando a cor escolhida é dual-color — some
+  // filamento com 2ª cor custa mais e imprime mais devagar (mais trocas).
+  // Fixa (não por grama) pelo mesmo motivo de postProcessingFeeCents.
+  dualColorFeeCents: integer("dual_color_fee_cents").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

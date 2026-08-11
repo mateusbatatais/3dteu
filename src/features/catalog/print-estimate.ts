@@ -99,3 +99,45 @@ export function estimateMaterialCost(inputs: MaterialCostInputs, store: StorePri
 
   return { materialCostCents, energyCostCents, postProcessingFeeCents, printTimeHours, suggestedPriceCents };
 }
+
+// ---------------------------------------------------------------------------
+// Preço ao vivo por peça, por material/cor escolhida (pricing.ts) — irmã mais
+// simples de `estimateMaterialCost` acima. Diferença deliberada: sempre usa
+// peso/velocidade pro tempo de impressão, mesmo pra resina (que fisicamente
+// escala com altura, não peso) — não existe altura por PEÇA no schema (só
+// por produto inteiro), e `estimateMaterialCost`/`estimatePrintWeight` já
+// cobrem o caso "produto inteiro" com mais precisão pra calculadora do
+// admin. Essa aproximação é aceitável aqui pelo mesmo motivo de
+// `estimatePrintWeight` assumir sempre FDM/PLA/20% infill: uma sugestão
+// declarada como aproximada é melhor que nenhuma, mas não finge precisão
+// que os dados disponíveis não sustentam.
+// ---------------------------------------------------------------------------
+
+export interface PartRawCostInputs {
+  weightGrams: number;
+  pricePerKgCents: number;
+  /** Sempre tratado como g/hora aqui, independente do processo — ver comentário acima. */
+  printSpeedValue: number;
+  postProcessingFeeCents: number;
+}
+
+export interface EnergyPricingConfig {
+  energyPriceCentsPerKwh: number;
+  printerPowerWatts: number;
+}
+
+/** Custo cru (sem margem, sem taxa fixa da loja) de imprimir uma peça com um
+ * material específico — usado só pra comparar DELTAS entre o material padrão
+ * e o escolhido (ver pricing.ts), nunca como preço final sozinho. */
+export function estimatePartRawCostCents(inputs: PartRawCostInputs, energy: EnergyPricingConfig | null): number {
+  const materialCostCents = Math.round((inputs.weightGrams * inputs.pricePerKgCents) / 1000);
+
+  let energyCostCents = 0;
+  if (energy && inputs.printSpeedValue > 0) {
+    const printTimeHours = inputs.weightGrams / inputs.printSpeedValue;
+    const printerPowerKw = energy.printerPowerWatts / 1000;
+    energyCostCents = Math.round(printTimeHours * printerPowerKw * energy.energyPriceCentsPerKwh);
+  }
+
+  return materialCostCents + energyCostCents + inputs.postProcessingFeeCents;
+}

@@ -4,6 +4,7 @@ import { calculateProductPriceCents, InvalidSelectionError } from "@/features/ca
 import { getProductBySlug } from "@/features/catalog/queries";
 import { sendAdminNewOrderNotification, sendOrderConfirmationEmail } from "@/features/orders/email";
 import { wooviProvider } from "@/features/payments/woovi";
+import { getStoreSettings } from "@/features/shipping/queries";
 import type { DeliveryMethod, ShippingAddress } from "@/features/shipping/types";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/server/db/client";
@@ -42,6 +43,14 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     return { error: "Seu carrinho está vazio." };
   }
 
+  // Mesma config de energia usada no preço ao vivo que o cliente já viu —
+  // buscada uma vez só (é a mesma loja pra todos os itens do pedido).
+  const storeSettings = await getStoreSettings().catch(() => null);
+  const pricingConfig =
+    storeSettings?.energyPriceCentsPerKwh != null && storeSettings?.printerPowerWatts != null
+      ? { energyPriceCentsPerKwh: storeSettings.energyPriceCentsPerKwh, printerPowerWatts: storeSettings.printerPowerWatts }
+      : null;
+
   // Recalcula tudo a partir do catálogo atual — nunca confia no preço vindo do
   // carrinho do cliente (que é só uma estimativa exibida na UI).
   const resolvedItems: Array<{
@@ -61,7 +70,7 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
 
     let unitPriceCents: number;
     try {
-      unitPriceCents = calculateProductPriceCents(product, item.selection);
+      unitPriceCents = calculateProductPriceCents(product, item.selection, pricingConfig);
     } catch (error) {
       if (error instanceof InvalidSelectionError) return { error: error.message };
       throw error;

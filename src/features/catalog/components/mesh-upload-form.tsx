@@ -12,7 +12,7 @@ import {
 } from "@/lib/supabase/storage-constants";
 import { createClient } from "@/lib/supabase/client";
 
-import { applySuggestedDimensions, applySuggestedWeight, autoGenerateSizeOptions, confirmPartMesh, createMeshUploadUrl } from "../actions";
+import { applySuggestedDimensions, autoGenerateSizeOptions, confirmPartMesh, createMeshUploadUrl } from "../actions";
 import { measureMesh, type MeshMeasurements } from "../mesh-measure";
 import { detectPaintedStates } from "../mmu-3mf";
 import { estimatePrintWeight } from "../print-estimate";
@@ -150,8 +150,15 @@ export function MeshUploadForm({
       }
 
       // 3) Confirma no servidor: grava a URL pública na parte do produto (+
-      // as regiões pintadas detectadas no passo anterior, se houver).
-      const confirmed = await confirmPartMesh(productId, partId, prepared.path, detectedStates ?? undefined);
+      // as regiões pintadas detectadas no passo anterior, se houver, + o
+      // peso desta peça — usado no preço ao vivo por material/cor).
+      const confirmed = await confirmPartMesh(
+        productId,
+        partId,
+        prepared.path,
+        detectedStates ?? undefined,
+        weightEstimate?.weightGrams,
+      );
       if (confirmed.error) {
         setError(confirmed.error);
         return;
@@ -167,17 +174,16 @@ export function MeshUploadForm({
         }
       }
 
-      // 5) Peso e dimensões são sempre derivados do arquivo — preenche
+      // 5) Dimensões de embalagem são sempre derivadas do arquivo — preenche
       // automaticamente, sem precisar de um clique extra (diferente do
       // preço, que segue exigindo confirmação por afetar cobrança direta).
-      if (weightEstimate && suggestedDimensionsCm) {
-        const [weightResult, dimensionsResult] = await Promise.all([
-          applySuggestedWeight(productId, weightEstimate.weightGrams),
-          applySuggestedDimensions(productId, suggestedDimensionsCm),
-        ]);
-        if (weightResult.error || dimensionsResult.error) {
-          toast.error(weightResult.error ?? dimensionsResult.error ?? "Não foi possível salvar peso/dimensões.");
-        } else {
+      // Peso já foi gravado no passo 3 (por peça, com recálculo do
+      // agregado do produto) — não precisa de uma segunda chamada aqui.
+      if (suggestedDimensionsCm) {
+        const dimensionsResult = await applySuggestedDimensions(productId, suggestedDimensionsCm);
+        if (dimensionsResult.error) {
+          toast.error(dimensionsResult.error ?? "Não foi possível salvar as dimensões.");
+        } else if (weightEstimate) {
           setAppliedPhysicalProps({ weightGrams: weightEstimate.weightGrams, ...suggestedDimensionsCm });
         }
       }

@@ -64,6 +64,7 @@ interface MaterialRow {
   printProcess: MaterialPrintProcess;
   allowsDualColor: boolean;
   postProcessingFeeCents: number;
+  dualColorFeeCents: number;
   types: TypeRow[];
 }
 
@@ -100,6 +101,7 @@ function MaterialCard({ material }: { material: MaterialRow }) {
             printProcess: material.printProcess,
             allowsDualColor: material.allowsDualColor,
             postProcessingFeeReais: material.postProcessingFeeCents / 100,
+            dualColorFeeReais: material.dualColorFeeCents / 100,
           }}
           onSubmit={(input) => updateMaterial(material.id, input)}
           onDone={() => setIsEditing(false)}
@@ -112,6 +114,9 @@ function MaterialCard({ material }: { material: MaterialRow }) {
               {PRINT_PROCESS_LABELS[material.printProcess]} · {material.allowsDualColor ? "Permite dual-color" : "Só cor única"}
               {material.postProcessingFeeCents > 0 ? (
                 <> · Pós-processamento: {formatPriceCents(material.postProcessingFeeCents)}/peça</>
+              ) : null}
+              {material.allowsDualColor && material.dualColorFeeCents > 0 ? (
+                <> · Taxa dual-color: {formatPriceCents(material.dualColorFeeCents)}/peça</>
               ) : null}
             </p>
           </div>
@@ -318,6 +323,19 @@ function MaterialForm({
           className="w-32"
         />
       </div>
+      {values.allowsDualColor ? (
+        <div className="flex flex-col gap-1.5">
+          <Label>Taxa dual-color (R$/peça)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={values.dualColorFeeReais}
+            onChange={(e) => update("dualColorFeeReais", Number(e.target.value))}
+            className="w-32"
+          />
+        </div>
+      ) : null}
       <div className="flex gap-2">
         <Button type="button" disabled={isPending || !values.name.trim()} onClick={handleSubmit}>
           {isPending ? "Salvando..." : "Salvar"}
@@ -330,7 +348,13 @@ function MaterialForm({
   );
 }
 
-const EMPTY_MATERIAL: MaterialInput = { name: "", printProcess: "fdm", allowsDualColor: false, postProcessingFeeReais: 0 };
+const EMPTY_MATERIAL: MaterialInput = {
+  name: "",
+  printProcess: "fdm",
+  allowsDualColor: false,
+  postProcessingFeeReais: 0,
+  dualColorFeeReais: 0,
+};
 
 function NewMaterialForm() {
   // key força remount (e volta aos valores vazios) depois de criar com
