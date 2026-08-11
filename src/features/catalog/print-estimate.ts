@@ -39,3 +39,63 @@ export function estimatePrintWeight(volumeMm3: number, surfaceAreaMm2: number): 
     assumptionLabel: "FDM, PLA, preenchimento 20%",
   };
 }
+
+// ---------------------------------------------------------------------------
+// Calculadora de preço (Fase 1 do ROADMAP.md): material + energia +
+// pós-processamento, com margem de lucro em cima — vira a sugestão de
+// `basePriceCents` que o admin aplica com um clique (nunca automático,
+// mesmo princípio já usado pro peso/dimensões).
+// ---------------------------------------------------------------------------
+
+export interface MaterialCostInputs {
+  weightGrams: number;
+  /** Só usado pra resina (o tempo de cura depende da altura, não do peso). */
+  heightMm: number;
+  printProcess: "fdm" | "resin";
+  pricePerKgCents: number;
+  /** g/hora se FDM, mm de altura/hora se resina. */
+  printSpeedValue: number;
+  postProcessingFeeCents: number;
+}
+
+export interface StorePricingSettings {
+  energyPriceCentsPerKwh: number;
+  printerPowerWatts: number;
+  profitMarginPercent: number;
+  fixedFeeCents: number;
+}
+
+export interface PriceSuggestion {
+  materialCostCents: number;
+  energyCostCents: number;
+  postProcessingFeeCents: number;
+  printTimeHours: number;
+  suggestedPriceCents: number;
+}
+
+/**
+ * FDM deposita material continuamente — tempo de impressão escala com o
+ * PESO. Resina cura uma camada inteira de cada vez, então o tempo escala
+ * com a ALTURA da peça (uma peça baixa e larga imprime rápido; uma peça alta
+ * e fina demora, mesmo pesando pouco) — por isso as duas fórmulas são
+ * diferentes, não um "tempo genérico" só.
+ */
+function estimatePrintTimeHours(inputs: MaterialCostInputs): number {
+  if (inputs.printSpeedValue <= 0) return 0;
+  return inputs.printProcess === "resin"
+    ? inputs.heightMm / inputs.printSpeedValue
+    : inputs.weightGrams / inputs.printSpeedValue;
+}
+
+export function estimateMaterialCost(inputs: MaterialCostInputs, store: StorePricingSettings): PriceSuggestion {
+  const materialCostCents = Math.round((inputs.weightGrams * inputs.pricePerKgCents) / 1000);
+  const printTimeHours = estimatePrintTimeHours(inputs);
+  const printerPowerKw = store.printerPowerWatts / 1000;
+  const energyCostCents = Math.round(printTimeHours * printerPowerKw * store.energyPriceCentsPerKwh);
+  const postProcessingFeeCents = inputs.postProcessingFeeCents;
+
+  const totalCostCents = materialCostCents + energyCostCents + postProcessingFeeCents;
+  const suggestedPriceCents = Math.round(totalCostCents * (1 + store.profitMarginPercent / 100)) + store.fixedFeeCents;
+
+  return { materialCostCents, energyCostCents, postProcessingFeeCents, printTimeHours, suggestedPriceCents };
+}

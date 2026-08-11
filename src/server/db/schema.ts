@@ -18,11 +18,19 @@ import {
 
 export const productStatusEnum = pgEnum("product_status", ["draft", "published"]);
 
-export const filamentTypeEnum = pgEnum("filament_type", [
-  "solid_color",
-  "dual_color",
-  "special",
-]);
+// Não usado por nenhuma coluna mais (a hierarquia Material→Tipo→Cor da Fase
+// 1 do ROADMAP.md substituiu `filament_options`) — mantido declarado de
+// propósito, sem uso, só pra `drizzle-kit generate` não confundir "esse enum
+// sumiu" com "isso virou material_print_process" e pedir confirmação
+// interativa (não tem TTY disponível nesta sessão pra responder). Seguro
+// remover numa limpeza futura, depois que a migração desta rodada rodar.
+export const filamentTypeEnum = pgEnum("filament_type", ["solid_color", "dual_color", "special"]);
+
+// Determina qual fórmula de tempo de impressão usar (ver
+// src/features/catalog/print-estimate.ts): FDM imprime camada por camada
+// depositando material (tempo ~ proporcional ao peso), resina cura uma
+// camada inteira de cada vez (tempo ~ proporcional à altura da peça).
+export const materialPrintProcessEnum = pgEnum("material_print_process", ["fdm", "resin"]);
 
 export const orderStatusEnum = pgEnum("order_status", [
   "awaiting_payment",
@@ -104,10 +112,14 @@ export const productParts = pgTable("product_parts", {
   // futuro sem mudar o preview; stlFileUrl é sempre o arquivo original.
   meshFileUrl: text("mesh_file_url"),
   stlFileUrl: text("stl_file_url"),
-  // Pré-seleciona esse material quando o cliente abre a página do produto,
-  // em vez do primeiro material da lista (ordem arbitrária) — admin escolhe
-  // qual fica bonito por padrão. Null = usa o primeiro da lista, como antes.
-  defaultFilamentOptionId: uuid("default_filament_option_id").references(() => filamentOptions.id, {
+  // Pré-seleciona essa cor quando o cliente abre a página do produto, em vez
+  // da primeira da lista (ordem arbitrária) — admin escolhe qual fica bonito
+  // por padrão. Null = usa a primeira da lista, como antes. Nome da coluna
+  // física ficou o antigo (default_filament_option_id) de propósito — só a
+  // FK muda de alvo (agora aponta pra material_colors), pra não precisar de
+  // um rename de coluna que o drizzle-kit não consegue distinguir de "isso
+  // virou outra coisa" sem um prompt interativo (sem TTY nesta sessão).
+  defaultMaterialColorId: uuid("default_filament_option_id").references(() => materialColors.id, {
     onDelete: "set null",
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -131,12 +143,13 @@ export const productPartRegions = pgTable(
     label: text("label").notNull(),
     // Uma região detectada errado (ruído da segmentação MMU) pode ser
     // escondida do cliente sem precisar reenviar o arquivo — continua
-    // renderizando no preview com defaultFilamentOptionId, só não aparece
+    // renderizando no preview com defaultMaterialColorId, só não aparece
     // como opção configurável na loja.
     enabled: boolean("enabled").default(true).notNull(),
     // Mesma ideia do default por parte (acima), mas por região — cai pro
-    // padrão da parte quando null.
-    defaultFilamentOptionId: uuid("default_filament_option_id").references(() => filamentOptions.id, {
+    // padrão da parte quando null. Nome físico antigo mantido pelo mesmo
+    // motivo do comentário em productParts.defaultMaterialColorId.
+    defaultMaterialColorId: uuid("default_filament_option_id").references(() => materialColors.id, {
       onDelete: "set null",
     }),
     sortOrder: integer("sort_order").default(0).notNull(),
@@ -145,20 +158,78 @@ export const productPartRegions = pgTable(
   (table) => [uniqueIndex("product_part_region_state_unique").on(table.productPartId, table.paintState)],
 );
 
-// Catálogo global de materiais/filamentos disponíveis para uso em qualquer produto.
+// Tabela antiga (lista achatada de cores, sem noção de material físico) —
+// substituída pela hierarquia Material→Tipo→Cor abaixo (ver ROADMAP.md
+// "Fase 1"). Não referenciada por nenhum código mais; mantida declarada de
+// propósito (mesmo motivo do filamentTypeEnum acima) só pra `drizzle-kit
+// generate` não confundir "essa tabela sumiu" com "virou material_colors"
+// (colunas parecidas o bastante pra disparar o prompt de rename, sem TTY
+// disponível nesta sessão pra responder). Seguro dropar numa limpeza futura.
 export const filamentOptions = pgTable("filament_options", {
   id: uuid("id").defaultRandom().primaryKey(),
   type: filamentTypeEnum("type").notNull(),
   name: text("name").notNull(),
-  hexColor: text("hex_color"), // cor única, ou primeira cor de um dual-color
-  hexColorSecondary: text("hex_color_secondary"), // segunda cor, só em dual-color
+  hexColor: text("hex_color"),
+  hexColorSecondary: text("hex_color_secondary"),
   swatchImageUrl: text("swatch_image_url"),
   priceModifierCents: integer("price_modifier_cents").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Quais materiais estão disponíveis para cada parte de cada produto
-// (nem toda peça suporta todo material — ex.: peça fina em madeira pode quebrar).
+// ---------------------------------------------------------------------------
+// Materiais: hierarquia Material (Resina/Plástico) → Tipo (PLA, Cristal...) →
+// Cor. Substitui a antiga `filament_options` (lista achatada de cores sem
+// noção de material físico nenhuma) — ver ROADMAP.md "Fase 1" pro desenho
+// completo e o porquê de cada campo.
+// ---------------------------------------------------------------------------
+
+export const materials = pgTable("materials", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(), // "Resina" | "Plástico"
+  printProcess: materialPrintProcessEnum("print_process").notNull(),
+  // Regra de negócio, não limitação técnica: hoje só Plástico permite
+  // dual-color. Reforçado no servidor (nunca só escondendo o campo na UI —
+  // mesma lição da rodada 14, onde um form sem validação no back deixou
+  // gravar dual-color em material que não devia ter 2ª cor).
+  allowsDualColor: boolean("allows_dual_color").default(false).notNull(),
+  // Mão de obra de pós-processamento (lavagem/cura/remoção de suporte) —
+  // não escala com o peso da peça como o custo de material, por isso é uma
+  // taxa fixa por peça, não por grama. Normalmente só Resina tem valor > 0.
+  postProcessingFeeCents: integer("post_processing_fee_cents").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const materialTypes = pgTable("material_types", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  materialId: uuid("material_id")
+    .notNull()
+    .references(() => materials.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // "PLA", "ABS", "Cristal", "Dental"...
+  pricePerKgCents: integer("price_per_kg_cents").notNull(),
+  // Unidade depende de materials.printProcess: g/hora pra FDM, mm de
+  // altura/hora pra resina (ver estimatePrintTimeHours em print-estimate.ts).
+  printSpeedValue: numeric("print_speed_value", { precision: 8, scale: 2 }).notNull(),
+  // Texto livre explicando pra que esse tipo é indicado (ex.: "translúcida,
+  // ótima pra decoração") — exibido pro cliente no configurador.
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const materialColors = pgTable("material_colors", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  materialTypeId: uuid("material_type_id")
+    .notNull()
+    .references(() => materialTypes.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  hexColor: text("hex_color"),
+  // Só permitido quando materials.allowsDualColor = true pro material dono
+  // do tipo desta cor (validado em material-actions.ts, nunca só no form).
+  hexColorSecondary: text("hex_color_secondary"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Quais cores estão disponíveis para cada parte de cada produto (nem toda
+// peça suporta toda cor — ex.: peça fina pode quebrar num material específico).
 export const productPartMaterialOptions = pgTable(
   "product_part_material_options",
   {
@@ -166,14 +237,17 @@ export const productPartMaterialOptions = pgTable(
     productPartId: uuid("product_part_id")
       .notNull()
       .references(() => productParts.id, { onDelete: "cascade" }),
-    filamentOptionId: uuid("filament_option_id")
+    // Nome físico antigo mantido (filament_option_id) pelo mesmo motivo dos
+    // outros campos renomeados só no lado TS desta tabela — evita rename de
+    // coluna ambíguo pro drizzle-kit (sem TTY nesta sessão pra confirmar).
+    materialColorId: uuid("filament_option_id")
       .notNull()
-      .references(() => filamentOptions.id, { onDelete: "cascade" }),
+      .references(() => materialColors.id, { onDelete: "cascade" }),
   },
   (table) => [
     uniqueIndex("product_part_material_unique").on(
       table.productPartId,
-      table.filamentOptionId,
+      table.materialColorId,
     ),
   ],
 );
@@ -326,11 +400,25 @@ export const storeSettings = pgTable("store_settings", {
   neighborhood: text("neighborhood"),
   city: text("city"),
   state: text("state"),
-  // Usados só pra sugerir um preço base ao cadastrar produto (a partir do
-  // peso estimado do arquivo 3D) — nunca aplicados automaticamente, o
-  // admin sempre confirma clicando. Null = sem sugestão de preço ainda.
+  // Sugestão de preço "v1" (rodada 22), substituída pela calculadora
+  // completa da Fase 1 (material + energia + pós-processamento + margem,
+  // abaixo). Não lida/gravada por nenhum código mais — mantida declarada só
+  // pra `drizzle-kit generate` não confundir "esse campo sumiu" com "virou
+  // um dos campos novos abaixo" e pedir confirmação interativa (sem TTY
+  // disponível nesta sessão). Seguro dropar numa limpeza futura.
   pricePerGramCents: integer("price_per_gram_cents"),
+  // Usada só pra sugerir um preço base ao cadastrar produto — nunca
+  // aplicada automaticamente, o admin sempre confirma clicando. Somada por
+  // cima do custo calculado (material + energia + pós-processamento +
+  // margem, ver print-estimate.ts) — representa taxas fixas por pedido
+  // (embalagem, etc.) que não variam por material.
   fixedFeeCents: integer("fixed_fee_cents"),
+  // Config global da calculadora de preço (rodada Fase 1 do roadmap) — um
+  // valor só pra loja inteira, não por material/impressora. Null = ainda
+  // não configurado, a sugestão de preço fica indisponível até preencher.
+  energyPriceCentsPerKwh: integer("energy_price_cents_per_kwh"),
+  printerPowerWatts: integer("printer_power_watts"),
+  profitMarginPercent: numeric("profit_margin_percent", { precision: 5, scale: 2 }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -382,7 +470,17 @@ export const productPartRegionsRelations = relations(productPartRegions, ({ one 
   part: one(productParts, { fields: [productPartRegions.productPartId], references: [productParts.id] }),
 }));
 
-export const filamentOptionsRelations = relations(filamentOptions, ({ many }) => ({
+export const materialsRelations = relations(materials, ({ many }) => ({
+  types: many(materialTypes),
+}));
+
+export const materialTypesRelations = relations(materialTypes, ({ one, many }) => ({
+  material: one(materials, { fields: [materialTypes.materialId], references: [materials.id] }),
+  colors: many(materialColors),
+}));
+
+export const materialColorsRelations = relations(materialColors, ({ one, many }) => ({
+  type: one(materialTypes, { fields: [materialColors.materialTypeId], references: [materialTypes.id] }),
   partOptions: many(productPartMaterialOptions),
 }));
 
@@ -393,9 +491,9 @@ export const productPartMaterialOptionsRelations = relations(
       fields: [productPartMaterialOptions.productPartId],
       references: [productParts.id],
     }),
-    filament: one(filamentOptions, {
-      fields: [productPartMaterialOptions.filamentOptionId],
-      references: [filamentOptions.id],
+    color: one(materialColors, {
+      fields: [productPartMaterialOptions.materialColorId],
+      references: [materialColors.id],
     }),
   }),
 );

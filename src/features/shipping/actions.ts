@@ -28,15 +28,16 @@ export async function updateStoreSettings(values: StoreSettingsFormValues): Prom
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  // pricePerGramReais/fixedFeeReais são do formulário (reais) — a tabela
-  // guarda centavos, como todo valor monetário do projeto; 0 vira null
-  // ("sem sugestão configurada ainda"), mesmo padrão de weightGrams etc.
-  // em catalog/actions.ts.
-  const { pricePerGramReais, fixedFeeReais, ...addressFields } = parsed.data;
+  // Campos *Reais são do formulário (reais) — a tabela guarda centavos, como
+  // todo valor monetário do projeto; 0 vira null ("ainda não configurado"),
+  // mesmo padrão de weightGrams etc. em catalog/actions.ts.
+  const { fixedFeeReais, energyPriceReaisPerKwh, printerPowerWatts, profitMarginPercent, ...addressFields } = parsed.data;
   const row = {
     ...addressFields,
-    pricePerGramCents: pricePerGramReais > 0 ? Math.round(pricePerGramReais * 100) : null,
     fixedFeeCents: fixedFeeReais > 0 ? Math.round(fixedFeeReais * 100) : null,
+    energyPriceCentsPerKwh: energyPriceReaisPerKwh > 0 ? Math.round(energyPriceReaisPerKwh * 100) : null,
+    printerPowerWatts: printerPowerWatts > 0 ? Math.round(printerPowerWatts) : null,
+    profitMarginPercent: profitMarginPercent > 0 ? profitMarginPercent.toString() : null,
   };
 
   await db

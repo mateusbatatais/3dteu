@@ -5,8 +5,15 @@ export class InvalidSelectionError extends Error {}
 /**
  * Calcula o preço final (em centavos) de um produto configurado:
  *
- *   preço = base + modificador do tamanho + soma dos modificadores de
- *           material de cada parte selecionada
+ *   preço = base + modificador do tamanho
+ *
+ * `basePriceCents` é definido pelo admin (a calculadora de
+ * material+energia+pós-processamento+margem em print-estimate.ts ajuda a
+ * chegar nesse número, mas nunca aplica sozinha) — a cor escolhida não muda
+ * o preço ao vivo aqui, é só validada (precisa ser uma opção de verdade da
+ * parte). Isso é uma escolha deliberada: o preço por kg fica no Tipo do
+ * material pra alimentar a calculadora do admin, não pra recalcular o preço
+ * a cada clique do cliente no configurador — ver ROADMAP.md "Fase 1".
  *
  * Esta função deve rodar sempre no servidor a partir do catálogo atual no
  * momento do checkout — nunca a partir de um preço enviado pelo cliente,
@@ -26,14 +33,14 @@ export function calculateProductPriceCents(product: Product, selection: ProductS
     );
   }
 
-  const partsModifierCents = product.parts.reduce((total, part) => {
+  for (const part of product.parts) {
     const chosen = selection.partSelections.find((s) => s.partId === part.id);
     if (!chosen) {
-      throw new InvalidSelectionError(`Nenhum material selecionado para a parte "${part.name}".`);
+      throw new InvalidSelectionError(`Nenhuma cor selecionada para a parte "${part.name}".`);
     }
 
     if (part.regions.length > 0) {
-      // Peça com .3mf pintado: soma o modificador do material escolhido em cada região.
+      // Peça com .3mf pintado: confere se existe uma cor válida pra cada região.
       const regionSelections = chosen.regionSelections ?? [];
       if (regionSelections.length !== part.regions.length) {
         throw new InvalidSelectionError(
@@ -41,35 +48,28 @@ export function calculateProductPriceCents(product: Product, selection: ProductS
         );
       }
 
-      return (
-        total +
-        part.regions.reduce((regionTotal, region) => {
-          const regionChoice = regionSelections.find((r) => r.regionId === region.id);
-          if (!regionChoice) {
-            throw new InvalidSelectionError(`Nenhum material selecionado para a região "${region.label}".`);
-          }
-
-          const material = part.availableMaterials.find((m) => m.id === regionChoice.filamentOptionId);
-          if (!material) {
-            throw new InvalidSelectionError(
-              `Material "${regionChoice.filamentOptionId}" não é uma opção válida para a parte "${part.name}".`,
-            );
-          }
-
-          return regionTotal + material.priceModifierCents;
-        }, 0)
-      );
+      for (const region of part.regions) {
+        const regionChoice = regionSelections.find((r) => r.regionId === region.id);
+        if (!regionChoice) {
+          throw new InvalidSelectionError(`Nenhuma cor selecionada para a região "${region.label}".`);
+        }
+        const isValid = part.availableColors.some((c) => c.id === regionChoice.materialColorId);
+        if (!isValid) {
+          throw new InvalidSelectionError(
+            `Cor "${regionChoice.materialColorId}" não é uma opção válida para a parte "${part.name}".`,
+          );
+        }
+      }
+      continue;
     }
 
-    const material = part.availableMaterials.find((m) => m.id === chosen.filamentOptionId);
-    if (!material) {
+    const isValid = part.availableColors.some((c) => c.id === chosen.materialColorId);
+    if (!isValid) {
       throw new InvalidSelectionError(
-        `Material "${chosen.filamentOptionId}" não é uma opção válida para a parte "${part.name}".`,
+        `Cor "${chosen.materialColorId}" não é uma opção válida para a parte "${part.name}".`,
       );
     }
+  }
 
-    return total + material.priceModifierCents;
-  }, 0);
-
-  return product.basePriceCents + size.priceModifierCents + partsModifierCents;
+  return product.basePriceCents + size.priceModifierCents;
 }

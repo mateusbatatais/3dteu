@@ -3,7 +3,9 @@ import "dotenv/config";
 import { db } from "../src/server/db/client";
 import {
   categories,
-  filamentOptions,
+  materialColors,
+  materials,
+  materialTypes,
   productPartMaterialOptions,
   productParts,
   products,
@@ -16,18 +18,22 @@ async function main() {
     .values({ slug: "fidgets", name: "Fidgets" })
     .returning();
 
+  const [plastico] = await db
+    .insert(materials)
+    .values({ name: "Plástico", printProcess: "fdm", allowsDualColor: true, postProcessingFeeCents: 0 })
+    .returning();
+
+  const [pla] = await db
+    .insert(materialTypes)
+    .values({ materialId: plastico.id, name: "PLA", pricePerKgCents: 8000, printSpeedValue: "20" })
+    .returning();
+
   const [azul, dualAzulLaranja, madeira] = await db
-    .insert(filamentOptions)
+    .insert(materialColors)
     .values([
-      { type: "solid_color", name: "Azul", hexColor: "#2563eb", priceModifierCents: 0 },
-      {
-        type: "dual_color",
-        name: "Azul/Laranja",
-        hexColor: "#2563eb",
-        hexColorSecondary: "#f97316",
-        priceModifierCents: 300,
-      },
-      { type: "special", name: "Madeira", hexColor: "#8b5a2b", priceModifierCents: 800 },
+      { materialTypeId: pla.id, name: "Azul", hexColor: "#2563eb" },
+      { materialTypeId: pla.id, name: "Azul/Laranja", hexColor: "#2563eb", hexColorSecondary: "#f97316" },
+      { materialTypeId: pla.id, name: "Madeira", hexColor: "#8b5a2b" },
     ])
     .returning();
 
@@ -54,11 +60,11 @@ async function main() {
     .returning();
 
   await db.insert(productPartMaterialOptions).values([
-    { productPartId: corpo.id, filamentOptionId: azul.id },
-    { productPartId: corpo.id, filamentOptionId: dualAzulLaranja.id },
-    { productPartId: corpo.id, filamentOptionId: madeira.id },
-    { productPartId: tampa.id, filamentOptionId: azul.id },
-    { productPartId: tampa.id, filamentOptionId: dualAzulLaranja.id },
+    { productPartId: corpo.id, materialColorId: azul.id },
+    { productPartId: corpo.id, materialColorId: dualAzulLaranja.id },
+    { productPartId: corpo.id, materialColorId: madeira.id },
+    { productPartId: tampa.id, materialColorId: azul.id },
+    { productPartId: tampa.id, materialColorId: dualAzulLaranja.id },
   ]);
 
   await db.insert(sizeOptions).values([

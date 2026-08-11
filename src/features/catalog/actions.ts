@@ -451,10 +451,10 @@ export async function confirmPartMesh(
 
 export interface RegionSettingsInput {
   label: string;
-  /** false = escondida da loja (ex.: ruído da segmentação MMU) — continua colorida no preview com defaultFilamentOptionId. */
+  /** false = escondida da loja (ex.: ruído da segmentação MMU) — continua colorida no preview com defaultMaterialColorId. */
   enabled: boolean;
-  /** null = usa o padrão da parte (productParts.defaultFilamentOptionId). */
-  defaultFilamentOptionId: string | null;
+  /** null = usa o padrão da parte (productParts.defaultMaterialColorId). */
+  defaultMaterialColorId: string | null;
 }
 
 export async function updateRegionSettings(
@@ -467,7 +467,7 @@ export async function updateRegionSettings(
 
   await db
     .update(productPartRegions)
-    .set({ label, enabled: input.enabled, defaultFilamentOptionId: input.defaultFilamentOptionId })
+    .set({ label, enabled: input.enabled, defaultMaterialColorId: input.defaultMaterialColorId })
     .where(eq(productPartRegions.id, regionId));
 
   await revalidateProductPages(productId);
@@ -475,25 +475,25 @@ export async function updateRegionSettings(
 }
 
 export async function setPartMaterials(productId: string, partId: string, formData: FormData) {
-  const filamentOptionIds = formData.getAll("filamentOptionId").map(String);
+  const materialColorIds = formData.getAll("materialColorId").map(String);
 
-  // O "padrão" só faz sentido se ainda estiver entre os materiais marcados
-  // (o admin pode ter desmarcado o que era padrão) — nesse caso cai pro
-  // primeiro marcado, em vez de gravar um padrão que o cliente nem veria.
-  const chosenDefault = formData.get("defaultFilamentOptionId");
-  const defaultFilamentOptionId =
-    typeof chosenDefault === "string" && filamentOptionIds.includes(chosenDefault)
+  // O "padrão" só faz sentido se ainda estiver entre as cores marcadas (o
+  // admin pode ter desmarcado a que era padrão) — nesse caso cai pra
+  // primeira marcada, em vez de gravar um padrão que o cliente nem veria.
+  const chosenDefault = formData.get("defaultMaterialColorId");
+  const defaultMaterialColorId =
+    typeof chosenDefault === "string" && materialColorIds.includes(chosenDefault)
       ? chosenDefault
-      : filamentOptionIds[0] ?? null;
+      : materialColorIds[0] ?? null;
 
   await db.transaction(async (tx) => {
     await tx.delete(productPartMaterialOptions).where(eq(productPartMaterialOptions.productPartId, partId));
-    if (filamentOptionIds.length > 0) {
+    if (materialColorIds.length > 0) {
       await tx
         .insert(productPartMaterialOptions)
-        .values(filamentOptionIds.map((filamentOptionId) => ({ productPartId: partId, filamentOptionId })));
+        .values(materialColorIds.map((materialColorId) => ({ productPartId: partId, materialColorId })));
     }
-    await tx.update(productParts).set({ defaultFilamentOptionId }).where(eq(productParts.id, partId));
+    await tx.update(productParts).set({ defaultMaterialColorId }).where(eq(productParts.id, partId));
   });
 
   await revalidateProductPages(productId);

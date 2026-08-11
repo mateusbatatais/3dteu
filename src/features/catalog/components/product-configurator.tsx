@@ -13,39 +13,39 @@ import { formatPriceCents } from "@/lib/format";
 
 import { calculateProductPriceCents, InvalidSelectionError } from "../pricing";
 import { encodeSelectionForShareUrl, SHARE_SELECTION_PARAM } from "../selection-share";
-import type { FilamentOption, Product, ProductPartRegion, ProductSelection } from "../types";
+import type { MaterialColor, Product, ProductPartRegion, ProductSelection } from "../types";
 import { ProductViewer3D, type ViewerPart } from "./product-viewer-3d";
 
-function MaterialSwatches({
-  materials,
+function ColorSwatches({
+  colors,
   selectedId,
   onSelect,
 }: {
-  materials: FilamentOption[];
+  colors: MaterialColor[];
   selectedId: string | undefined;
-  onSelect: (materialId: string) => void;
+  onSelect: (colorId: string) => void;
 }) {
   return (
     <div className="mt-2 flex flex-wrap gap-2">
-      {materials.map((material) => {
-        const isSelected = selectedId === material.id;
+      {colors.map((color) => {
+        const isSelected = selectedId === color.id;
         return (
           <button
-            key={material.id}
+            key={color.id}
             type="button"
-            title={material.name}
-            aria-label={material.name}
+            title={color.name}
+            aria-label={color.name}
             aria-pressed={isSelected}
-            onClick={() => onSelect(material.id)}
+            onClick={() => onSelect(color.id)}
             className={`size-9 rounded-full transition-shadow ${
               isSelected
                 ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
                 : "ring-1 ring-border hover:ring-foreground/30"
             }`}
             style={{
-              background: material.hexColorSecondary
-                ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
-                : (material.hexColor ?? "#a1a1aa"),
+              background: color.hexColorSecondary
+                ? `linear-gradient(135deg, ${color.hexColor} 50%, ${color.hexColorSecondary} 50%)`
+                : (color.hexColor ?? "#a1a1aa"),
             }}
           />
         );
@@ -54,29 +54,29 @@ function MaterialSwatches({
   );
 }
 
-// Material pré-selecionado pelo admin pra essa parte — cai pro primeiro da
-// lista se não tiver padrão definido, ou se o padrão salvo não estiver mais
-// entre os materiais aceitos (admin pode ter desmarcado depois).
-function resolveDefaultMaterialId(part: Product["parts"][number]): string {
-  if (part.defaultMaterialId && part.availableMaterials.some((m) => m.id === part.defaultMaterialId)) {
-    return part.defaultMaterialId;
+// Cor pré-selecionada pelo admin pra essa parte — cai pra primeira da lista
+// se não tiver padrão definido, ou se o padrão salvo não estiver mais entre
+// as cores aceitas (admin pode ter desmarcado depois).
+function resolveDefaultMaterialColorId(part: Product["parts"][number]): string {
+  if (part.defaultMaterialColorId && part.availableColors.some((c) => c.id === part.defaultMaterialColorId)) {
+    return part.defaultMaterialColorId;
   }
-  return part.availableMaterials[0]?.id ?? "";
+  return part.availableColors[0]?.id ?? "";
 }
 
 // Mesma ideia, mas o padrão da própria região tem prioridade sobre o da
 // parte (uma região pintada pode querer uma cor diferente do resto da peça).
-function resolveRegionDefaultMaterialId(part: Product["parts"][number], region: ProductPartRegion): string {
-  if (region.defaultMaterialId && part.availableMaterials.some((m) => m.id === region.defaultMaterialId)) {
-    return region.defaultMaterialId;
+function resolveRegionDefaultMaterialColorId(part: Product["parts"][number], region: ProductPartRegion): string {
+  if (region.defaultMaterialColorId && part.availableColors.some((c) => c.id === region.defaultMaterialColorId)) {
+    return region.defaultMaterialColorId;
   }
-  return resolveDefaultMaterialId(part);
+  return resolveDefaultMaterialColorId(part);
 }
 
 // Um id vindo de um link compartilhado só é usado se ainda for válido pra
-// esse produto — o produto pode ter mudado (material removido, etc.) desde
-// que o link foi gerado. Cada campo cai pro próprio padrão individualmente
-// em vez de descartar a configuração inteira por causa de um id só.
+// esse produto — o produto pode ter mudado (cor removida, etc.) desde que o
+// link foi gerado. Cada campo cai pro próprio padrão individualmente em vez
+// de descartar a configuração inteira por causa de um id só.
 function findSharedPartSelection(initialSelection: ProductSelection | null | undefined, partId: string) {
   return initialSelection?.partSelections.find((p) => p.partId === partId);
 }
@@ -94,15 +94,15 @@ export function ProductConfigurator({
     if (shared && product.sizeOptions.some((s) => s.id === shared)) return shared;
     return product.sizeOptions[0]?.id ?? "";
   });
-  const [materialByPart, setMaterialByPart] = useState<Record<string, string>>(() =>
+  const [colorByPart, setColorByPart] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       product.parts
         .filter((part) => part.regions.length === 0)
         .map((part) => {
-          const shared = findSharedPartSelection(initialSelection, part.id)?.filamentOptionId;
-          const materialId =
-            shared && part.availableMaterials.some((m) => m.id === shared) ? shared : resolveDefaultMaterialId(part);
-          return [part.id, materialId];
+          const shared = findSharedPartSelection(initialSelection, part.id)?.materialColorId;
+          const colorId =
+            shared && part.availableColors.some((c) => c.id === shared) ? shared : resolveDefaultMaterialColorId(part);
+          return [part.id, colorId];
         }),
     ),
   );
@@ -111,17 +111,17 @@ export function ProductConfigurator({
   // se a região não tiver um específico). Inclui regiões desabilitadas
   // também: elas não aparecem pro cliente escolher, mas continuam com uma
   // cor fixa (o padrão) pro preview 3D.
-  const [materialByRegion, setMaterialByRegion] = useState<Record<string, string>>(() =>
+  const [colorByRegion, setColorByRegion] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       product.parts.flatMap((part) => {
         const sharedRegions = findSharedPartSelection(initialSelection, part.id)?.regionSelections;
         return part.regions.map((region) => {
-          const shared = sharedRegions?.find((r) => r.regionId === region.id)?.filamentOptionId;
-          const materialId =
-            shared && part.availableMaterials.some((m) => m.id === shared)
+          const shared = sharedRegions?.find((r) => r.regionId === region.id)?.materialColorId;
+          const colorId =
+            shared && part.availableColors.some((c) => c.id === shared)
               ? shared
-              : resolveRegionDefaultMaterialId(part, region);
-          return [region.id, materialId];
+              : resolveRegionDefaultMaterialColorId(part, region);
+          return [region.id, colorId];
         });
       }),
     ),
@@ -144,13 +144,13 @@ export function ProductConfigurator({
               partId: part.id,
               regionSelections: part.regions.map((region) => ({
                 regionId: region.id,
-                filamentOptionId: materialByRegion[region.id],
+                materialColorId: colorByRegion[region.id],
               })),
             }
-          : { partId: part.id, filamentOptionId: materialByPart[part.id] },
+          : { partId: part.id, materialColorId: colorByPart[part.id] },
       ),
     }),
-    [sizeId, materialByPart, materialByRegion, product.parts],
+    [sizeId, colorByPart, colorByRegion, product.parts],
   );
 
   const priceCents = useMemo(() => {
@@ -169,18 +169,18 @@ export function ProductConfigurator({
         meshUrl: part.meshFileUrl,
         color: "#a1a1aa",
         regions: part.regions.map((region) => {
-          const material = part.availableMaterials.find((m) => m.id === materialByRegion[region.id]);
-          return { paintState: region.paintState, color: material?.hexColor ?? "#a1a1aa" };
+          const color = part.availableColors.find((c) => c.id === colorByRegion[region.id]);
+          return { paintState: region.paintState, color: color?.hexColor ?? "#a1a1aa" };
         }),
       };
     }
 
-    const material = part.availableMaterials.find((m) => m.id === materialByPart[part.id]);
+    const color = part.availableColors.find((c) => c.id === colorByPart[part.id]);
     return {
       id: part.id,
       meshUrl: part.meshFileUrl,
-      color: material?.hexColor ?? "#a1a1aa",
-      colorSecondary: material?.hexColorSecondary ?? null,
+      color: color?.hexColor ?? "#a1a1aa",
+      colorSecondary: color?.hexColorSecondary ?? null,
     };
   });
 
@@ -196,15 +196,15 @@ export function ProductConfigurator({
           const regionsSummary = part.regions
             .filter((region) => region.enabled)
             .map((region) => {
-              const material = part.availableMaterials.find((m) => m.id === materialByRegion[region.id]);
-              return `${region.label}: ${material?.name ?? "—"}`;
+              const color = part.availableColors.find((c) => c.id === colorByRegion[region.id]);
+              return `${region.label}: ${color?.name ?? "—"}`;
             })
             .join(", ");
           return `${part.name} (${regionsSummary})`;
         }
 
-        const material = part.availableMaterials.find((m) => m.id === materialByPart[part.id]);
-        return `${part.name}: ${material?.name ?? "—"}`;
+        const color = part.availableColors.find((c) => c.id === colorByPart[part.id]);
+        return `${part.name}: ${color?.name ?? "—"}`;
       })
       .join(" · ");
 
@@ -315,10 +315,10 @@ export function ProductConfigurator({
             return (
               <div key={part.id}>
                 <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
-                <MaterialSwatches
-                  materials={part.availableMaterials}
-                  selectedId={materialByPart[part.id]}
-                  onSelect={(materialId) => setMaterialByPart((prev) => ({ ...prev, [part.id]: materialId }))}
+                <ColorSwatches
+                  colors={part.availableColors}
+                  selectedId={colorByPart[part.id]}
+                  onSelect={(colorId) => setColorByPart((prev) => ({ ...prev, [part.id]: colorId }))}
                 />
               </div>
             );
@@ -333,7 +333,7 @@ export function ProductConfigurator({
               <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
               <div className="mt-2 flex flex-col gap-1">
                 {visibleRegions.map((region) => {
-                  const material = part.availableMaterials.find((m) => m.id === materialByRegion[region.id]);
+                  const color = part.availableColors.find((c) => c.id === colorByRegion[region.id]);
                   const isActive = region.id === activeRegionId;
                   return (
                     <button
@@ -349,9 +349,9 @@ export function ProductConfigurator({
                       <span
                         className="size-5 shrink-0 rounded-full ring-1 ring-border"
                         style={{
-                          background: material?.hexColorSecondary
-                            ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
-                            : (material?.hexColor ?? "#a1a1aa"),
+                          background: color?.hexColorSecondary
+                            ? `linear-gradient(135deg, ${color.hexColor} 50%, ${color.hexColorSecondary} 50%)`
+                            : (color?.hexColor ?? "#a1a1aa"),
                         }}
                       />
                     </button>
@@ -362,11 +362,11 @@ export function ProductConfigurator({
               {activeRegion ? (
                 <div className="mt-3 border-t pt-3">
                   <h3 className="text-xs text-muted-foreground">Cor para &ldquo;{activeRegion.label}&rdquo;</h3>
-                  <MaterialSwatches
-                    materials={part.availableMaterials}
-                    selectedId={materialByRegion[activeRegion.id]}
-                    onSelect={(materialId) =>
-                      setMaterialByRegion((prev) => ({ ...prev, [activeRegion.id]: materialId }))
+                  <ColorSwatches
+                    colors={part.availableColors}
+                    selectedId={colorByRegion[activeRegion.id]}
+                    onSelect={(colorId) =>
+                      setColorByRegion((prev) => ({ ...prev, [activeRegion.id]: colorId }))
                     }
                   />
                 </div>

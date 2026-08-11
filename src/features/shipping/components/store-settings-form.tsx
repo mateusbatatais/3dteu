@@ -24,8 +24,10 @@ interface StoreSettingsFormProps {
     neighborhood: string | null;
     city: string | null;
     state: string | null;
-    pricePerGramCents: number | null;
     fixedFeeCents: number | null;
+    energyPriceCentsPerKwh: number | null;
+    printerPowerWatts: number | null;
+    profitMarginPercent: string | null;
   } | null;
 }
 
@@ -50,8 +52,10 @@ export function StoreSettingsForm({ settings }: StoreSettingsFormProps) {
       neighborhood: settings?.neighborhood ?? "",
       city: settings?.city ?? "",
       state: settings?.state ?? "",
-      pricePerGramReais: settings?.pricePerGramCents ? settings.pricePerGramCents / 100 : 0,
       fixedFeeReais: settings?.fixedFeeCents ? settings.fixedFeeCents / 100 : 0,
+      energyPriceReaisPerKwh: settings?.energyPriceCentsPerKwh ? settings.energyPriceCentsPerKwh / 100 : 0,
+      printerPowerWatts: settings?.printerPowerWatts ?? 0,
+      profitMarginPercent: settings?.profitMarginPercent ? Number(settings.profitMarginPercent) : 0,
     },
   });
 
@@ -135,15 +139,29 @@ export function StoreSettingsForm({ settings }: StoreSettingsFormProps) {
       </div>
 
       <div className="mt-2 border-t pt-4">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Sugestão de preço</h2>
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Calculadora de preço</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Usados só pra sugerir um preço base ao cadastrar um produto, a partir do peso estimado do arquivo 3D — o
-          admin sempre confirma antes de aplicar, nunca é automático.
+          Usados na sugestão de preço por produto (material + energia + pós-processamento + margem, ver aba Partes) —
+          o admin sempre confirma antes de aplicar, nunca é automático.
         </p>
         <div className="mt-2 grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="pricePerGramReais">Preço por grama (R$)</Label>
-            <Input id="pricePerGramReais" type="number" step="0.01" min="0" {...register("pricePerGramReais")} />
+            <Label htmlFor="energyPriceReaisPerKwh">Preço da energia (R$/kWh)</Label>
+            <Input
+              id="energyPriceReaisPerKwh"
+              type="number"
+              step="0.01"
+              min="0"
+              {...register("energyPriceReaisPerKwh")}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="printerPowerWatts">Potência média da impressora (W)</Label>
+            <Input id="printerPowerWatts" type="number" step="1" min="0" {...register("printerPowerWatts")} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="profitMarginPercent">Margem de lucro (%)</Label>
+            <Input id="profitMarginPercent" type="number" step="1" min="0" {...register("profitMarginPercent")} />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="fixedFeeReais">Taxa fixa por peça (R$)</Label>

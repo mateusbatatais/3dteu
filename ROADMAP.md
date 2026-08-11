@@ -11,8 +11,11 @@ do que já foi feito.
 
 ---
 
-## ✅ Feito nesta rodada
+## ✅ Feito recentemente
 
+- **Fase 1 completa** (hierarquia Material→Tipo→Cor + calculadora de preço)
+  — ver detalhes na seção da própria fase, mais abaixo. Falta só rodar a
+  migração `0009_tiny_zeigeist.sql` em produção.
 - **Tooltip de tamanho**: no configurador do produto, ao lado do label
   "Tamanho", um ícone de info explica que o valor escolhido é a maior
   dimensão da peça — as outras acompanham proporcionalmente. Componente
@@ -24,127 +27,84 @@ do que já foi feito.
 
 ## Fase 1 — Hierarquia de material (Material → Tipo → Cor) + calculadora de preço
 
-**Status: ⏸ aguardando decisão** — é a mudança mais estrutural do roadmap
-(schema novo, recalcula preço, mexe em quase todo componente de admin e loja
-que hoje fala de "filamento"/"cor"). Melhor confirmar o desenho antes de
-implementar do que refazer depois.
+**Status: ✅ feito** (schema + admin + loja + calculadora — falta só rodar a
+migração em produção, ver abaixo).
 
-### O que muda
+`filament_options` (lista achatada de cores) virou uma hierarquia de 3
+níveis: `materials` (Resina/Plástico, com `print_process` fdm/resin,
+`allows_dual_color`, `post_processing_fee_cents`) → `material_types` (PLA,
+ABS, Cristal... com `price_per_kg_cents`, `print_speed_value`,
+`description`) → `material_colors` (nome + hex, dual-color só quando o
+Material permite — reforçado no servidor, não só escondendo o campo na UI).
+Admin novo em `/admin/materiais` (`MaterialManager`) navega os 3 níveis;
+todo lugar que antes listava "materiais disponíveis" (upload de arquivo,
+cadastro de produto) agora lista cores com rótulo "Material · Tipo · Cor".
 
-Hoje `filament_options` é uma lista achatada (cada linha = uma cor, com um
-`type` que na verdade só distingue cor-única/dual-color/especial — não tem
-noção de material físico nenhuma). Vira uma hierarquia de 3 níveis:
+**Calculadora de preço** (`estimateMaterialCost` em `print-estimate.ts`):
+`custo = peso×preço/kg (material) + tempo_impressão×potência×preço_kWh
+(energia) + taxa do Material (pós-processamento)`, tempo de impressão
+calculado diferente por processo (FDM: peso/velocidade; Resina:
+altura/velocidade, já que resina cura uma camada inteira de cada vez —
+tempo depende da altura, não do peso). `preço_sugerido = custo × (1 +
+margem%) + taxa_fixa_da_loja`. Config de energia/potência/margem nova em
+`/admin/configuracoes`, substituindo o "preço por grama" genérico da rodada
+22. Widget `PriceSuggestionCalculator` em `ProductPartsManager` deixa o
+admin escolher qual Tipo usar como referência e aplicar o preço sugerido
+com um clique (nunca automático).
 
-```
-Material (Resina | Plástico)
-  └─ Tipo (Plástico: ABS, PLA, Emborrachado — Resina: Cristal, Opaca, Resistente, Dental, Emborrachada)
-       └─ Cor (nome + hex, dual-color só permitido se o Material permitir)
-```
+**Decisão importante que NÃO segue o pedido original ao pé da letra**: o
+preço do produto (`basePriceCents`) continua sendo um valor único, fixo,
+que o admin define (com a ajuda da calculadora) — a cor que o cliente
+escolhe no configurador da loja **não recalcula o preço ao vivo**. Antes
+cada cor tinha um "adicional" manual; agora esse conceito foi removido
+(preço vive no Tipo, não na Cor) e não foi substituído por um recálculo ao
+vivo, porque isso exigiria rastrear o peso de CADA peça individualmente
+(hoje só existe o peso agregado do produto todo) — escopo bem maior que o
+pedido original, que era uma calculadora pra ajudar a PRECIFICAR, não um
+motor de preço dinâmico por cliente. Se isso for importante (ex.: cliente
+pode escolher entre um PLA barato e uma Resina cara pra mesma peça, hoje
+pagando o mesmo preço pelos dois), me avisa que vira uma sub-fase nova.
 
-- **Dual-color só em Plástico** — Resina nunca tem 2ª cor (regra do
-  negócio, não é uma limitação técnica). Vai ser reforçado no servidor
-  (nunca confiar só na UI escondendo o campo) — mesmo tipo de bug já
-  corrigido antes num contexto parecido: um form que não valida no back
-  deixa passar um dado que a regra de negócio não permite.
-- **Preço por kg é cadastrado no Tipo**, não na Cor — todas as cores de um
-  mesmo Tipo custam o mesmo por grama.
-- **Resina tem um custo de pós-processamento maior** (lavagem, cura,
-  remoção de suporte — trabalho manual, não escala com o peso do jeito que
-  o custo de material escala). Modelado como uma taxa fixa por peça,
-  configurável por Material (não por Tipo — é uma característica do
-  processo de resina como um todo, não de uma cor específica).
+**Migração**: `drizzle/0009_tiny_zeigeist.sql` — cria as 3 tabelas novas +
+enum, e reaponta as colunas que hoje referenciam `filament_options` pra
+`material_colors` (**qualquer cor já atribuída a uma peça existente é
+desatribuída** nesse processo — é esperado reatribuir na tela nova depois
+de rodar). `filament_options` e o enum antigo (`filament_type`) ficam
+órfãos no banco (não usados por nenhum código), seguro dropar numa limpeza
+futura depois de confirmar que está tudo certo. Ainda **não rodada em
+produção** — mesmo procedimento de sempre (rodar o SQL no editor do
+Supabase ou `npm run db:migrate`).
 
-### Schema proposto (aditivo, migração nova)
+---
 
-```
-materials            (id, name, allows_dual_color bool, post_processing_fee_cents int, created_at)
-material_types       (id, material_id FK, name, price_per_kg_cents int,
-                       print_speed_value numeric,  -- unidade depende do material (ver cálculo de preço)
-                       description text,           -- pro texto explicativo da Fase 3
-                       created_at)
-material_colors      (id, material_type_id FK, name, hex_color, hex_color_secondary nullable,
-                       swatch_image_url, created_at)
-```
+## Fase 1b — Recomendar material por categoria
 
-`filament_options` (tabela atual) fica **sem uso, não é apagada** — pedidos
-antigos guardam a configuração vendida como snapshot JSON em
-`order_items.configuration`, então não dependem da tabela viva pra manter o
-histórico correto. As referências ao vivo que hoje apontam pra
-`filament_options` (`product_parts.default_filament_option_id`,
-`product_part_regions.default_filament_option_id`,
-`product_part_material_options.filament_option_id`) passam a apontar pra
-`material_colors` — **isso significa reatribuir manualmente as cores de cada
-peça já cadastrada** depois da migração, não tem como preservar
-automaticamente (o mapeamento antigo não carrega informação de qual
-Material/Tipo cada cor pertencia). Preciso confirmar: **quantos produtos
-reais você já tem cadastrados hoje?** Se forem poucos, refazer na mão no
-admin novo é rápido; se forem muitos, vale eu escrever um script de migração
-de dados assumindo um mapeamento (ex.: tudo que existe hoje vira "Plástico
-→ PLA" por padrão, e você ajusta manualmente as exceções).
+**Status: 🔜 próximo** (schema de Material/Tipo/Cor da Fase 1 já existe).
 
-### Cálculo de preço proposto
+Pedido: no admin, ao cadastrar/editar uma categoria, poder marcar quais
+Tipos de material são recomendados pra produtos dessa categoria (ex.:
+"Decoração" recomenda Resina Cristal + Plástico PLA; "Peças funcionais"
+recomenda Plástico ABS/Resistente). Na tela de cadastro de produto
+(`NewProductForm`), ao escolher a categoria, as cores dos tipos
+recomendados vêm marcadas primeiro/destacadas, em vez de simplesmente
+"todas marcadas" (comportamento de hoje, rodada 26) — uma categoria sem
+recomendação configurada continua caindo no "marca tudo" de sempre, não
+regride o comportamento atual.
 
-Curto: **custo total = material + energia + pós-processamento**, preço
-final = custo total com margem de lucro em cima, mais a taxa fixa que já
-existe hoje.
-
-```
-peso_g = peso estimado da peça (já existe, vem do arquivo 3D — rodada 22)
-custo_material = peso_g * (price_per_kg_cents do Tipo / 1000)
-
-tempo_impressão_h = depende do material:
-  - Plástico: peso_g / velocidade_g_por_hora (cadastrada no Tipo)
-  - Resina: altura_mm / velocidade_mm_por_hora (cadastrada no Tipo — resina
-    imprime camada inteira de uma vez, então o tempo depende da ALTURA da
-    peça, não do peso/volume, diferente de FDM)
-custo_energia = tempo_impressão_h * potência_impressora_kw * preço_kwh
-  (potência e preço do kWh são configurações da loja, não por produto)
-
-custo_pos_processamento = taxa fixa do Material (0 pra a maioria dos
-  Plásticos, um valor real pra Resina)
-
-custo_total = custo_material + custo_energia + custo_pos_processamento
-preço_sugerido = custo_total * (1 + margem_de_lucro%) + taxa_fixa_da_loja
-```
-
-**Decisões que preciso de você antes de implementar isso**:
-1. Confirma o formato "R$/kg por Tipo" mesmo (não por Material, não por Cor)?
-2. Pra estimar tempo de impressão, a ideia é você cadastrar uma "velocidade"
-   por Tipo (ex.: "PLA imprime a ~20g/h nas minhas impressoras", "Resina
-   Cristal sobe ~15mm/h") — você tem uma noção real desses números, ou
-   prefiro sugerir um valor padrão de mercado pra você ajustar depois?
-3. Potência da impressora (kW) e preço do kWh — configuração única da loja
-   (`/admin/configuracoes`) ou você tem impressoras/processos bem diferentes
-   que precisariam de valores por Tipo também?
-4. Margem de lucro: um percentual único da loja, ou também por Material
-   (ex.: margem maior em Resina por ser mais trabalhosa)?
-5. As configurações antigas de sugestão de preço (`price_per_gram_cents`/
-   `fixed_fee_cents`, rodada 22) ficam obsoletas com isso — tudo bem
-   substituir por esse cálculo novo, ou você quer manter as duas coisas
-   coexistindo (ex.: essa fórmula nova só pra quem cadastrar
-   material/tipo/cor, a antiga como fallback)?
-
-### Impacto no código (pra dimensionar o tamanho do trabalho, não é a lista final)
-
-- `src/server/db/schema.ts` + migração nova (tabelas acima)
-- `src/features/catalog/pricing.ts` (+ `pricing.test.ts`) — cálculo novo
-- `/admin/materiais` — vira um CRUD de 3 níveis (hoje é uma lista só)
-- `src/features/catalog/components/product-parts-manager.tsx`,
-  `part-regions-panel.tsx`, `new-product-form.tsx`, `mesh-upload-form.tsx` —
-  todo lugar que hoje lista "materiais disponíveis" passa a navegar
-  Material → Tipo → Cor
-- `src/features/catalog/components/product-configurator.tsx` (loja: cliente
-  escolhe cor, mas pode precisar mostrar o Tipo também — ver Fase 3)
-- `src/features/catalog/components/product-viewer-3d.tsx` — a differenciação
-  visual da Fase 2 pluga aqui
+Desenho técnico rápido: tabela nova `category_recommended_material_types`
+(`category_id` FK, `material_type_id` FK, par único) — recomendação no
+nível de Tipo, não de Cor específica (mais simples de configurar: "recomendo
+PLA pra essa categoria", não "recomendo especificamente o PLA azul"). UI
+mais natural em `/admin/categorias` (editar categoria → checklist de tipos
+recomendados), já que é de lá que a decisão "que material combina com essa
+categoria" faz mais sentido sair.
 
 ---
 
 ## Fase 2 — Diferenciação visual do material no preview 3D
 
-**Status: 💤 não iniciado, depende da Fase 1** (precisa saber se a peça é
-Resina ou Plástico pra escolher o material do Three.js — essa informação só
-existe depois da hierarquia nova).
+**Status: 🔜 próximo** (já dá pra saber se a cor escolhida é Resina ou
+Plástico — `MaterialColor.printProcess`, ver Fase 1).
 
 Ideia técnica (viável, sem biblioteca nova): `buildPartMaterial()` em
 `product-viewer-3d.tsx` hoje sempre cria um `THREE.MeshStandardMaterial`
@@ -167,9 +127,8 @@ vez) não deve ser perceptível.
 
 ## Fase 3 — Textos explicativos de material/tipo/cor
 
-**Status: 💤 não iniciado, depende da Fase 1** (o campo `description` já
-está no schema proposto de `material_types` acima — só falta o admin
-preencher e a loja exibir).
+**Status: 🔜 próximo** (o campo `description` já existe em `material_types`
+— o admin já pode preencher em `/admin/materiais`; só falta a loja exibir).
 
 Ideia de UI: no configurador, ao lado do nome do Tipo selecionado, um texto
 curto (tipo o tooltip da Fase 0) explicando pra que serve — ex.: "Resina
@@ -182,59 +141,83 @@ exibe.
 
 ## Fase 4 — Pedido de modelo customizado via IA (imagem → 3D)
 
-**Status: ⏸ aguardando decisão** (depende de escolher um provedor pago e
-definir o fluxo — não dá pra simplesmente "implementar", é uma decisão de
-produto + custo).
+**Status: ⏸ aguardando decisão** (a qualidade já está validada por você —
+o que falta é fechar o modelo de custo/cobrança).
 
 Pesquisei as opções reais disponíveis hoje (2026): existem várias APIs
 comerciais de imagem-pra-3D que já exportam direto em STL pronto pra
 fatiar — não é mais ficção científica, mas também não é mágica perfeita.
 
 - **Meshy** — API REST, aceita JPG/PNG, devolve GLB/FBX/OBJ/USDZ/STL/3MF.
-  Marca mais estabelecida do grupo, boa documentação.
-- **Neural4D** — a que mais chamou atenção pro seu caso específico: alega
-  STL "watertight" (sem furos) e "estruturalmente espessado" **pronto pra
-  fatiar sem reparo manual** — é literalmente o problema mais comum de
-  malha gerada por IA (furos, paredes finas demais pra imprimir).
-- **Tripo 3D**, **3D AI Studio**, **Hyper3D** — alternativas parecidas,
-  todas com export STL.
+  Marca mais estabelecida do grupo, boa documentação. **Você já testou e
+  aprovou a qualidade.**
+- **Tripo 3D** — mesma categoria. **Você já testou e aprovou a qualidade
+  também.**
+- **Neural4D** — não testado por você ainda, mas alega STL "watertight"
+  (sem furos) e "estruturalmente espessado" **pronto pra fatiar sem reparo
+  manual** — vale considerar como terceira opção se Meshy/Tripo derem
+  algum problema recorrente de malha.
+- **3D AI Studio**, **Hyper3D** — alternativas parecidas, não testadas.
 
-[How to Use Image to 3D Model API: A Complete Guide 2026](https://www.meshy.ai/tutorials/api-quickstart-image-to-3d) ·
-[Neural4D API](https://www.neural4d.com/api) ·
-[Tripo 3D](https://www.tripo3d.ai/) ·
-[Hyper3D API](https://hyper3d.ai/features/api) ·
-[3D AI Studio Platform](https://www.3daistudio.com/Platform)
+### Como funciona o custo (a pergunta real desta rodada)
 
-**Minha recomendação**: não automatizar de ponta a ponta na v1. Modelo 3D
-gerado por IA a partir de foto de cliente tende a vir com qualidade
-inconsistente (depende muito da foto, do ângulo, da complexidade do
-objeto) — imprimir direto sem revisão é arriscado (desperdiça filamento,
-gera reclamação). Proposta de fluxo v1:
+Os dois provedores que você testou usam **crédito por geração**, não
+"grátis pra sempre":
 
-1. Formulário novo na loja: "Peça um modelo customizado" — cliente sobe
-   1+ fotos e descreve o que quer, sem preço/checkout ainda (vira um pedido
-   de orçamento, não uma compra direta).
-2. Você (admin) recebe o pedido, chama a API de imagem-pra-3D manualmente
-   (ou automatizado só pra gerar um preview, mas sempre revisado antes de
-   confirmar orçamento) — dá pra rodar a chamada de API do lado do servidor
-   mesmo sem UI nenhuma pro cliente ver o resultado bruto.
-3. Depois de validar a malha (abre no fatiador, confere se imprime de
-   verdade), você aprova e manda um orçamento real pro cliente.
-4. Só depois de rodar esse fluxo manual algumas vezes — e você decidir que
-   a taxa de sucesso compensa — automatizar mais (gerar preview pro
-   cliente ver antes de confirmar, por exemplo).
+- **Meshy**: plano Free dá 100 créditos/mês (sem cartão), e uma geração
+  completa (malha + textura) custa ~20 créditos — dá pra gerar ~5
+  modelos/mês de graça, com **download incluído** (mas limitado por mês, só
+  no motor mais recente, licença CC BY 4.0 que permite uso comercial com
+  atribuição). O plano Pro (US$20/mês, ~R$110) dá 1.000 créditos/mês
+  (~50 gerações), download ilimitado e direitos comerciais completos sem
+  atribuição.
+- **Tripo3D**: a API é **pré-paga** — tem um trial de 300 créditos por 2
+  semanas pra testar, mas depois disso não existe um "plano grátis"
+  contínuo pra uso via API (o app web Tripo Studio tem plano free, mas é um
+  produto/cobrança separada da API). Uma geração custa ~20-30+ créditos
+  dependendo da qualidade pedida.
 
-**Decisões que preciso de você**: qual provedor topa testar primeiro
-(a maioria tem créditos grátis/trial — dá pra validar qualidade antes de
-comprometer com um plano pago), e se concorda com o fluxo "pedido de
-orçamento revisado por você" em vez de checkout automático na v1.
+**Ou seja**: não dá pra oferecer geração ilimitada de graça pro cliente —
+cada geração custa dinheiro de verdade (seu, via crédito comprado), mesmo
+que pareça "grátis" na hora H. Isso confirma que **o modelo que você
+propôs é o caminho certo**: gerar o preview é um custo de vendas que você
+assume (como uma amostra), e só quando o cliente confirma o pedido é que
+esse custo (fixo ou por token) entra na conta final — igual uma taxa de
+"modelagem customizada" soma no preço do produto.
+
+### Fluxo proposto (revisado com a confirmação de qualidade)
+
+1. Formulário novo na loja: "Peça um modelo customizado" — cliente loga
+   (contas de cliente já existem desde a rodada 16, isso ajuda a evitar
+   abuso) e sobe 1+ fotos + descrição.
+2. Servidor chama a API (Meshy ou Tripo) automaticamente e mostra um
+   **preview** do modelo gerado pro cliente — sem cobrar nada ainda.
+3. Se o cliente gostar e confirmar, o preço final do pedido já inclui uma
+   **taxa de modelagem customizada** (fixa, ou calculada a partir do custo
+   real do crédito gasto) — aí sim vira uma venda de verdade.
+4. Se o cliente não gostar/desistir, você perde só o crédito daquela
+   geração (custo pequeno e previsível, tipo uma amostra grátis) — melhor
+   que gerar tudo manualmente sem saber se vai vender.
+5. **Guardrail contra abuso**: limitar quantas gerações grátis por
+   cliente/dia (ex.: 1-2), já que cada uma tem custo real — sem isso,
+   alguém poderia gerar dezenas de modelos só de curiosidade e estourar o
+   crédito do mês.
+
+**Decisões que preciso de você**: Meshy ou Tripo como provedor principal
+pra começar (dá pra trocar depois, a integração fica isolada num arquivo
+só, mesmo padrão já usado pra Woovi/Superfrete), se topa o limite de
+gerações grátis por cliente, e se a "taxa de modelagem customizada" é um
+valor fixo (mais simples) ou calculada a partir do crédito real gasto
+(mais preciso, mas exige guardar quanto cada chamada custou).
 
 Sources:
 - [How to Use Image to 3D Model API: A Complete Guide 2026](https://www.meshy.ai/tutorials/api-quickstart-image-to-3d)
 - [Free Image to 3D Model 2026 — Photo to 3D in a Minute | Meshy](https://www.meshy.ai/features/image-to-3d)
+- [Meshy Official Pricing: Free, Pro, Studio & Enterprise Plans](https://www.meshy.ai/pricing)
+- [Tripo AI vs. Other AI 3D Model Generators 2026](https://www.tripo3d.ai/tutorials/tripo-ai-vs-other-ai-3d-generators)
+- [Pricing | Tripo OpenAPI docs](https://docs.tripo3d.ai/get-started/pricing.html)
 - [3D AI Studio API - Developer Platform for 3D Model Generation](https://www.3daistudio.com/Platform)
 - [AI 3D Model Generation API - Text to 3D and Image to 3D | Hyper3D](https://hyper3d.ai/features/api)
-- [AI 3D Model Generator from Text & Images | Tripo 3D](https://www.tripo3d.ai/)
 - [Neural4D API - Best Text-to-3D & Image-to-3D API for Developers](https://www.neural4d.com/api)
 
 ---

@@ -3,7 +3,9 @@ import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import {
   categories,
-  filamentOptions,
+  materialColors,
+  materials,
+  materialTypes,
   productImages,
   productPartRegions,
   productParts,
@@ -52,7 +54,7 @@ export async function getPublishedProductsForCatalog(filters?: { q?: string; cat
       parts: {
         orderBy: [asc(productParts.sortOrder)],
         limit: 1,
-        with: { materialOptions: { with: { filament: true } } },
+        with: { materialOptions: { with: { color: true } } },
       },
       images: { orderBy: [asc(productImages.position)], limit: 1 },
     },
@@ -60,8 +62,8 @@ export async function getPublishedProductsForCatalog(filters?: { q?: string; cat
 
   return rows.map((row) => {
     const part = row.parts[0];
-    const defaultMaterial = part?.materialOptions.find((m) => m.filamentOptionId === part.defaultFilamentOptionId);
-    const material = defaultMaterial ?? part?.materialOptions[0];
+    const defaultOption = part?.materialOptions.find((m) => m.materialColorId === part.defaultMaterialColorId);
+    const color = (defaultOption ?? part?.materialOptions[0])?.color;
 
     return {
       id: row.id,
@@ -70,8 +72,8 @@ export async function getPublishedProductsForCatalog(filters?: { q?: string; cat
       description: row.description,
       basePriceCents: row.basePriceCents,
       coverImageUrl: row.images[0]?.url ?? null,
-      fallbackColor: material?.filament.hexColor ?? null,
-      fallbackColorSecondary: material?.filament.hexColorSecondary ?? null,
+      fallbackColor: color?.hexColor ?? null,
+      fallbackColorSecondary: color?.hexColorSecondary ?? null,
     };
   });
 }
@@ -96,12 +98,58 @@ export async function getCategoryBySlug(slug: string) {
   return db.query.categories.findFirst({ where: eq(categories.slug, slug) });
 }
 
-/** Catálogo global de materiais/filamentos, usado no admin e na atribuição por parte. */
-export async function getAllFilamentOptions() {
-  return db.query.filamentOptions.findMany({ orderBy: [asc(filamentOptions.name)] });
+/**
+ * Catálogo completo de materiais — Material (Resina/Plástico) → Tipo (PLA,
+ * Cristal...) → Cor — usado no admin (CRUD de materiais) e em qualquer tela
+ * que precise deixar escolher cores agrupadas por tipo (upload de arquivo,
+ * cadastro de produto).
+ */
+export async function getMaterialCatalog() {
+  return db.query.materials.findMany({
+    orderBy: [asc(materials.name)],
+    with: {
+      types: {
+        orderBy: [asc(materialTypes.name)],
+        with: {
+          colors: { orderBy: [asc(materialColors.name)] },
+        },
+      },
+    },
+  });
 }
 
-/** Produto com partes (+ materiais atribuídos e regiões pintadas), tamanhos e imagens, para a tela de edição do admin. */
+/**
+ * Mesmo catálogo, mas achatado numa lista só de cores (com o nome do
+ * material/tipo dono junto) — usado nas telas que escolhem quais cores uma
+ * peça aceita (upload de arquivo, cadastro de produto), onde uma lista
+ * simples com rótulo "Material · Tipo · Cor" é mais direta que navegar a
+ * árvore de novo.
+ */
+export async function getAllMaterialColorsForAdmin() {
+  const catalog = await getMaterialCatalog();
+  return catalog.flatMap((material) =>
+    material.types.flatMap((type) =>
+      type.colors.map((color) => ({
+        id: color.id,
+        name: color.name,
+        hexColor: color.hexColor,
+        hexColorSecondary: color.hexColorSecondary,
+        materialName: material.name,
+        typeName: type.name,
+        // Campos extras (não usados pra listar/marcar cores, só pela
+        // calculadora de preço quando ela precisa saber o custo do tipo
+        // dono da cor escolhida como padrão) — incluídos aqui pra não
+        // precisar de uma segunda query só pra isso.
+        printProcess: material.printProcess,
+        postProcessingFeeCents: material.postProcessingFeeCents,
+        pricePerKgCents: type.pricePerKgCents,
+        printSpeedValue: type.printSpeedValue,
+      })),
+    ),
+  );
+}
+
+/** Produto com partes (+ cores atribuídas e regiões pintadas), tamanhos e imagens, para a tela de edição do admin. */
 export async function getProductWithConfigForAdmin(id: string) {
   return db.query.products.findFirst({
     where: eq(products.id, id),
@@ -126,7 +174,9 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
       parts: {
         orderBy: [asc(productParts.sortOrder)],
         with: {
-          materialOptions: { with: { filament: true } },
+          materialOptions: {
+            with: { color: { with: { type: { with: { material: true } } } } },
+          },
           regions: { orderBy: [asc(productPartRegions.sortOrder)] },
         },
       },
@@ -154,22 +204,30 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
       id: part.id,
       name: part.name,
       meshFileUrl: part.meshFileUrl,
-      availableMaterials: part.materialOptions.map(({ filament }) => ({
-        id: filament.id,
-        type: filament.type,
-        name: filament.name,
-        hexColor: filament.hexColor,
-        hexColorSecondary: filament.hexColorSecondary,
-        priceModifierCents: filament.priceModifierCents,
+      availableColors: part.materialOptions.map(({ color }) => ({
+        id: color.id,
+        name: color.name,
+        hexColor: color.hexColor,
+        hexColorSecondary: color.hexColorSecondary,
+        materialName: color.type.material.name,
+        printProcess: color.type.material.printProcess,
+        postProcessingFeeCents: color.type.material.postProcessingFeeCents,
+        type: {
+          id: color.type.id,
+          name: color.type.name,
+          pricePerKgCents: color.type.pricePerKgCents,
+          printSpeedValue: Number(color.type.printSpeedValue),
+          description: color.type.description,
+        },
       })),
       regions: part.regions.map((region) => ({
         id: region.id,
         label: region.label,
         paintState: region.paintState,
         enabled: region.enabled,
-        defaultMaterialId: region.defaultFilamentOptionId,
+        defaultMaterialColorId: region.defaultMaterialColorId,
       })),
-      defaultMaterialId: part.defaultFilamentOptionId,
+      defaultMaterialColorId: part.defaultMaterialColorId,
     })),
     sizeOptions: row.sizeOptions.map((size) => ({
       id: size.id,

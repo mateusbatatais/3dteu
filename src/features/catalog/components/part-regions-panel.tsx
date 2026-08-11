@@ -13,7 +13,7 @@ import { PartThumbnailCapture } from "./part-thumbnail-capture";
 import type { ViewerPart } from "./product-viewer-3d";
 
 // Só pra diferenciar visualmente as regiões no admin antes de qualquer
-// material padrão ser escolhido — não tem relação com materiais reais.
+// cor padrão ser escolhida — não tem relação com cores reais.
 const FALLBACK_PALETTE = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#ec4899", "#14b8a6", "#f97316"];
 const NO_DEFAULT_VALUE = "__none__";
 
@@ -22,18 +22,13 @@ interface RegionRow {
   label: string;
   paintState: number;
   enabled: boolean;
-  defaultFilamentOptionId: string | null;
+  defaultMaterialColorId: string | null;
 }
 
-interface MaterialOption {
+interface ColorOption {
   id: string;
   name: string;
   hexColor: string | null;
-}
-
-interface PricingSettings {
-  pricePerGramCents: number | null;
-  fixedFeeCents: number | null;
 }
 
 export function PartRegionsPanel({
@@ -42,16 +37,14 @@ export function PartRegionsPanel({
   meshUrl,
   hasMesh,
   regions,
-  materialOptions,
-  pricingSettings,
+  colorOptions,
 }: {
   productId: string;
   partId: string;
   meshUrl: string | null;
   hasMesh: boolean;
   regions: RegionRow[];
-  materialOptions: MaterialOption[];
-  pricingSettings: PricingSettings;
+  colorOptions: ColorOption[];
 }) {
   const [highlighted, setHighlighted] = useState<number | null>(null);
 
@@ -60,8 +53,8 @@ export function PartRegionsPanel({
     meshUrl,
     color: "#a1a1aa",
     regions: regions.map((region, index) => {
-      const material = materialOptions.find((m) => m.id === region.defaultFilamentOptionId);
-      const baseColor = material?.hexColor ?? FALLBACK_PALETTE[index % FALLBACK_PALETTE.length];
+      const color = colorOptions.find((c) => c.id === region.defaultMaterialColorId);
+      const baseColor = color?.hexColor ?? FALLBACK_PALETTE[index % FALLBACK_PALETTE.length];
       const isDimmed = highlighted !== null && highlighted !== region.paintState;
       return { paintState: region.paintState, color: isDimmed ? "#d4d4d8" : baseColor };
     }),
@@ -74,7 +67,7 @@ export function PartRegionsPanel({
         <div className="flex-1">
           <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Arquivo 3D</h3>
           <div className="mt-2">
-            <MeshUploadForm productId={productId} partId={partId} hasMesh={hasMesh} pricingSettings={pricingSettings} />
+            <MeshUploadForm productId={productId} partId={partId} hasMesh={hasMesh} />
           </div>
         </div>
       </div>
@@ -85,9 +78,9 @@ export function PartRegionsPanel({
         </h3>
         <p className="mt-1 text-sm text-muted-foreground">
           Detectadas automaticamente no arquivo enviado — cada uma ganhou uma cor diferente só pra identificação (sem
-          relação com o material de verdade ainda). Clique em &ldquo;Destacar&rdquo; pra ver qual pedaço do modelo é
+          relação com a cor de verdade ainda). Clique em &ldquo;Destacar&rdquo; pra ver qual pedaço do modelo é
           qual antes de renomear. Desmarque &ldquo;Visível pro cliente&rdquo; se uma região veio errada (ruído da
-          detecção) — ela continua colorida com o material padrão escolhido, só não aparece pra configurar na loja.
+          detecção) — ela continua colorida com a cor padrão escolhida, só não aparece pra configurar na loja.
         </p>
         <div className="mt-2 flex flex-col gap-2">
           {regions.map((region) => (
@@ -95,7 +88,7 @@ export function PartRegionsPanel({
               key={region.id}
               productId={productId}
               region={region}
-              materialOptions={materialOptions}
+              colorOptions={colorOptions}
               isHighlighted={highlighted === region.paintState}
               onToggleHighlight={() =>
                 setHighlighted((prev) => (prev === region.paintState ? null : region.paintState))
@@ -111,26 +104,26 @@ export function PartRegionsPanel({
 function RegionRow({
   productId,
   region,
-  materialOptions,
+  colorOptions,
   isHighlighted,
   onToggleHighlight,
 }: {
   productId: string;
   region: RegionRow;
-  materialOptions: MaterialOption[];
+  colorOptions: ColorOption[];
   isHighlighted: boolean;
   onToggleHighlight: () => void;
 }) {
   const [label, setLabel] = useState(region.label);
   const [enabled, setEnabled] = useState(region.enabled);
-  const [defaultId, setDefaultId] = useState(region.defaultFilamentOptionId ?? NO_DEFAULT_VALUE);
+  const [defaultId, setDefaultId] = useState(region.defaultMaterialColorId ?? NO_DEFAULT_VALUE);
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
     const input: RegionSettingsInput = {
       label,
       enabled,
-      defaultFilamentOptionId: defaultId === NO_DEFAULT_VALUE ? null : defaultId,
+      defaultMaterialColorId: defaultId === NO_DEFAULT_VALUE ? null : defaultId,
     };
 
     startTransition(async () => {
@@ -168,9 +161,9 @@ function RegionRow({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={NO_DEFAULT_VALUE}>Usa o padrão da parte</SelectItem>
-          {materialOptions.map((material) => (
-            <SelectItem key={material.id} value={material.id}>
-              {material.name}
+          {colorOptions.map((color) => (
+            <SelectItem key={color.id} value={color.id}>
+              {color.name}
             </SelectItem>
           ))}
         </SelectContent>

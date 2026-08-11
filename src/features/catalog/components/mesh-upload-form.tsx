@@ -4,7 +4,6 @@ import { useId, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { formatPriceCents } from "@/lib/format";
 import {
   getMeshExtension,
   MAX_MESH_FILE_SIZE_BYTES,
@@ -13,14 +12,7 @@ import {
 } from "@/lib/supabase/storage-constants";
 import { createClient } from "@/lib/supabase/client";
 
-import {
-  applySuggestedDimensions,
-  applySuggestedPrice,
-  applySuggestedWeight,
-  autoGenerateSizeOptions,
-  confirmPartMesh,
-  createMeshUploadUrl,
-} from "../actions";
+import { applySuggestedDimensions, applySuggestedWeight, autoGenerateSizeOptions, confirmPartMesh, createMeshUploadUrl } from "../actions";
 import { measureMesh, type MeshMeasurements } from "../mesh-measure";
 import { detectPaintedStates } from "../mmu-3mf";
 import { estimatePrintWeight } from "../print-estimate";
@@ -29,21 +21,14 @@ function formatMegabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-interface PricingSettings {
-  pricePerGramCents: number | null;
-  fixedFeeCents: number | null;
-}
-
 export function MeshUploadForm({
   productId,
   partId,
   hasMesh,
-  pricingSettings,
 }: {
   productId: string;
   partId: string;
   hasMesh: boolean;
-  pricingSettings: PricingSettings;
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,7 +51,6 @@ export function MeshUploadForm({
     widthCm: number;
     lengthCm: number;
   } | null>(null);
-  const [isApplyingSuggestion, startSuggestionTransition] = useTransition();
 
   const weightEstimate = measurements ? estimatePrintWeight(measurements.volumeMm3, measurements.surfaceAreaMm2) : null;
   // Arredonda pra cima — pra uma estimativa de embalagem, é mais seguro
@@ -78,10 +62,6 @@ export function MeshUploadForm({
         lengthCm: Math.max(1, Math.ceil(measurements.depthMm / 10)),
       }
     : null;
-  const suggestedPriceCents =
-    weightEstimate && pricingSettings.pricePerGramCents
-      ? Math.round(weightEstimate.weightGrams * pricingSettings.pricePerGramCents + (pricingSettings.fixedFeeCents ?? 0))
-      : null;
 
   function processSelectedFile(selected: File) {
     setSuccess(false);
@@ -208,18 +188,6 @@ export function MeshUploadForm({
     });
   }
 
-  function handleApplyPrice() {
-    if (!suggestedPriceCents) return;
-    startSuggestionTransition(async () => {
-      const result = await applySuggestedPrice(productId, suggestedPriceCents);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(`Preço base do produto atualizado pra ${formatPriceCents(suggestedPriceCents)}.`);
-    });
-  }
-
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2">
       <div
@@ -284,21 +252,6 @@ export function MeshUploadForm({
           {(measurements.depthMm / 10).toFixed(1)} cm, ~{weightEstimate ? Math.round(weightEstimate.weightGrams) : "?"}
           g estimados ({weightEstimate?.assumptionLabel}) — ao confirmar o envio, tamanhos, peso e dimensões de
           embalagem são preenchidos automaticamente a partir dessas medidas.
-        </p>
-      ) : null}
-
-      {suggestedPriceCents ? (
-        <p className="text-xs text-muted-foreground">
-          Preço sugerido: {formatPriceCents(suggestedPriceCents)} (peso estimado × preço por grama, configurado em
-          Configurações da loja).{" "}
-          <button
-            type="button"
-            disabled={isApplyingSuggestion}
-            onClick={handleApplyPrice}
-            className="font-medium text-primary underline-offset-2 hover:underline disabled:opacity-50"
-          >
-            Usar esse preço
-          </button>
         </p>
       ) : null}
 

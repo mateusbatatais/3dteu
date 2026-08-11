@@ -64,6 +64,13 @@
       "when": 1786402023087,
       "tag": "0008_rapid_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786414218952,
+      "tag": "0009_tiny_zeigeist",
+      "breakpoints": true
     }
   ]
 }

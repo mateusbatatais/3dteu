@@ -1,25 +1,27 @@
 import { NewProductForm } from "@/features/catalog/components/new-product-form";
-import { getAllFilamentOptions, getCategories } from "@/features/catalog/queries";
+import { getAllMaterialColorsForAdmin, getCategories } from "@/features/catalog/queries";
 import { getStoreSettings } from "@/features/shipping/queries";
 
 export default async function NovoProdutoPage() {
-  // Sugestão de preço (a partir do peso estimado) é um extra — se essa query
-  // falhar (ex.: migração de store_settings ainda não aplicada em produção),
-  // a tela de cadastro não pode quebrar por causa disso. Mesmo princípio já
-  // usado em /admin/produtos/[id].
+  // Sugestão de preço é um extra — se essa query falhar (ex.: migração de
+  // store_settings ainda não aplicada em produção), a tela de cadastro não
+  // pode quebrar por causa disso. Mesmo princípio já usado em
+  // /admin/produtos/[id].
   const storeSettingsPromise = getStoreSettings().catch((error: unknown) => {
     console.error("[admin] falha ao buscar configurações da loja (sugestão de preço)", error);
     return null;
   });
 
-  const [categories, allMaterials, storeSettings] = await Promise.all([
+  const [categories, allColors, storeSettings] = await Promise.all([
     getCategories(),
-    getAllFilamentOptions(),
+    getAllMaterialColorsForAdmin(),
     storeSettingsPromise,
   ]);
 
   const pricingSettings = {
-    pricePerGramCents: storeSettings?.pricePerGramCents ?? null,
+    energyPriceCentsPerKwh: storeSettings?.energyPriceCentsPerKwh ?? null,
+    printerPowerWatts: storeSettings?.printerPowerWatts ?? null,
+    profitMarginPercent: storeSettings?.profitMarginPercent ? Number(storeSettings.profitMarginPercent) : null,
     fixedFeeCents: storeSettings?.fixedFeeCents ?? null,
   };
 
@@ -30,7 +32,7 @@ export default async function NovoProdutoPage() {
         Envie o arquivo 3D de cada peça pra já preencher tamanhos, peso e dimensões automaticamente.
       </p>
       <div className="mt-6">
-        <NewProductForm categories={categories} allMaterials={allMaterials} pricingSettings={pricingSettings} />
+        <NewProductForm categories={categories} allColors={allColors} pricingSettings={pricingSettings} />
       </div>
     </div>
   );

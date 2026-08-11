@@ -1,12 +1,26 @@
-export type FilamentType = "solid_color" | "dual_color" | "special";
+export type MaterialPrintProcess = "fdm" | "resin";
 
-export interface FilamentOption {
+/** O Tipo dentro de um Material (ex.: "PLA"/"ABS" em Plástico, "Cristal"/"Dental" em Resina). */
+export interface MaterialTypeInfo {
   id: string;
-  type: FilamentType;
+  name: string;
+  pricePerKgCents: number;
+  /** g/hora se o material é FDM, mm de altura/hora se é resina — ver print-estimate.ts. */
+  printSpeedValue: number;
+  description: string | null;
+}
+
+/** Uma cor específica dentro de um Tipo de material. */
+export interface MaterialColor {
+  id: string;
   name: string;
   hexColor: string | null;
+  /** Só preenchido quando o Material dono do tipo permite dual-color (hoje só Plástico). */
   hexColorSecondary: string | null;
-  priceModifierCents: number;
+  materialName: string; // "Resina" | "Plástico" — pro texto explicativo (Fase 3) e diferenciação visual (Fase 2)
+  printProcess: MaterialPrintProcess;
+  postProcessingFeeCents: number;
+  type: MaterialTypeInfo;
 }
 
 /** Uma região pintada (MMU) dentro de um único arquivo .3mf — ver src/features/catalog/mmu-3mf.ts. */
@@ -15,10 +29,10 @@ export interface ProductPartRegion {
   label: string;
   /** Estado decodificado do arquivo: 0 = região padrão, 1-16 = Extrusora 1-16. */
   paintState: number;
-  /** false = detectada errado (ruído da segmentação) — some da loja, mas continua colorida no preview com defaultMaterialId. */
+  /** false = detectada errado (ruído da segmentação) — some da loja, mas continua colorida no preview com defaultMaterialColorId. */
   enabled: boolean;
-  /** Material pré-selecionado pra essa região — null usa o padrão da parte (ProductPart.defaultMaterialId). */
-  defaultMaterialId: string | null;
+  /** Cor pré-selecionada pra essa região — null usa o padrão da parte (ProductPart.defaultMaterialColorId). */
+  defaultMaterialColorId: string | null;
 }
 
 export interface ProductPart {
@@ -26,11 +40,11 @@ export interface ProductPart {
   name: string;
   /** URL do .glb usado no preview 3D (convertido a partir do STL original no upload). */
   meshFileUrl: string | null;
-  availableMaterials: FilamentOption[];
+  availableColors: MaterialColor[];
   /** Vazio = peça de cor única (comportamento normal). Não-vazio = .3mf pintado, uma cor por região. */
   regions: ProductPartRegion[];
-  /** Material pré-selecionado pro cliente (e pras regiões desta parte) — null usa o primeiro da lista. */
-  defaultMaterialId: string | null;
+  /** Cor pré-selecionada pro cliente (e pras regiões desta parte) — null usa a primeira da lista. */
+  defaultMaterialColorId: string | null;
 }
 
 export interface SizeOption {
@@ -64,15 +78,15 @@ export interface Product {
 }
 
 /**
- * Escolha do cliente ao configurar um produto: tamanho + material de cada
- * parte. Uma parte sem regiões usa `filamentOptionId` (comportamento
- * normal); uma parte com regiões usa `regionSelections`, uma cor por região.
+ * Escolha do cliente ao configurar um produto: tamanho + cor de cada parte.
+ * Uma parte sem regiões usa `materialColorId` (comportamento normal); uma
+ * parte com regiões usa `regionSelections`, uma cor por região.
  */
 export interface ProductSelection {
   sizeId: string;
   partSelections: Array<{
     partId: string;
-    filamentOptionId?: string;
-    regionSelections?: Array<{ regionId: string; filamentOptionId: string }>;
+    materialColorId?: string;
+    regionSelections?: Array<{ regionId: string; materialColorId: string }>;
   }>;
 }

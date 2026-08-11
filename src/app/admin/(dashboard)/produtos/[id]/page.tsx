@@ -5,7 +5,7 @@ import { ProductForm } from "@/features/catalog/components/product-form";
 import { ProductImagesManager } from "@/features/catalog/components/product-images-manager";
 import { ProductPartsManager } from "@/features/catalog/components/product-parts-manager";
 import { ProductSizesManager } from "@/features/catalog/components/product-sizes-manager";
-import { getAllFilamentOptions, getCategories, getProductWithConfigForAdmin } from "@/features/catalog/queries";
+import { getAllMaterialColorsForAdmin, getCategories, getMaterialCatalog, getProductWithConfigForAdmin } from "@/features/catalog/queries";
 import { getStoreSettings } from "@/features/shipping/queries";
 
 const TAB_VALUES = ["info", "tamanhos", "partes", "imagens"] as const;
@@ -30,17 +30,32 @@ export default async function EditarProdutoPage({
     return null;
   });
 
-  const [product, categories, allMaterials, storeSettings] = await Promise.all([
+  const [product, categories, allColors, materialCatalog, storeSettings] = await Promise.all([
     getProductWithConfigForAdmin(id),
     getCategories(),
-    getAllFilamentOptions(),
+    getAllMaterialColorsForAdmin(),
+    getMaterialCatalog(),
     storeSettingsPromise,
   ]);
 
   if (!product) notFound();
 
+  const materialTypes = materialCatalog.flatMap((material) =>
+    material.types.map((type) => ({
+      id: type.id,
+      name: type.name,
+      materialName: material.name,
+      printProcess: material.printProcess,
+      pricePerKgCents: type.pricePerKgCents,
+      printSpeedValue: type.printSpeedValue,
+      postProcessingFeeCents: material.postProcessingFeeCents,
+    })),
+  );
+
   const pricingSettings = {
-    pricePerGramCents: storeSettings?.pricePerGramCents ?? null,
+    energyPriceCentsPerKwh: storeSettings?.energyPriceCentsPerKwh ?? null,
+    printerPowerWatts: storeSettings?.printerPowerWatts ?? null,
+    profitMarginPercent: storeSettings?.profitMarginPercent ? Number(storeSettings.profitMarginPercent) : null,
     fixedFeeCents: storeSettings?.fixedFeeCents ?? null,
   };
 
@@ -71,7 +86,10 @@ export default async function EditarProdutoPage({
           <ProductPartsManager
             productId={product.id}
             parts={product.parts}
-            allMaterials={allMaterials}
+            allColors={allColors}
+            materialTypes={materialTypes}
+            productWeightGrams={product.weightGrams}
+            productHeightCm={product.heightCm}
             pricingSettings={pricingSettings}
           />
         </TabsContent>

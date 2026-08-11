@@ -31,22 +31,31 @@ import {
 } from "../actions";
 import { measureMesh, type MeshMeasurements } from "../mesh-measure";
 import { detectPaintedStates } from "../mmu-3mf";
-import { estimatePrintWeight } from "../print-estimate";
+import { estimateMaterialCost, estimatePrintWeight } from "../print-estimate";
 import { productFormSchema } from "../schemas";
+import type { MaterialPrintProcess } from "../types";
 
 function formatMegabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-interface MaterialOption {
+interface ColorOption {
   id: string;
   name: string;
   hexColor: string | null;
   hexColorSecondary: string | null;
+  materialName: string;
+  typeName: string;
+  printProcess: MaterialPrintProcess;
+  postProcessingFeeCents: number;
+  pricePerKgCents: number;
+  printSpeedValue: string;
 }
 
 interface PricingSettings {
-  pricePerGramCents: number | null;
+  energyPriceCentsPerKwh: number | null;
+  printerPowerWatts: number | null;
+  profitMarginPercent: number | null;
   fixedFeeCents: number | null;
 }
 
@@ -58,11 +67,11 @@ interface PartDraft {
   measurements: MeshMeasurements | null;
   detectedStates: number[] | null;
   isReadingFile: boolean;
-  selectedMaterialIds: Set<string>;
-  defaultMaterialId: string | null;
+  selectedColorIds: Set<string>;
+  defaultColorId: string | null;
 }
 
-function makePartDraft(key: string, name: string, allMaterialIds: string[]): PartDraft {
+function makePartDraft(key: string, name: string, allColorIds: string[]): PartDraft {
   return {
     key,
     name,
@@ -71,22 +80,22 @@ function makePartDraft(key: string, name: string, allMaterialIds: string[]): Par
     measurements: null,
     detectedStates: null,
     isReadingFile: false,
-    selectedMaterialIds: new Set(allMaterialIds),
-    defaultMaterialId: allMaterialIds[0] ?? null,
+    selectedColorIds: new Set(allColorIds),
+    defaultColorId: allColorIds[0] ?? null,
   };
 }
 
 export function NewProductForm({
   categories,
-  allMaterials,
+  allColors,
   pricingSettings,
 }: {
   categories: Array<{ id: string; name: string }>;
-  allMaterials: MaterialOption[];
+  allColors: ColorOption[];
   pricingSettings: PricingSettings;
 }) {
   const router = useRouter();
-  const allMaterialIds = allMaterials.map((m) => m.id);
+  const allColorIds = allColors.map((c) => c.id);
 
   // Contador simples em vez de crypto.randomUUID(): um id aleatório gerado
   // de novo na hidratação do cliente não bate com o que o servidor gerou —
@@ -109,7 +118,7 @@ export function NewProductForm({
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
-  const [parts, setParts] = useState<PartDraft[]>(() => [makePartDraft("part-0", "corpo", allMaterialIds)]);
+  const [parts, setParts] = useState<PartDraft[]>(() => [makePartDraft("part-0", "corpo", allColorIds)]);
 
   const [error, setError] = useState<string | null>(null);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
@@ -136,9 +145,25 @@ export function NewProductForm({
           { weightGrams: 0, heightCm: 1, widthCm: 1, lengthCm: 1 },
         )
       : null;
-  const suggestedPriceCents =
-    aggregatePhysicalProps && pricingSettings.pricePerGramCents
-      ? Math.round(aggregatePhysicalProps.weightGrams * pricingSettings.pricePerGramCents + (pricingSettings.fixedFeeCents ?? 0))
+
+  // Sugestão de preço usa o material padrão da primeira peça como
+  // referência pro custo — o preço do produto é um valor único
+  // (basePriceCents), não recalcula por cor escolhida (ver pricing.ts).
+  const firstPartDefaultColor = allColors.find((c) => c.id === parts[0]?.defaultColorId);
+  const { energyPriceCentsPerKwh, printerPowerWatts, profitMarginPercent } = pricingSettings;
+  const priceSuggestion =
+    aggregatePhysicalProps && firstPartDefaultColor && energyPriceCentsPerKwh && printerPowerWatts && profitMarginPercent
+      ? estimateMaterialCost(
+          {
+            weightGrams: aggregatePhysicalProps.weightGrams,
+            heightMm: aggregatePhysicalProps.heightCm * 10,
+            printProcess: firstPartDefaultColor.printProcess,
+            pricePerKgCents: firstPartDefaultColor.pricePerKgCents,
+            printSpeedValue: Number(firstPartDefaultColor.printSpeedValue),
+            postProcessingFeeCents: firstPartDefaultColor.postProcessingFeeCents,
+          },
+          { energyPriceCentsPerKwh, printerPowerWatts, profitMarginPercent, fixedFeeCents: pricingSettings.fixedFeeCents ?? 0 },
+        )
       : null;
 
   function handleNameChange(value: string) {
@@ -151,22 +176,22 @@ export function NewProductForm({
   }
 
   function addPart() {
-    setParts((prev) => [...prev, makePartDraft(nextPartKey(), `peça ${prev.length + 1}`, allMaterialIds)]);
+    setParts((prev) => [...prev, makePartDraft(nextPartKey(), `peça ${prev.length + 1}`, allColorIds)]);
   }
 
   function removePart(key: string) {
     setParts((prev) => (prev.length > 1 ? prev.filter((p) => p.key !== key) : prev));
   }
 
-  function toggleMaterial(partKey: string, materialId: string) {
+  function toggleColor(partKey: string, colorId: string) {
     setParts((prev) =>
       prev.map((p) => {
         if (p.key !== partKey) return p;
-        const next = new Set(p.selectedMaterialIds);
-        if (next.has(materialId)) next.delete(materialId);
-        else next.add(materialId);
-        const defaultMaterialId = next.has(p.defaultMaterialId ?? "") ? p.defaultMaterialId : (Array.from(next)[0] ?? null);
-        return { ...p, selectedMaterialIds: next, defaultMaterialId };
+        const next = new Set(p.selectedColorIds);
+        if (next.has(colorId)) next.delete(colorId);
+        else next.add(colorId);
+        const defaultColorId = next.has(p.defaultColorId ?? "") ? p.defaultColorId : (Array.from(next)[0] ?? null);
+        return { ...p, selectedColorIds: next, defaultColorId };
       }),
     );
   }
@@ -200,8 +225,8 @@ export function NewProductForm({
   }
 
   function applySuggestedPriceToForm() {
-    if (!suggestedPriceCents) return;
-    setBasePriceReais(suggestedPriceCents / 100);
+    if (!priceSuggestion) return;
+    setBasePriceReais(priceSuggestion.suggestedPriceCents / 100);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -212,7 +237,7 @@ export function NewProductForm({
       setError("Adicione pelo menos uma peça.");
       return;
     }
-    const partWithoutColor = parts.find((p) => p.selectedMaterialIds.size === 0);
+    const partWithoutColor = parts.find((p) => p.selectedColorIds.size === 0);
     if (partWithoutColor) {
       setError(`A peça "${partWithoutColor.name}" precisa de pelo menos uma cor marcada.`);
       return;
@@ -283,8 +308,8 @@ export function NewProductForm({
         }
 
         const formData = new FormData();
-        part.selectedMaterialIds.forEach((id) => formData.append("filamentOptionId", id));
-        if (part.defaultMaterialId) formData.set("defaultFilamentOptionId", part.defaultMaterialId);
+        part.selectedColorIds.forEach((id) => formData.append("materialColorId", id));
+        if (part.defaultColorId) formData.set("defaultMaterialColorId", part.defaultColorId);
         await setPartMaterials(productId, partId, formData);
       }
 
@@ -372,12 +397,12 @@ export function NewProductForm({
           <PartDraftCard
             key={part.key}
             part={part}
-            allMaterials={allMaterials}
+            allColors={allColors}
             canRemove={parts.length > 1}
             onNameChange={(value) => updatePart(part.key, { name: value })}
             onFileChange={(file) => handlePartFileChange(part.key, file)}
-            onToggleMaterial={(materialId) => toggleMaterial(part.key, materialId)}
-            onSetDefaultMaterial={(materialId) => updatePart(part.key, { defaultMaterialId: materialId })}
+            onToggleColor={(colorId) => toggleColor(part.key, colorId)}
+            onSetDefaultColor={(colorId) => updatePart(part.key, { defaultColorId: colorId })}
             onRemove={() => removePart(part.key)}
             index={index}
           />
@@ -400,9 +425,11 @@ export function NewProductForm({
             Pode deixar 0 por enquanto (só rascunho) — só precisa ser maior que zero pra publicar.
           </p>
         </div>
-        {suggestedPriceCents ? (
+        {priceSuggestion ? (
           <p className="text-xs text-muted-foreground">
-            Preço sugerido a partir do peso estimado do(s) arquivo(s): {formatPriceCents(suggestedPriceCents)}.{" "}
+            Preço sugerido (material + energia + pós-processamento + margem, assumindo{" "}
+            {firstPartDefaultColor?.materialName} · {firstPartDefaultColor?.typeName}):{" "}
+            {formatPriceCents(priceSuggestion.suggestedPriceCents)}.{" "}
             <button
               type="button"
               onClick={applySuggestedPriceToForm}
@@ -454,23 +481,23 @@ export function NewProductForm({
 
 function PartDraftCard({
   part,
-  allMaterials,
+  allColors,
   canRemove,
   index,
   onNameChange,
   onFileChange,
-  onToggleMaterial,
-  onSetDefaultMaterial,
+  onToggleColor,
+  onSetDefaultColor,
   onRemove,
 }: {
   part: PartDraft;
-  allMaterials: MaterialOption[];
+  allColors: ColorOption[];
   canRemove: boolean;
   index: number;
   onNameChange: (value: string) => void;
   onFileChange: (file: File | null) => void;
-  onToggleMaterial: (materialId: string) => void;
-  onSetDefaultMaterial: (materialId: string) => void;
+  onToggleColor: (colorId: string) => void;
+  onSetDefaultColor: (colorId: string) => void;
   onRemove: () => void;
 }) {
   const inputId = useId();
@@ -555,38 +582,38 @@ function PartDraftCard({
 
       <div>
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Cores disponíveis</p>
-        {allMaterials.length === 0 ? (
+        {allColors.length === 0 ? (
           <p className="mt-1 text-sm text-muted-foreground">
             Nenhum material cadastrado ainda — crie um em /admin/materiais.
           </p>
         ) : (
           <div className="mt-2 flex flex-col gap-1.5">
-            {allMaterials.map((material) => (
-              <div key={material.id} className="flex items-center gap-3 text-sm">
+            {allColors.map((color) => (
+              <div key={color.id} className="flex items-center gap-3 text-sm">
                 <label className="flex flex-1 items-center gap-1.5">
                   <input
                     type="checkbox"
-                    checked={part.selectedMaterialIds.has(material.id)}
-                    onChange={() => onToggleMaterial(material.id)}
+                    checked={part.selectedColorIds.has(color.id)}
+                    onChange={() => onToggleColor(color.id)}
                     className="size-4"
                   />
                   <span
-                    className="inline-block size-3.5 rounded-full border"
+                    className="inline-block size-3.5 shrink-0 rounded-full border"
                     style={{
-                      background: material.hexColorSecondary
-                        ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
-                        : (material.hexColor ?? "#a1a1aa"),
+                      background: color.hexColorSecondary
+                        ? `linear-gradient(135deg, ${color.hexColor} 50%, ${color.hexColorSecondary} 50%)`
+                        : (color.hexColor ?? "#a1a1aa"),
                     }}
                   />
-                  {material.name}
+                  {color.materialName} · {color.typeName} · {color.name}
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <input
                     type="radio"
-                    name={`default-material-${part.key}`}
-                    checked={part.defaultMaterialId === material.id}
-                    onChange={() => onSetDefaultMaterial(material.id)}
-                    disabled={!part.selectedMaterialIds.has(material.id)}
+                    name={`default-color-${part.key}`}
+                    checked={part.defaultColorId === color.id}
+                    onChange={() => onSetDefaultColor(color.id)}
+                    disabled={!part.selectedColorIds.has(color.id)}
                     className="size-3.5"
                   />
                   Padrão

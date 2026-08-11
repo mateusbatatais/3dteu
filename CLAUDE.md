@@ -373,18 +373,21 @@ real nem contra a API da Woovi de verdade):**
 - Rodar as migrações `drizzle/0001_brainy_the_order.sql`,
   `drizzle/0002_flawless_runaways.sql`, `drizzle/0003_curvy_boom_boom.sql`,
   `drizzle/0004_empty_amphibian.sql`, `drizzle/0005_solid_lucky_pierre.sql`,
-  `drizzle/0006_nappy_banshee.sql`, `drizzle/0007_tan_xavin.sql` e
-  `drizzle/0008_rapid_chamber.sql` contra o
+  `drizzle/0006_nappy_banshee.sql`, `drizzle/0007_tan_xavin.sql`,
+  `drizzle/0008_rapid_chamber.sql` e `drizzle/0009_tiny_zeigeist.sql` contra o
   Supabase real (`npm run db:migrate` ou colar o SQL no SQL Editor) — sem
   isso, nada da rodada 10 (Superfrete completo, imagens de produto), da
   rodada 12 (regiões pintadas), da rodada 13 (material padrão por parte),
   da rodada 15 (esconder/definir padrão por região), da rodada 16 (conta de
   cliente — `orders.customer_id` — e avaliações de produto —
   `product_reviews`), da rodada 18 (imagem de categoria —
-  `categories.image_url`) nem da rodada 22 (`store_settings.price_per_gram_cents`/
-  `fixed_fee_cents`, usados pra sugerir preço a partir do peso estimado)
-  funciona contra produção. Todas são só aditivas (CREATE TABLE / ALTER
-  TABLE ADD COLUMN), seguras. **Atenção
+  `categories.image_url`), da rodada 22 (`store_settings.price_per_gram_cents`/
+  `fixed_fee_cents`, usados pra sugerir preço a partir do peso estimado) nem
+  da rodada 28 (hierarquia de materiais Material→Tipo→Cor + calculadora de
+  preço — a 0009 é a que mais precisa de atenção: reaponta cores já
+  atribuídas em produtos existentes, ver o próprio comentário dentro do
+  arquivo SQL antes de rodar) funciona contra produção. Todas são só
+  aditivas (CREATE TABLE / ALTER TABLE ADD COLUMN), seguras. **Atenção
   pro mesmo problema da rodada 11**: se a 0001 já foi parcialmente aplicada
   antes, rodar de novo pode dar "already exists" num `CREATE TYPE` — nesse
   caso usar a versão idempotente (`DO $$ ... EXCEPTION WHEN
@@ -1855,6 +1858,126 @@ test` (10/10) e `npm run build` passaram limpos.
 usuário** (schema/fórmula de preço da Fase 1 em especial — errar isso é
 caro de desfazer com dado real de cliente em cima) — ver o arquivo pra
 detalhes completos de cada uma.
+
+### Rodada 28: Fase 1 do roadmap — hierarquia Material→Tipo→Cor + calculadora de preço
+
+Usuário confirmou os 4 pontos em aberto da Fase 1 (config de energia/
+potência/margem única pra loja inteira, velocidade de impressão parte de
+estimativa de mercado por enquanto, sugestão de preço antiga substituída
+pela nova, e "pouco ou nada" de dado real cadastrado hoje — sem precisar de
+script de migração de dados). No meio da rodada, mandou mais dois pedidos
+pontuais: acrescentar ao roadmap a pesquisa real sobre preço das APIs de
+IA (Meshy/Tripo, que ele já testou e aprovou a qualidade — a dúvida real
+era o modelo de cobrança) e uma "Fase 1b" nova (recomendar material por
+categoria) — ambos só documentados no `ROADMAP.md`, não implementados
+ainda.
+
+**Schema**: `filament_options` (lista achatada, um `type` que só distinguia
+cor-única/dual-color/especial) virou 3 tabelas —
+`materials` (Resina/Plástico, `print_process` fdm/resin,
+`allows_dual_color`, `post_processing_fee_cents`) → `material_types` (PLA,
+Cristal..., `price_per_kg_cents`, `print_speed_value`, `description`) →
+`material_colors` (nome + hex, `hex_color_secondary` só quando o Material
+permite — reforçado em `material-actions.ts`, nunca só escondendo o campo
+no form, mesma lição da rodada 14).
+
+**`drizzle-kit generate` sem TTY disponível nesta sessão**: renomear a
+coluna/enum na mesma leva que adiciona os novos (ex.: `filament_type` →
+`material_print_process`, `default_filament_option_id` → um nome novo)
+faz o drizzle-kit tentar perguntar interativamente "isso é um rename ou
+uma tabela/coluna nova?" — sem terminal interativo, ele só lança uma
+exception (`Interactive prompts require a TTY`) em vez de gerar a
+migração. Resolvido com dois truques, sem esperar resposta humana: (1)
+`filamentTypeEnum` e a tabela `filamentOptions` continuam **declaradas no
+schema.ts, sem nenhum código as referenciando** — como nada "some" do
+ponto de vista do differ, ele nunca cogita que viraram outra coisa; (2) as
+3 colunas de FK que hoje apontam pra cores (`product_parts
+.defaultMaterialColorId`, `product_part_regions.defaultMaterialColorId`,
+`product_part_material_options.materialColorId`) mantiveram o **nome físico
+antigo da coluna no banco** (`default_filament_option_id`/
+`filament_option_id`) — só o nome do lado TypeScript mudou, e só o alvo da
+FK foi trocado (de `filament_options.id` pra `material_colors.id`), que é
+uma mudança de constraint, não um rename de coluna. As duas tabelas/enum
+antigos ficam órfãos no banco (documentado como seguro remover numa limpeza
+futura, depois de confirmar que a migração rodou bem).
+
+**Migração `0009_tiny_zeigeist.sql` editada à mão** depois de gerada: o
+`ADD CONSTRAINT` que reaponta as 3 colunas pra `material_colors` quebraria
+com violação de FK se qualquer produto já tivesse uma cor atribuída (o
+catálogo novo nasce vazio) — adicionei `DELETE FROM
+product_part_material_options` + dois `UPDATE ... SET
+default_filament_option_id = NULL` **antes** dos `ADD CONSTRAINT`, pra
+limpar referências ao catálogo antigo antes de apertar a constraint nova.
+Isso "desatribui" cores de peças já cadastradas — inevitável (o mapeamento
+antigo não carrega informação de qual Material/Tipo cada cor pertencia),
+já avisado no ROADMAP.md antes de implementar.
+
+**Calculadora de preço** (`src/features/catalog/print-estimate.ts`,
+`estimateMaterialCost`): `custo = peso×preço/kg (material) +
+tempo_impressão×potência×preço_kWh (energia) + taxa do Material
+(pós-processamento)`, `preço_sugerido = custo × (1+margem%) +
+taxa_fixa_da_loja`. Tempo de impressão usa fórmula diferente por processo
+— `peso/velocidade` pra FDM (deposita continuamente, tempo escala com
+peso), `altura/velocidade` pra resina (cura uma camada inteira de cada
+vez, tempo escala com altura, não com peso/volume). `storeSettings` ganhou
+`energyPriceCentsPerKwh`/`printerPowerWatts`/`profitMarginPercent`
+(config única da loja, não por material — decisão confirmada pelo
+usuário); a antiga `pricePerGramCents` (rodada 22) parou de ser lida/
+escrita por qualquer código (mantida só como coluna órfã no banco, mesmo
+motivo do truque de migração acima).
+
+**Decisão que documentei explicitamente no ROADMAP.md pro usuário
+revisar**: o preço do produto continua um valor único (`basePriceCents`)
+que o admin define com a ajuda da calculadora — a cor escolhida pelo
+cliente na loja **não recalcula o preço ao vivo**. Cheguei a desenhar uma
+versão que faria isso (custo de material ao vivo por peça, com margem
+aplicada em cima), mas exigiria rastrear o peso de CADA peça
+individualmente (hoje só existe o peso agregado do produto inteiro) —
+escopo bem maior que o pedido original ("um bom processo de cálculo de
+valor" pra ajudar a precificar, não um motor de repreçamento dinâmico por
+cliente). Prefiro entregar a versão mais simples e avisar do que
+inventar escopo não pedido.
+
+**Bugs reais pegos testando de verdade, não hipotéticos**:
+- `NewMaterialForm` (criar Material) tinha um bug de estado duplicado: o
+  wrapper mantinha seu próprio `values`/`isPending` e passava
+  `onSubmit={handleSubmit as never}` pro `MaterialForm` interno — como
+  `MaterialForm` já gerencia seu próprio estado e só lê `initialValues` no
+  mount, digitar no formulário atualizava o estado INTERNO dele, mas o
+  clique em Salvar chamava a função do wrapper, que lia o estado
+  EXTERNO (sempre vazio). Corrigido copiando o padrão já usado (e correto)
+  em `NewMaterialTypeForm`/`NewMaterialColorForm`: `onSubmit` recebe o
+  `input` de verdade e chama a Server Action direto; reset entre
+  cadastros vira um truque de `key` (força remount) em vez de estado
+  duplicado. Só apareceu rodando de verdade (digitei "Metal", cliquei
+  Salvar, confirmei via Playwright que o valor enviado batia com o
+  digitado) — o bug não aparece read-only, só ao tentar submeter.
+- Todas as novas Server Actions em `material-actions.ts`
+  (createMaterial/Type/Color, update\*, delete\*) faziam `db.insert`/
+  `db.update`/`db.delete` **sem try/catch** — mesmo bug já corrigido nas
+  rodadas 24/25 pras actions de sugestão, reintroduzido aqui por serem
+  actions novas. Achado do mesmo jeito: cliquei "Salvar" de verdade contra
+  o dev server sem `DATABASE_URL`, e o erro subia como exception não
+  tratada em vez de um toast — agora todas devolvem `{ error }` limpo.
+
+**Testado**: Playwright contra `MaterialManager` mockado — Resina e
+Plástico renderizam, formulário de nova cor da Resina mostra só 1 campo de
+cor (sem dual-color), o de Plástico mostra 2; digitar "Metal" no form de
+novo material e salvar confirma que o valor certo chega até a Server
+Action (e agora falha com toast limpo, não crash). Contra
+`ProductConfigurator` + `PriceSuggestionCalculator` mockados: troquei
+tamanho/cor e conferi que o preço bate exatamente com `basePriceCents +
+size.priceModifierCents` (sem modificador de cor); calculei a sugestão de
+preço à mão pra PLA (R$8,10) e pra Resina Cristal (R$41,17) e bati com o
+que a UI mostrou nos dois casos, confirmando a fórmula ponta a ponta.
+`npm run lint`, `npm run test` (10/10, suíte reescrita pra cores em vez de
+materiais) e `npm run build` passaram limpos.
+
+**Não testado**: a migração `0009` contra o Supabase real (mesma limitação
+de sempre — sem `DATABASE_URL` nesta sessão), incluindo se o `DELETE`/
+`UPDATE` de limpeza realmente evita a violação de FK num banco com dados
+de verdade. Primeira vez que o usuário rodar essa migração em produção é o
+teste real disso.
 
 ## Preferências do usuário (importante)
 

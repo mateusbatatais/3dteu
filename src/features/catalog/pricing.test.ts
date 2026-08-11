@@ -1,11 +1,29 @@
 import { describe, expect, it } from "vitest";
 
 import { calculateProductPriceCents, InvalidSelectionError } from "./pricing";
-import type { Product } from "./types";
+import type { MaterialColor, Product } from "./types";
 
-const azul = { id: "mat-azul", type: "solid_color", name: "Azul", hexColor: "#2563eb", hexColorSecondary: null, priceModifierCents: 0 } as const;
-const dualAzulLaranja = { id: "mat-dual", type: "dual_color", name: "Azul/Laranja", hexColor: "#2563eb", hexColorSecondary: "#f97316", priceModifierCents: 300 } as const;
-const madeira = { id: "mat-madeira", type: "special", name: "Madeira", hexColor: "#8b5a2b", hexColorSecondary: null, priceModifierCents: 800 } as const;
+function makeColor(id: string, name: string, overrides: Partial<MaterialColor> = {}): MaterialColor {
+  return {
+    id,
+    name,
+    hexColor: "#2563eb",
+    hexColorSecondary: null,
+    materialName: "Plástico",
+    printProcess: "fdm",
+    postProcessingFeeCents: 0,
+    type: { id: `type-${id}`, name: "PLA", pricePerKgCents: 8000, printSpeedValue: 20, description: null },
+    ...overrides,
+  };
+}
+
+const azul = makeColor("mat-azul", "Azul");
+const dualAzulLaranja = makeColor("mat-dual", "Azul/Laranja", { hexColorSecondary: "#f97316" });
+const madeira = makeColor("mat-madeira", "Madeira", {
+  materialName: "Resina",
+  printProcess: "resin",
+  type: { id: "type-resina", name: "Cristal", pricePerKgCents: 25000, printSpeedValue: 15, description: null },
+});
 
 const produtoUmaPeca: Product = {
   id: "prod-1",
@@ -25,9 +43,9 @@ const produtoUmaPeca: Product = {
       id: "parte-corpo",
       name: "corpo",
       meshFileUrl: null,
-      availableMaterials: [azul, dualAzulLaranja, madeira],
+      availableColors: [azul, dualAzulLaranja, madeira],
       regions: [],
-      defaultMaterialId: null,
+      defaultMaterialColorId: null,
     },
   ],
   sizeOptions: [
@@ -55,17 +73,17 @@ const produtoDuasPecas: Product = {
       id: "parte-corpo",
       name: "corpo",
       meshFileUrl: null,
-      availableMaterials: [azul, madeira],
+      availableColors: [azul, madeira],
       regions: [],
-      defaultMaterialId: null,
+      defaultMaterialColorId: null,
     },
     {
       id: "parte-tampa",
       name: "tampa",
       meshFileUrl: null,
-      availableMaterials: [azul, dualAzulLaranja],
+      availableColors: [azul, dualAzulLaranja],
       regions: [],
-      defaultMaterialId: null,
+      defaultMaterialColorId: null,
     },
   ],
   sizeOptions: [{ id: "size-m", label: "M", scaleFactor: 1, priceModifierCents: 0, weightModifierGrams: 0 }],
@@ -89,22 +107,22 @@ const produtoPintado: Product = {
       id: "parte-corpo",
       name: "corpo",
       meshFileUrl: null,
-      availableMaterials: [azul, madeira],
+      availableColors: [azul, madeira],
       regions: [
-        { id: "regiao-0", label: "Região padrão", paintState: 0, enabled: true, defaultMaterialId: null },
-        { id: "regiao-1", label: "Extrusora 1", paintState: 1, enabled: true, defaultMaterialId: null },
+        { id: "regiao-0", label: "Região padrão", paintState: 0, enabled: true, defaultMaterialColorId: null },
+        { id: "regiao-1", label: "Extrusora 1", paintState: 1, enabled: true, defaultMaterialColorId: null },
       ],
-      defaultMaterialId: null,
+      defaultMaterialColorId: null,
     },
   ],
   sizeOptions: [{ id: "size-m", label: "M", scaleFactor: 1, priceModifierCents: 0, weightModifierGrams: 0 }],
 };
 
 describe("calculateProductPriceCents", () => {
-  it("retorna o preço base quando tamanho M e material sem modificador", () => {
+  it("retorna o preço base quando tamanho M", () => {
     const preco = calculateProductPriceCents(produtoUmaPeca, {
       sizeId: "size-m",
-      partSelections: [{ partId: "parte-corpo", filamentOptionId: "mat-azul" }],
+      partSelections: [{ partId: "parte-corpo", materialColorId: "mat-azul" }],
     });
 
     expect(preco).toBe(2500);
@@ -113,38 +131,38 @@ describe("calculateProductPriceCents", () => {
   it("soma o modificador de tamanho", () => {
     const preco = calculateProductPriceCents(produtoUmaPeca, {
       sizeId: "size-g",
-      partSelections: [{ partId: "parte-corpo", filamentOptionId: "mat-azul" }],
+      partSelections: [{ partId: "parte-corpo", materialColorId: "mat-azul" }],
     });
 
     expect(preco).toBe(2500 + 500);
   });
 
-  it("soma o modificador de material especial (madeira)", () => {
+  it("preço não muda por causa da cor escolhida — só valida que é uma opção real", () => {
     const preco = calculateProductPriceCents(produtoUmaPeca, {
       sizeId: "size-p",
-      partSelections: [{ partId: "parte-corpo", filamentOptionId: "mat-madeira" }],
+      partSelections: [{ partId: "parte-corpo", materialColorId: "mat-madeira" }],
     });
 
-    expect(preco).toBe(2500 - 300 + 800);
+    expect(preco).toBe(2500 - 300);
   });
 
-  it("soma o modificador de cada parte em um produto multi-peça", () => {
+  it("soma o modificador de tamanho em um produto multi-peça", () => {
     const preco = calculateProductPriceCents(produtoDuasPecas, {
       sizeId: "size-m",
       partSelections: [
-        { partId: "parte-corpo", filamentOptionId: "mat-madeira" },
-        { partId: "parte-tampa", filamentOptionId: "mat-dual" },
+        { partId: "parte-corpo", materialColorId: "mat-madeira" },
+        { partId: "parte-tampa", materialColorId: "mat-dual" },
       ],
     });
 
-    expect(preco).toBe(4000 + 800 + 300);
+    expect(preco).toBe(4000);
   });
 
   it("lança erro quando o tamanho não existe para o produto", () => {
     expect(() =>
       calculateProductPriceCents(produtoUmaPeca, {
         sizeId: "size-inexistente",
-        partSelections: [{ partId: "parte-corpo", filamentOptionId: "mat-azul" }],
+        partSelections: [{ partId: "parte-corpo", materialColorId: "mat-azul" }],
       }),
     ).toThrow(InvalidSelectionError);
   });
@@ -153,38 +171,38 @@ describe("calculateProductPriceCents", () => {
     expect(() =>
       calculateProductPriceCents(produtoDuasPecas, {
         sizeId: "size-m",
-        partSelections: [{ partId: "parte-corpo", filamentOptionId: "mat-azul" }],
+        partSelections: [{ partId: "parte-corpo", materialColorId: "mat-azul" }],
       }),
     ).toThrow(InvalidSelectionError);
   });
 
-  it("lança erro quando o material escolhido não é válido para a parte", () => {
+  it("lança erro quando a cor escolhida não é válida para a parte", () => {
     expect(() =>
       calculateProductPriceCents(produtoDuasPecas, {
         sizeId: "size-m",
         partSelections: [
-          { partId: "parte-corpo", filamentOptionId: "mat-dual" }, // dual não é opção do corpo
-          { partId: "parte-tampa", filamentOptionId: "mat-azul" },
+          { partId: "parte-corpo", materialColorId: "mat-dual" }, // dual não é opção do corpo
+          { partId: "parte-tampa", materialColorId: "mat-azul" },
         ],
       }),
     ).toThrow(InvalidSelectionError);
   });
 
-  it("soma o modificador de cada região selecionada num .3mf pintado", () => {
+  it("valida a cor de cada região selecionada num .3mf pintado", () => {
     const preco = calculateProductPriceCents(produtoPintado, {
       sizeId: "size-m",
       partSelections: [
         {
           partId: "parte-corpo",
           regionSelections: [
-            { regionId: "regiao-0", filamentOptionId: "mat-azul" },
-            { regionId: "regiao-1", filamentOptionId: "mat-madeira" },
+            { regionId: "regiao-0", materialColorId: "mat-azul" },
+            { regionId: "regiao-1", materialColorId: "mat-madeira" },
           ],
         },
       ],
     });
 
-    expect(preco).toBe(5000 + 0 + 800);
+    expect(preco).toBe(5000);
   });
 
   it("lança erro quando faltam seleções de região", () => {
@@ -194,14 +212,14 @@ describe("calculateProductPriceCents", () => {
         partSelections: [
           {
             partId: "parte-corpo",
-            regionSelections: [{ regionId: "regiao-0", filamentOptionId: "mat-azul" }],
+            regionSelections: [{ regionId: "regiao-0", materialColorId: "mat-azul" }],
           },
         ],
       }),
     ).toThrow(InvalidSelectionError);
   });
 
-  it("lança erro quando o material de uma região não é válido para a parte", () => {
+  it("lança erro quando a cor de uma região não é válida para a parte", () => {
     expect(() =>
       calculateProductPriceCents(produtoPintado, {
         sizeId: "size-m",
@@ -209,8 +227,8 @@ describe("calculateProductPriceCents", () => {
           {
             partId: "parte-corpo",
             regionSelections: [
-              { regionId: "regiao-0", filamentOptionId: "mat-azul" },
-              { regionId: "regiao-1", filamentOptionId: "mat-dual" }, // não é opção do corpo
+              { regionId: "regiao-0", materialColorId: "mat-azul" },
+              { regionId: "regiao-1", materialColorId: "mat-dual" }, // não é opção do corpo
             ],
           },
         ],
