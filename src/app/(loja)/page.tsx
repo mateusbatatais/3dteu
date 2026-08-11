@@ -108,7 +108,12 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
             </Button>
           </div>
           <div className="w-full max-w-64 shrink-0 sm:max-w-72">
-            <AnimatedModelViewer src="/animatedfile1/model.glb" />
+            {/* margin mais baixo que o padrão: esse modelo (hoje um jipe de
+            teste) é bem mais comprido num eixo que nos outros, e o padrão
+            deixava ele pequeno demais no quadro — ver o porquê em
+            AnimatedModelViewer. Reconsiderar esse valor quando trocar pelo
+            arquivo real da impressora, que pode ter proporções diferentes. */}
+            <AnimatedModelViewer src="/animatedfile1/model.glb" margin={1.15} />
           </div>
         </div>
       </section>

@@ -2361,6 +2361,55 @@ run test` (10/10) e `npm run build` (`.next` limpo) passaram limpos.
 impressoras — trocar pelos modelos reais quando o usuário conseguir, sem
 precisar mexer em código.
 
+### Rodada 35: cubo cortando na tela — causa raiz real do `Bounds` (não é esfera, é caixa alinhada aos eixos)
+
+Usuário reportou dois problemas em sequência, cada um confirmado com
+print de produção de verdade: (1) o carro parecia menor que a área do
+canvas dele; (2) depois de eu reduzir o `margin` do `Bounds` pra corrigir
+isso, o **cubo** (o outro slot) passou a **cortar** nas bordas.
+
+**Investiguei o código-fonte real do `Bounds`** (`node_modules/@react-three/
+drei/core/Bounds.js`) em vez de continuar assumindo como ele calcula o
+enquadramento — a rodada anterior descrevia (incorretamente) que ele usa a
+esfera que envolve a caixa do objeto. Não é isso: `getSize()` usa
+`maxSize = Math.max(boxSize.x, boxSize.y, boxSize.z)` — só a MAIOR
+dimensão alinhada aos eixos, e calcula a distância da câmera a partir só
+dela, a partir do ângulo de câmera ATUAL (fixo, não recalculado por
+rotação). Isso explica os dois sintomas:
+- **Carro** (formato alongado, ~2:1): a maior dimensão sozinha (o
+  comprimento) já é bem maior que a silhueta em qualquer ângulo — sobra
+  folga de verdade, por isso parecia pequeno com margin alto.
+- **Cubo** (as 3 dimensões praticamente iguais): visto do ângulo de canto
+  fixo da câmera ([2.5, 2, 2.5], não um ângulo alinhado a nenhum eixo), a
+  silhueta real é até ~1,7x (raiz de 3) maior que a maior dimensão
+  isolada — é o pior caso geométrico de um cubo visto na diagonal. Um
+  `margin` baixo não tem folga suficiente pra cobrir essa diferença, e a
+  peça literalmente sai do quadro em alguns ângulos de rotação.
+
+**Fix**: `AnimatedModelViewer` ganhou uma prop `margin` (default `1.4` —
+valor seguro, não corta objetos compactos/cúbicos). Cada instância ajusta
+por si: o cubo (hero) fica no default seguro; o carro/jipe ("Imprima algo
+customizado") usa `margin={1.15}`, com um comentário no código avisando
+pra reconsiderar esse número quando o arquivo for trocado pelo modelo
+real da impressora (proporção desconhecida ainda).
+
+**Testado com rigor bem maior que a rodada anterior** (que só amostrou 6
+quadros ao longo de 6s e não pegou o corte do cubo): calculei o período
+real de uma volta completa do `autoRotate` (velocidade 1.2 ⇒ ~50s/volta,
+a partir da referência do `OrbitControls` do three.js) e capturei 22
+quadros ao longo de 55s (~16° de diferença entre eles, cobertura da volta
+inteira) pros dois modelos ao mesmo tempo, contra um fundo contrastante
+(pra qualquer corte ficar óbvio). Nenhum dos 22 quadros mostra o cubo ou
+o carro cortados nas bordas — confirmei visualmente quadro a quadro, não
+só por amostragem esparsa. `npm run lint`, `npx tsc --noEmit`, `npm run
+test` (10/10) e `npm run build` (`.next` limpo) passaram limpos.
+
+**Lição pra próximas rodadas envolvendo bibliotecas de terceiro**: quando
+o comportamento observado não bate com a explicação inicial (rodada 34
+disse "esfera", o bug do cubo provou que não), ler o código-fonte real da
+lib antes de tentar mais um ajuste de valor no escuro — resolveu de
+primeira depois disso, em vez de mais uma rodada de tentativa e erro.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

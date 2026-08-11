@@ -60,7 +60,32 @@ function Placeholder() {
  * produto configurável) — flutua direto no fundo da página, sem card/caixa
  * ao redor.
  */
-export function AnimatedModelViewer({ src, className = "" }: { src: string; className?: string }) {
+export function AnimatedModelViewer({
+  src,
+  className = "",
+  margin = 1.4,
+}: {
+  src: string;
+  className?: string;
+  /**
+   * `Bounds` (drei) calcula a distância da câmera a partir da MAIOR
+   * dimensão alinhada aos eixos da caixa do objeto (`max(size.x, size.y,
+   * size.z)`) — não da esfera nem da silhueta real vista de um ângulo
+   * corner (nossa câmera fica em [2.5, 2, 2.5], um ângulo de canto). Pra um
+   * objeto próximo de um cubo (todas as dimensões parecidas), a silhueta
+   * vista desse ângulo é bem maior que essa maior dimensão isolada — até
+   * ~1.7x (raiz de 3), o pior caso geométrico de um cubo visto na
+   * diagonal — e um margin baixo corta o objeto (confirmado cortando de
+   * verdade em produção com um cubo mágico e margin 1.1). Já um objeto bem
+   * alongado (ex.: um carro, comprido demais num eixo) já tem folga de
+   * sobra mesmo com margin baixo, porque a maior dimensão sozinha já é bem
+   * maior que a silhueta em qualquer ângulo. Não dá pra acertar as duas
+   * formas com um valor só — por isso é uma prop, com um default seguro
+   * (não corta objetos compactos/cúbicos); ajuste por instância pra
+   * objetos alongados que ficam pequenos demais com o default.
+   */
+  margin?: number;
+}) {
   return (
     <div className={`aspect-square w-full ${className}`}>
       <ModelErrorBoundary fallback={<Placeholder />}>
@@ -87,17 +112,8 @@ export function AnimatedModelViewer({ src, className = "" }: { src: string; clas
             animação), então `observe` ficaria re-enquadrando a câmera a
             cada frame (a bounding box muda com o movimento). `fit clip`
             sem `observe` enquadra uma vez, no carregamento, e não mexe
-            mais depois.
-            Margin baixo (perto de 1, sem quase nenhuma folga): o Bounds
-            calcula a distância pela ESFERA que envolve a caixa do objeto
-            (não só a caixa em si), pra nunca cortar nada enquanto o
-            OrbitControls gira a câmera ao redor — isso é ainda mais
-            conservador pra um objeto alongado (ex.: um carro, bem mais
-            comprido num eixo que nos outros), onde a esfera fica bem maior
-            que a "vista de frente" do objeto e ele acaba parecendo pequeno
-            dentro do quadro — ver verificação real (rotação completa, sem
-            corte em nenhum ângulo) na rodada correspondente do CLAUDE.md. */}
-            <Bounds fit clip margin={1.1}>
+            mais depois. */}
+            <Bounds fit clip margin={margin}>
               <AnimatedGltf src={src} />
             </Bounds>
             <Environment preset="city" />
