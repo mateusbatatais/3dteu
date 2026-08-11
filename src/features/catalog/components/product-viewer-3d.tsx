@@ -9,6 +9,7 @@ import { OBJLoader, STLLoader, ThreeMFLoader } from "three-stdlib";
 import { getMeshExtension } from "@/lib/supabase/storage-constants";
 
 import { MmuPaintedThreeMFLoader } from "../mmu-3mf-loader";
+import type { MaterialPrintProcess } from "../types";
 
 // Um arquivo que falha ao carregar/parsear (corrompido, extensão errada por
 // dentro, etc.) não pode derrubar o preview inteiro — sem isso, o erro sobe
@@ -39,7 +40,19 @@ export interface ViewerPart {
   colorSecondary?: string | null;
   /** Presente só quando o .3mf tem regiões pintadas (MMU) — uma cor por região, em vez de uma cor pra peça inteira. */
   regions?: Array<{ paintState: number; color: string }>;
+  /** Muda o acabamento do material no preview (fosco/FDM vs liso e brilhante/resina) — undefined cai no fosco padrão. */
+  printProcess?: MaterialPrintProcess;
 }
+
+// Diferenciação visual por processo de impressão (Fase 2 do ROADMAP.md):
+// resina sai da impressora com um acabamento liso e brilhante de verdade
+// (clearcoat alto, pouca rugosidade); FDM tem um acabamento fosco, com as
+// camadas visíveis (não simuladas aqui, só a rugosidade já ajuda a
+// diferenciar). `MeshPhysicalMaterial` estende o shader do
+// `MeshStandardMaterial` (mesmas variáveis internas), então o patch de
+// dual-color abaixo funciona pra qualquer um dos dois sem duplicar código.
+const RESIN_MATERIAL_PROPS = { roughness: 0.2, clearcoat: 0.9, clearcoatRoughness: 0.1 } as const;
+const FDM_MATERIAL_PROPS = { roughness: 0.7 } as const;
 
 // Material dual-color: um filamento com 2ª cor precisa aparecer como um
 // degradê sobre a peça de verdade, não só como uma cor sólida (a mistura das
@@ -47,10 +60,18 @@ export interface ViewerPart {
 // "misturar" um meshStandardMaterial comum). Faz isso remendando o shader
 // padrão via onBeforeCompile: mistura as duas cores ao longo do eixo de
 // maior extensão da geometria (em espaço local da própria malha), preservando
-// a iluminação/PBR do MeshStandardMaterial em vez de trocar por um material
-// sem sombra.
-function buildPartMaterial(color: string, colorSecondary?: string | null, geometry?: THREE.BufferGeometry): THREE.MeshStandardMaterial {
-  const material = new THREE.MeshStandardMaterial({ color });
+// a iluminação/PBR do material base em vez de trocar por um material sem
+// sombra.
+function buildPartMaterial(
+  color: string,
+  colorSecondary?: string | null,
+  geometry?: THREE.BufferGeometry,
+  printProcess?: MaterialPrintProcess,
+): THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial {
+  const material =
+    printProcess === "resin"
+      ? new THREE.MeshPhysicalMaterial({ color, ...RESIN_MATERIAL_PROPS })
+      : new THREE.MeshStandardMaterial({ color, ...FDM_MATERIAL_PROPS });
   if (!colorSecondary || !geometry) return material;
 
   geometry.computeBoundingBox();
@@ -89,11 +110,21 @@ function buildPartMaterial(color: string, colorSecondary?: string | null, geomet
   return material;
 }
 
+interface PartColorProps {
+  meshUrl: string;
+  color: string;
+  colorSecondary?: string | null;
+  printProcess?: MaterialPrintProcess;
+}
+
 // STL só descreve geometria (sem cor/material), então basta aplicar a cor
 // escolhida direto no material — sem precisar clonar/percorrer uma cena.
-function StlPart({ meshUrl, color, colorSecondary }: { meshUrl: string; color: string; colorSecondary?: string | null }) {
+function StlPart({ meshUrl, color, colorSecondary, printProcess }: PartColorProps) {
   const geometry = useLoader(STLLoader, meshUrl);
-  const material = useMemo(() => buildPartMaterial(color, colorSecondary, geometry), [geometry, color, colorSecondary]);
+  const material = useMemo(
+    () => buildPartMaterial(color, colorSecondary, geometry, printProcess),
+    [geometry, color, colorSecondary, printProcess],
+  );
 
   return <mesh geometry={geometry} material={material} />;
 }
@@ -102,25 +133,36 @@ function StlPart({ meshUrl, color, colorSecondary }: { meshUrl: string; color: s
 // e o 3MF pode até vir com cor própria embutida) — clona e percorre a árvore
 // pra forçar a cor escolhida em tudo, mantendo o mesmo comportamento do STL:
 // uma cor por parte, escolhida pelo cliente na configuração do produto.
-function retint(object: THREE.Object3D, color: string, colorSecondary?: string | null): THREE.Object3D {
+function retint(
+  object: THREE.Object3D,
+  color: string,
+  colorSecondary?: string | null,
+  printProcess?: MaterialPrintProcess,
+): THREE.Object3D {
   const clone = object.clone(true);
   clone.traverse((child) => {
     if (child instanceof THREE.Mesh) {
-      child.material = buildPartMaterial(color, colorSecondary, child.geometry);
+      child.material = buildPartMaterial(color, colorSecondary, child.geometry, printProcess);
     }
   });
   return clone;
 }
 
-function ObjPart({ meshUrl, color, colorSecondary }: { meshUrl: string; color: string; colorSecondary?: string | null }) {
+function ObjPart({ meshUrl, color, colorSecondary, printProcess }: PartColorProps) {
   const object = useLoader(OBJLoader, meshUrl);
-  const tinted = useMemo(() => retint(object, color, colorSecondary), [object, color, colorSecondary]);
+  const tinted = useMemo(
+    () => retint(object, color, colorSecondary, printProcess),
+    [object, color, colorSecondary, printProcess],
+  );
   return <primitive object={tinted} />;
 }
 
-function ThreeMfPart({ meshUrl, color, colorSecondary }: { meshUrl: string; color: string; colorSecondary?: string | null }) {
+function ThreeMfPart({ meshUrl, color, colorSecondary, printProcess }: PartColorProps) {
   const object = useLoader(ThreeMFLoader, meshUrl);
-  const tinted = useMemo(() => retint(object, color, colorSecondary), [object, color, colorSecondary]);
+  const tinted = useMemo(
+    () => retint(object, color, colorSecondary, printProcess),
+    [object, color, colorSecondary, printProcess],
+  );
   return <primitive object={tinted} />;
 }
 
@@ -169,12 +211,18 @@ function Part({ part }: { part: ViewerPart }) {
   if (part.regions && part.regions.length > 0) {
     content = <MmuPart meshUrl={part.meshUrl} regions={part.regions} />;
   } else if (extension === "obj") {
-    content = <ObjPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} />;
+    content = (
+      <ObjPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} printProcess={part.printProcess} />
+    );
   } else if (extension === "3mf") {
-    content = <ThreeMfPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} />;
+    content = (
+      <ThreeMfPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} printProcess={part.printProcess} />
+    );
   } else {
     // STL é o padrão — também cai aqui se a extensão vier ausente/desconhecida.
-    content = <StlPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} />;
+    content = (
+      <StlPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} printProcess={part.printProcess} />
+    );
   }
 
   // Se o arquivo falhar ao carregar, cai pro placeholder em vez de derrubar

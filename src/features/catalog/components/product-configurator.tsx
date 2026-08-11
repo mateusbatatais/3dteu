@@ -181,6 +181,7 @@ export function ProductConfigurator({
       meshUrl: part.meshFileUrl,
       color: color?.hexColor ?? "#a1a1aa",
       colorSecondary: color?.hexColorSecondary ?? null,
+      printProcess: color?.printProcess,
     };
   });
 

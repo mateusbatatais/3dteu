@@ -34,6 +34,7 @@ interface MaterialColorOption {
   hexColorSecondary: string | null;
   materialName: string;
   typeName: string;
+  printProcess?: MaterialPrintProcess;
 }
 
 interface MaterialTypeOption {
@@ -116,6 +117,7 @@ export function ProductPartsManager({
                       meshUrl: part.meshFileUrl,
                       color: defaultColor?.hexColor ?? "#a1a1aa",
                       colorSecondary: defaultColor?.hexColorSecondary ?? null,
+                      printProcess: defaultColor?.printProcess,
                     }}
                   />
                   <div className="flex-1">

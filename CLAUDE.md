@@ -2021,6 +2021,40 @@ pré-existente (o padrão `value={categoryId || undefined}` já vinha da
 rodada 26, não mexi nele) — não é uma regressão desta rodada, só não
 peguei antes por falta de teste real desse fluxo específico.
 
+### Rodada 30: Fase 2 — diferenciação visual Resina vs Plástico no preview 3D
+
+Continuação direta da rodada anterior (usuário pediu pra emendar as fases
+sem pausar pra confirmar cada uma). `buildPartMaterial()` em
+`product-viewer-3d.tsx` passou a receber o `printProcess` da cor escolhida
+(campo que já existe desde a Fase 1) e escolher entre
+`THREE.MeshPhysicalMaterial` (Resina: `clearcoat: 0.9`, `roughness: 0.2` —
+acabamento liso e brilhante) ou `THREE.MeshStandardMaterial` (Plástico ou
+sem `printProcess`: `roughness: 0.7` — fosco, o comportamento de sempre).
+`MeshPhysicalMaterial` estende o mesmo shader do `MeshStandardMaterial`,
+então o patch de dual-color (gradiente via `onBeforeCompile`) não precisou
+de nenhuma duplicação. `ViewerPart` ganhou o campo opcional `printProcess`,
+propagado em `ProductConfigurator` (loja) e `ProductPartsManager` (preview
+do admin) a partir da cor escolhida/padrão. Regiões pintadas (.3mf MMU)
+ficaram de fora de propósito — pintura MMU é um recurso de fatiador FDM,
+não faz sentido prático numa peça de resina.
+
+**Escopo conscientemente reduzido**: a proposta original do roadmap incluía
+translucidez específica pro tipo "Cristal" (`transmission`/`opacity`) —
+não implementada agora, é um refinamento a mais em cima da diferenciação
+principal (Resina vs Plástico), que já é o que resolve o pedido.
+
+**Testado de um jeito que realmente prova a diferença, não só "não deu
+erro"**: montei um cubo de teste com a MESMA cor base (`#9ca3af`) nos dois
+materiais — se a única diferença fosse a cor, os screenshots seriam
+idênticos exceto pelo hex. Comparei os bytes dos dois PNGs via Playwright
+(claramente diferentes, um bem maior que o outro) e depois **olhei as
+imagens de verdade**: a versão Resina mostra reflexos/brilho nítidos do
+ambiente nas faces do cubo; a versão Plástico fica completamente fosca e
+uniforme, sem nenhum reflexo. Sem comparar contra a mesma cor base, um
+teste automatizado poderia "passar" só por causa da cor ser diferente,
+mascarando se o material em si estava sendo aplicado certo. `npm run
+lint`, `npm run test` (10/10) e `npm run build` passaram limpos.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

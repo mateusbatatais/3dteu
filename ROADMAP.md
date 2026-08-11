@@ -13,6 +13,8 @@ do que já foi feito.
 
 ## ✅ Feito recentemente
 
+- **Fase 2 completa** (diferenciação visual Resina/Plástico no preview 3D)
+  — ver detalhes na seção da própria fase, mais abaixo.
 - **Fase 1b completa** (recomendar material por categoria) — ver detalhes
   na seção da própria fase, mais abaixo.
 - **Fase 1 completa** (hierarquia Material→Tipo→Cor + calculadora de preço)
@@ -106,25 +108,34 @@ categoria" faz mais sentido sair.
 
 ## Fase 2 — Diferenciação visual do material no preview 3D
 
-**Status: 🔜 próximo** (já dá pra saber se a cor escolhida é Resina ou
-Plástico — `MaterialColor.printProcess`, ver Fase 1).
+**Status: ✅ feito**.
 
-Ideia técnica (viável, sem biblioteca nova): `buildPartMaterial()` em
-`product-viewer-3d.tsx` hoje sempre cria um `THREE.MeshStandardMaterial`
-opaco fosco. Dá pra variar por família de material:
+`buildPartMaterial()` em `product-viewer-3d.tsx` agora recebe o
+`printProcess` da cor escolhida (`MaterialColor.printProcess`, Fase 1) e
+escolhe o material do Three.js de acordo: **Resina** vira
+`THREE.MeshPhysicalMaterial` com `clearcoat: 0.9`/`roughness: 0.2`
+(acabamento liso e brilhante); **Plástico** (ou qualquer cor sem
+`printProcess`, ex. placeholder) continua `THREE.MeshStandardMaterial` com
+`roughness: 0.7` (fosco). `MeshPhysicalMaterial` estende o shader do
+`MeshStandardMaterial`, então o patch de dual-color (gradiente entre duas
+cores via `onBeforeCompile`) funciona sem duplicar código pros dois casos.
+Aplicado no preview da loja (`ProductConfigurator`) e no preview do admin
+(`ProductPartsManager`/`PartThumbnailCapture`) — regiões pintadas (.3mf
+MMU) ficaram de fora de propósito (pintura MMU é um recurso específico de
+fatiador FDM, não faz sentido prático numa peça de resina).
 
-- **Resina**: `THREE.MeshPhysicalMaterial` com `clearcoat` alto (~0.9) e
-  `roughness` baixa (~0.15-0.25) — simula o acabamento brilhante/liso típico
-  de impressão em resina. Pro tipo "Cristal" especificamente, dá pra ligar
-  `transmission`/`opacity` reduzida pra sugerir translucidez.
-- **Plástico**: `MeshStandardMaterial` com `roughness` mais alta (~0.6-0.8) —
-  acabamento fosco, mais parecido com FDM de verdade (que tem as camadas
-  visíveis, ainda que não simuladas aqui).
+**Não implementado** (proposta original tinha isso como extra, não como
+essencial): translucidez específica pro tipo "Cristal" via
+`transmission`/`opacity` — a diferenciação Resina/Plástico já cobre o
+pedido principal; translucidez por tipo específico pode virar um ajuste
+fino depois se fizer falta.
 
-`MeshPhysicalMaterial` já é parte do `three` (dependência existente, não
-precisa instalar nada) — só é mais pesado pra renderizar que
-`MeshStandardMaterial`, mas em objetos pequenos como esses (uma peça por
-vez) não deve ser perceptível.
+**Testado**: comparei dois screenshots do mesmo cubo de teste (mesma cor
+base) — um com material "Resina", outro "Plástico" — via Playwright. As
+imagens são visivelmente diferentes (Resina mostra reflexos/brilho
+nítidos do ambiente nas faces; Plástico fica completamente fosco/uniforme,
+sem reflexo nenhum), confirmando que a diferenciação funciona de verdade,
+não só no código.
 
 ---
 
