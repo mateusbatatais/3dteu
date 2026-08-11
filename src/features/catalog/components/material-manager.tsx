@@ -3,13 +3,15 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
-import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  checkMaterialColorDeletionImpact,
+  checkMaterialDeletionImpact,
+  checkMaterialTypeDeletionImpact,
   createMaterial,
   createMaterialColor,
   createMaterialType,
@@ -24,6 +26,8 @@ import {
   type MaterialInput,
   type MaterialTypeInput,
 } from "@/features/catalog/material-actions";
+
+import { ConfirmDeleteMaterialButton } from "./confirm-delete-material-button";
 import { formatPriceCents } from "@/lib/format";
 import type { MaterialPrintProcess } from "@/features/catalog/types";
 
@@ -113,10 +117,11 @@ function MaterialCard({ material }: { material: MaterialRow }) {
             <Button type="button" size="sm" variant="outline" onClick={() => setIsEditing(true)}>
               Editar
             </Button>
-            <ConfirmDeleteButton
-              action={deleteMaterial.bind(null, material.id)}
+            <ConfirmDeleteMaterialButton
               label="Excluir material"
-              description={`Excluir "${material.name}"? Todos os tipos e cores dele somem junto, e peças de produto que usam essas cores ficam sem essa opção.`}
+              itemDescription={`"${material.name}" (todos os tipos e cores dele somem junto)`}
+              checkImpact={() => checkMaterialDeletionImpact(material.id)}
+              onConfirm={(replacements) => deleteMaterial(material.id, replacements)}
             />
           </div>
         </div>
@@ -162,10 +167,11 @@ function MaterialTypeCard({ material, type }: { material: MaterialRow; type: Typ
             <Button type="button" size="sm" variant="outline" onClick={() => setIsEditing(true)}>
               Editar
             </Button>
-            <ConfirmDeleteButton
-              action={deleteMaterialType.bind(null, type.id)}
+            <ConfirmDeleteMaterialButton
               label="Excluir tipo"
-              description={`Excluir o tipo "${type.name}"? As cores dele somem junto.`}
+              itemDescription={`o tipo "${type.name}" (as cores dele somem junto)`}
+              checkImpact={() => checkMaterialTypeDeletionImpact(type.id)}
+              onConfirm={(replacements) => deleteMaterialType(type.id, replacements)}
             />
           </div>
         </div>
@@ -221,10 +227,11 @@ function MaterialColorRow({
       <Button type="button" size="sm" variant="outline" onClick={() => setIsEditing(true)}>
         Editar
       </Button>
-      <ConfirmDeleteButton
-        action={deleteMaterialColor.bind(null, color.id)}
+      <ConfirmDeleteMaterialButton
         label="Excluir cor"
-        description={`Excluir a cor "${color.name}"?`}
+        itemDescription={`a cor "${color.name}"`}
+        checkImpact={() => checkMaterialColorDeletionImpact(color.id)}
+        onConfirm={(replacements) => deleteMaterialColor(color.id, replacements)}
       />
     </div>
   );

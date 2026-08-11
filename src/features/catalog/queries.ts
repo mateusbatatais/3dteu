@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 
 import { db } from "@/server/db/client";
 import {
@@ -201,6 +201,94 @@ export async function getAllMaterialColorsForConfigurator(): Promise<MaterialCol
       })),
     ),
   );
+}
+
+export interface MaterialColorDeletionImpactRow {
+  kind: "part" | "region";
+  id: string;
+  label: string;
+  productId: string;
+  productName: string;
+  /** Cores que a peça/região ainda aceitaria depois da exclusão — o admin
+   * escolhe uma delas (ou nenhuma) como novo padrão. */
+  remainingColors: Array<{ id: string; name: string; hexColor: string | null }>;
+}
+
+/**
+ * Quais partes/regiões de produto ficariam sem um material padrão se as
+ * cores em `colorIds` fossem excluídas — usado antes de excluir uma Cor,
+ * um Tipo (todas as cores dele) ou um Material (todas as cores de todos os
+ * tipos dele) pra perguntar ao admin por um substituto em vez de zerar o
+ * padrão silenciosamente (ver ConfirmDeleteMaterialButton).
+ */
+export async function getMaterialColorDeletionImpact(colorIds: string[]): Promise<MaterialColorDeletionImpactRow[]> {
+  if (colorIds.length === 0) return [];
+
+  const affectedParts = await db.query.productParts.findMany({
+    where: inArray(productParts.defaultMaterialColorId, colorIds),
+    with: {
+      product: { columns: { id: true, name: true } },
+      materialOptions: { with: { color: { columns: { id: true, name: true, hexColor: true } } } },
+    },
+  });
+
+  const affectedRegions = await db.query.productPartRegions.findMany({
+    where: inArray(productPartRegions.defaultMaterialColorId, colorIds),
+    with: {
+      part: {
+        with: {
+          product: { columns: { id: true, name: true } },
+          materialOptions: { with: { color: { columns: { id: true, name: true, hexColor: true } } } },
+        },
+      },
+    },
+  });
+
+  const remaining = (options: Array<{ color: { id: string; name: string; hexColor: string | null } }>) =>
+    options.map((o) => o.color).filter((c) => !colorIds.includes(c.id));
+
+  return [
+    ...affectedParts.map(
+      (part): MaterialColorDeletionImpactRow => ({
+        kind: "part",
+        id: part.id,
+        label: part.name,
+        productId: part.product.id,
+        productName: part.product.name,
+        remainingColors: remaining(part.materialOptions),
+      }),
+    ),
+    ...affectedRegions.map(
+      (region): MaterialColorDeletionImpactRow => ({
+        kind: "region",
+        id: region.id,
+        label: `${region.part.name} · ${region.label}`,
+        productId: region.part.product.id,
+        productName: region.part.product.name,
+        remainingColors: remaining(region.part.materialOptions),
+      }),
+    ),
+  ];
+}
+
+/** Ids de todas as cores de um Tipo — usado pra checar o impacto de excluir
+ * o Tipo inteiro (cascata apaga todas elas). */
+export async function getMaterialColorIdsByType(materialTypeId: string): Promise<string[]> {
+  const colors = await db.query.materialColors.findMany({
+    where: eq(materialColors.materialTypeId, materialTypeId),
+    columns: { id: true },
+  });
+  return colors.map((c) => c.id);
+}
+
+/** Ids de todas as cores de todos os Tipos de um Material — mesma ideia,
+ * pra excluir o Material inteiro. */
+export async function getMaterialColorIdsByMaterial(materialId: string): Promise<string[]> {
+  const types = await db.query.materialTypes.findMany({
+    where: eq(materialTypes.materialId, materialId),
+    with: { colors: { columns: { id: true } } },
+  });
+  return types.flatMap((t) => t.colors.map((c) => c.id));
 }
 
 /** Produto com partes (+ cores atribuídas e regiões pintadas), tamanhos e imagens, para a tela de edição do admin. */

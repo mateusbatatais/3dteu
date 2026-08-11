@@ -4,12 +4,62 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/server/db/client";
-import { materialColors, materials, materialTypes } from "@/server/db/schema";
+import { materialColors, materials, materialTypes, productPartRegions, productParts } from "@/server/db/schema";
 
+import {
+  getMaterialColorDeletionImpact,
+  getMaterialColorIdsByMaterial,
+  getMaterialColorIdsByType,
+  type MaterialColorDeletionImpactRow,
+} from "./queries";
 import type { MaterialPrintProcess } from "./types";
 
 export interface MaterialActionResult {
   error?: string;
+}
+
+/**
+ * O que o admin decidiu pra cada parte/região que ficaria sem padrão —
+ * calculado a partir de `MaterialColorDeletionImpactRow` (ver
+ * ConfirmDeleteMaterialButton). `newDefaultColorId: null` = decisão
+ * explícita de deixar sem padrão, não um esquecimento.
+ */
+export interface MaterialDeletionReplacement {
+  kind: "part" | "region";
+  id: string;
+  newDefaultColorId: string | null;
+}
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function applyDeletionReplacements(tx: Transaction, replacements: MaterialDeletionReplacement[]) {
+  for (const replacement of replacements) {
+    if (replacement.kind === "part") {
+      await tx
+        .update(productParts)
+        .set({ defaultMaterialColorId: replacement.newDefaultColorId })
+        .where(eq(productParts.id, replacement.id));
+    } else {
+      await tx
+        .update(productPartRegions)
+        .set({ defaultMaterialColorId: replacement.newDefaultColorId })
+        .where(eq(productPartRegions.id, replacement.id));
+    }
+  }
+}
+
+export async function checkMaterialColorDeletionImpact(colorId: string): Promise<MaterialColorDeletionImpactRow[]> {
+  return getMaterialColorDeletionImpact([colorId]);
+}
+
+export async function checkMaterialTypeDeletionImpact(typeId: string): Promise<MaterialColorDeletionImpactRow[]> {
+  const colorIds = await getMaterialColorIdsByType(typeId);
+  return getMaterialColorDeletionImpact(colorIds);
+}
+
+export async function checkMaterialDeletionImpact(materialId: string): Promise<MaterialColorDeletionImpactRow[]> {
+  const colorIds = await getMaterialColorIdsByMaterial(materialId);
+  return getMaterialColorDeletionImpact(colorIds);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,12 +106,19 @@ export async function updateMaterial(id: string, input: MaterialInput): Promise<
   return {};
 }
 
-export async function deleteMaterial(id: string): Promise<MaterialActionResult> {
+export async function deleteMaterial(
+  id: string,
+  replacements: MaterialDeletionReplacement[] = [],
+): Promise<MaterialActionResult> {
   try {
-    // Cascade apaga tipos e cores desse material — e qualquer parte de
-    // produto que usasse essas cores perde a opção (aviso já fica no texto
-    // de confirmação do admin, ver material-manager.tsx).
-    await db.delete(materials).where(eq(materials.id, id));
+    // Cascade apaga tipos e cores desse material — qualquer parte/região que
+    // tinha uma dessas cores como padrão já foi reatribuída (ou explicitamente
+    // deixada sem padrão) via `replacements`, escolhido pelo admin em
+    // ConfirmDeleteMaterialButton antes de chegar aqui.
+    await db.transaction(async (tx) => {
+      await applyDeletionReplacements(tx, replacements);
+      await tx.delete(materials).where(eq(materials.id, id));
+    });
   } catch {
     return { error: "Não foi possível excluir o material." };
   }
@@ -119,9 +176,15 @@ export async function updateMaterialType(id: string, input: MaterialTypeInput): 
   return {};
 }
 
-export async function deleteMaterialType(id: string): Promise<MaterialActionResult> {
+export async function deleteMaterialType(
+  id: string,
+  replacements: MaterialDeletionReplacement[] = [],
+): Promise<MaterialActionResult> {
   try {
-    await db.delete(materialTypes).where(eq(materialTypes.id, id));
+    await db.transaction(async (tx) => {
+      await applyDeletionReplacements(tx, replacements);
+      await tx.delete(materialTypes).where(eq(materialTypes.id, id));
+    });
   } catch {
     return { error: "Não foi possível excluir o tipo." };
   }
@@ -190,9 +253,15 @@ export async function updateMaterialColor(
   return {};
 }
 
-export async function deleteMaterialColor(id: string): Promise<MaterialActionResult> {
+export async function deleteMaterialColor(
+  id: string,
+  replacements: MaterialDeletionReplacement[] = [],
+): Promise<MaterialActionResult> {
   try {
-    await db.delete(materialColors).where(eq(materialColors.id, id));
+    await db.transaction(async (tx) => {
+      await applyDeletionReplacements(tx, replacements);
+      await tx.delete(materialColors).where(eq(materialColors.id, id));
+    });
   } catch {
     return { error: "Não foi possível excluir a cor." };
   }
