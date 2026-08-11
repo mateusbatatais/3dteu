@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
     // variável por projeto) — sem isso, next/image rejeita otimizar
     // qualquer host que não seja o próprio app.
     remotePatterns: [{ protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/public/**" }],
+    // Next 16 passou a exigir um allowlist explícito de qualidades (default
+    // só [75]) — sem isso, `quality={90}` nas fotos de produto (usado onde a
+    // imagem aparece grande, ex. grid do catálogo) seria rejeitado/ignorado.
+    qualities: [75, 90],
   },
   experimental: {
     serverActions: {

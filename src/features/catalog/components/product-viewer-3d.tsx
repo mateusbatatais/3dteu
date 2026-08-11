@@ -213,6 +213,12 @@ export function ProductViewer3D({
         // padrão o WebGL limpa o buffer depois de cada frame) — só liga
         // quando alguém realmente vai capturar, custa um pouco de performance.
         gl={{ preserveDrawingBuffer: Boolean(onCanvasReady) }}
+        // dpr mais alto quando vai capturar: sem isso, o canvas renderiza no
+        // tamanho CSS em pixels "de verdade" (1x), e uma foto tirada de uma
+        // prévia pequena saía visivelmente borrada ao ser exibida maior na
+        // galeria/lightbox do produto. 3x é mais que suficiente mesmo pra
+        // uma prévia pequena virar uma foto razoável.
+        dpr={onCanvasReady ? [1, 3] : [1, 2]}
       >
         <ambientLight intensity={0.7} />
         <directionalLight position={[3, 5, 2]} intensity={1} />

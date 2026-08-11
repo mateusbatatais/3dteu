@@ -1682,6 +1682,144 @@ pode não ter sido aplicada ainda em produção — se a query for um "extra"
 (não o conteúdo principal da página), proteger com try/catch e fallback,
 não deixar propagar.
 
+### Rodada 26: redesenho completo do cadastro de produto
+
+Usuário rejeitou toda a abordagem incremental das rodadas 22-25 pro
+cadastro de produto: "to achando horrivel... quero mudar completamente.
+Redesenhar." Pedido com 7 partes:
+1. Tudo numa tela só, sem abas.
+2. Remover peso/dimensões de embalagem digitados à mão — o que importa é
+   peso/tamanho do OBJETO, preenchido automaticamente ao subir o arquivo.
+3. Todas as cores disponíveis vêm marcadas por padrão.
+4. Corrigir qualidade de imagem "salva muito ruim".
+5. Botões de upload mais visíveis (não dava pra ver onde clicar).
+6. Fluxo de upload/loading/salvar mais claro ("pesquise sobre
+   usabilidade").
+7. Obrigatório ter pelo menos uma peça e uma cor.
+
+**Investigação da causa da "qualidade ruim" antes de mexer em código**:
+`grep` em todo `<Image>` do projeto mostrou que quase tudo já usa
+`unoptimized` (herdado de antes da rodada 18 configurar `remotePatterns`,
+nunca removido depois) — ou seja, a maioria das fotos já é servida em
+qualidade original, não é o culpado. A causa real, encontrada checando o
+único lugar do código que gera pixels novos (não só transporta um
+arquivo): a captura de thumbnail 3D (rodada 22, `PartThumbnailCapture`)
+fotografava um `<canvas>` de **160px** (`max-w-40`) sem `dpr` explícito no
+`<Canvas>` do react-three-fiber — uma imagem genuinamente de baixa
+resolução, esticada depois pra até 900px na galeria/lightbox do produto.
+Também achei uma causa secundária real, específica do Next 16 (que muda
+convenções — ver AGENTS.md): a partir da v16, `next/image` **exige um
+allowlist explícito de qualidades**, e o default é `qualities: [75]` — as
+duas únicas fotos que passam pelo otimizador sem `unoptimized` (grid do
+catálogo e tiles de categoria) caíam nesse teto sem eu ter pedido.
+
+**Fix de qualidade**: `next.config.ts` ganhou `images.qualities: [75, 90]`
+e as duas fotos afetadas (`product-grid.tsx`, `category-tiles.tsx`)
+ganharam `quality={90}`. `ProductViewer3D` ganhou `dpr={onCanvasReady ?
+[1, 3] : [1, 2]}` (mais alto só durante captura, já que WebGL em dpr maior
+custa mais performance) e `PartThumbnailCapture` cresceu de `max-w-40`
+(160px) pra `max-w-64` (256px) — combinado, uma captura de até ~768px em
+vez de 160px.
+
+**Peso/dimensões viram 100% automáticos**: `weightGrams`/`heightCm`/
+`widthCm`/`lengthCm` saíram de `productFormSchema` e do `ProductForm` —
+não existe mais input manual pra isso em lugar nenhum. `MeshUploadForm`
+(usado na edição) chama `applySuggestedWeight`+`applySuggestedDimensions`
+**automaticamente** assim que o upload é confirmado (removidos os botões
+"Usar esse peso"/"Usar essas dimensões" da rodada 22/24 — peso/dimensão
+de um objeto físico não é uma decisão de negócio como preço, não faz
+sentido pedir confirmação separada). Preço continua exigindo clique
+explícito (`applySuggestedPrice`) — é a única sugestão que ainda mexe em
+quanto o cliente paga.
+
+**Todas as cores marcadas por padrão**: em `ProductPartsManager`, o
+checkbox de cada material usa `selectedIds.size === 0 ? true :
+selectedIds.has(material.id)` — só cai pro "nada marcado" se já existir
+uma seleção salva de verdade (edição posterior continua respeitando o que
+o admin escolheu). O rádio "Padrão" segue a mesma lógica, caindo pro
+primeiro material da lista quando não há default salvo ainda.
+
+**Upload mais visível**: trocado o `<input type="file">` cru (fácil de
+não ver, ainda mais no tema escuro) por uma dropzone grande com ícone,
+texto "Arraste o arquivo aqui ou clique pra escolher" e suporte a
+drag-and-drop de verdade (`onDrop`/`onDragOver`), tanto no
+`MeshUploadForm` quanto no cadastro novo.
+
+**Redesenho do cadastro (`/admin/produtos/novo`)**: `ProductForm` virou
+edição-only (o branch de criação foi removido, `product` deixou de ser
+opcional); um componente novo, `NewProductForm`
+(`src/features/catalog/components/new-product-form.tsx`), substitui o
+cadastro inteiro — uma tela só, sem `Tabs`, com seções empilhadas (Info
+básica → Peças e cores → Preço → SEO num `<details>` recolhido → Status)
+e um único botão "Criar produto" no final. Cada peça é um card com nome,
+dropzone de arquivo (mede localmente com `measureMesh()` antes de
+qualquer envio — só sobe pro Supabase no clique final) e checklist de
+cores (todas marcadas por padrão). Validação client-side bloqueia o envio
+se não houver pelo menos uma peça ou se qualquer peça ficar sem nenhuma
+cor marcada.
+
+**Orquestração do "criar produto" num clique só**: como o arquivo precisa
+ir direto do navegador pro Supabase Storage (arquitetura já estabelecida
+desde a saga do upload de STL) e não existe transação que atravesse
+chamadas de rede, `handleSubmit` faz uma sequência client-side: (1)
+`createProductDraft` — nova action, só insere a linha do produto, sem
+redirect nem parte automática (diferente do antigo `createProduct`,
+deletado); (2) pra cada peça, `createProductPart` (nova action, igual
+`addProductPart` mas devolve o id em vez de ser fire-and-forget) +
+upload+confirmação do arquivo (se houver) + `setPartMaterials` (montando
+um `FormData` na mão, reaproveitando a action existente sem duplicar
+lógica); (3) ao final, soma o peso estimado de todas as peças com arquivo
+e usa a MAIOR medida de cada eixo entre elas como aproximação da caixa —
+simplificação assumida (não empacota de verdade), mas consistente com o
+resto da UI já rotular tudo como estimativa — aplicada via
+`applySuggestedWeight`+`applySuggestedDimensions`, e tamanhos P/M/G a
+partir da primeira peça medida. Se uma etapa falhar depois do produto já
+criado, a UI nunca finge que nada aconteceu: mostra um toast explicando
+exatamente o que falhou e redireciona pra tela de edição (com abas) pra
+continuar dali — a criação nunca é atômica de verdade (não dá pra ser,
+dado o upload direto), então é mais honesto admitir isso do que simular.
+
+**Bug real pego rodando de verdade, não no build**: a primeira versão de
+`makePartDraft` gerava a `key` da peça inicial com `crypto.randomUUID()`
+dentro do inicializador de `useState` — como esse inicializador roda uma
+vez no render do servidor e de novo na hidratação do cliente, o id
+aleatório saía diferente nas duas vezes, e o React acusava "hydration
+mismatch" no atributo `name` do rádio de material padrão (só apareceu
+testando a página de verdade via Playwright, `next build`/`tsc` não pegam
+isso). Corrigido com uma key literal determinística (`"part-0"`) pra peça
+inicial; um contador (`useRef`) só é lido/incrementado dentro de
+`addPart` (um handler de clique, nunca durante o render) pra peças
+adicionadas depois — o eslint-plugin-react-hooks também pegou uma segunda
+versão errada disso ("Cannot access refs during render") antes de eu
+fixar a versão final.
+
+**`createProduct` (antigo) foi deletado**, não deprecado — só tinha um
+call site (`ProductForm`, que virou edição-only), então virou código morto
+de verdade assim que `NewProductForm` passou a usar `createProductDraft`.
+
+**Testado**: Playwright contra o formulário novo (mockado, sem produto):
+confirmei zero abas na tela, autofill de slug a partir do nome, os 3
+checkboxes de material nascendo todos marcados, "+ Adicionar peça"
+criando um segundo card, upload de um STL de teste mostrando as medidas
+detectadas corretamente, a validação bloqueando o submit quando a peça
+fica sem nenhuma cor marcada (mensagem certa), e o submit de verdade
+contra o dev server (sem `DATABASE_URL` local) falhando de forma limpa
+("Não foi possível salvar o produto.") em vez de travar — sem nenhum erro
+de console depois do fix de hidratação. Também testei os componentes de
+edição mockados: `ProductForm` não tem mais os campos de peso/altura,
+`ProductPartsManager` nasce com os checkboxes marcados e o primeiro rádio
+"Padrão" selecionado, `MeshUploadForm` mostra a dropzone nova e, ao
+confirmar um upload de verdade contra o dev server, falha graciosamente
+por falta de credenciais do Supabase (esperado, mesma limitação de
+sempre) sem nenhum erro de console. `npm run lint`, `npm run test`
+(10/10) e `npm run build` (com `.next` limpo) passaram limpos.
+
+**Não testado**: o fluxo de criação de ponta a ponta contra o Supabase
+real (produto + peça + upload + materiais + peso/dimensões/tamanhos
+aplicados de verdade) — só a parte client-side e a falha graciosa contra
+a ausência de banco/credenciais nesta sessão. Primeira vez que o usuário
+cadastrar um produto pelo fluxo novo em produção é o teste real disso.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

@@ -34,6 +34,7 @@ export async function ProductGrid({ q, categorySlug }: { q?: string; categorySlu
                 src={product.coverImageUrl}
                 alt={product.name}
                 fill
+                quality={90}
                 sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                 className="object-cover transition-transform group-hover:scale-105"
               />

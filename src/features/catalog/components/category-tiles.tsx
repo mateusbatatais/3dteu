@@ -29,6 +29,7 @@ export function CategoryTiles({
               src={category.imageUrl}
               alt={category.name}
               fill
+              quality={90}
               sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
               className="object-cover transition-transform duration-300 group-hover:scale-105"
             />

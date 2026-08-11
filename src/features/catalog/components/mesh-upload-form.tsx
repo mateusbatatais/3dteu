@@ -1,12 +1,17 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
 import { formatPriceCents } from "@/lib/format";
-import { getMeshExtension, MAX_MESH_FILE_SIZE_BYTES, MODELS_BUCKET } from "@/lib/supabase/storage-constants";
+import {
+  getMeshExtension,
+  MAX_MESH_FILE_SIZE_BYTES,
+  MESH_CONTENT_TYPE_BY_EXTENSION,
+  MODELS_BUCKET,
+} from "@/lib/supabase/storage-constants";
+import { createClient } from "@/lib/supabase/client";
 
 import {
   applySuggestedDimensions,
@@ -19,12 +24,6 @@ import {
 import { measureMesh, type MeshMeasurements } from "../mesh-measure";
 import { detectPaintedStates } from "../mmu-3mf";
 import { estimatePrintWeight } from "../print-estimate";
-
-const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
-  stl: "model/stl",
-  obj: "model/obj",
-  "3mf": "model/3mf",
-};
 
 function formatMegabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
@@ -47,17 +46,26 @@ export function MeshUploadForm({
   pricingSettings: PricingSettings;
 }) {
   const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isPending, startTransition] = useTransition();
   // Regiões pintadas (MMU) detectadas no .3mf selecionado — null = ainda não
   // detectado/não é um .3mf pintado. A detecção rola no navegador, no arquivo
   // que o próprio admin acabou de escolher, antes de qualquer upload.
   const [detectedStates, setDetectedStates] = useState<number[] | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
-  // Medidas + volume do arquivo — usadas pra sugerir tamanhos, peso e preço.
+  // Medidas + volume do arquivo — usadas pra sugerir tamanhos e preço, e pra
+  // preencher peso/dimensões automaticamente (ver passo 5 do handleSubmit).
   const [measurements, setMeasurements] = useState<MeshMeasurements | null>(null);
+  const [appliedPhysicalProps, setAppliedPhysicalProps] = useState<{
+    weightGrams: number;
+    heightCm: number;
+    widthCm: number;
+    lengthCm: number;
+  } | null>(null);
   const [isApplyingSuggestion, startSuggestionTransition] = useTransition();
 
   const weightEstimate = measurements ? estimatePrintWeight(measurements.volumeMm3, measurements.surfaceAreaMm2) : null;
@@ -75,23 +83,17 @@ export function MeshUploadForm({
       ? Math.round(weightEstimate.weightGrams * pricingSettings.pricePerGramCents + (pricingSettings.fixedFeeCents ?? 0))
       : null;
 
-  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
+  function processSelectedFile(selected: File) {
     setSuccess(false);
     setError(null);
     setDetectedStates(null);
     setMeasurements(null);
-
-    if (!selected) {
-      setFile(null);
-      return;
-    }
+    setAppliedPhysicalProps(null);
 
     const extension = getMeshExtension(selected.name);
     if (!extension) {
       setError("Formato não suportado. Use .stl, .obj ou .3mf.");
       setFile(null);
-      event.target.value = "";
       return;
     }
 
@@ -102,7 +104,6 @@ export function MeshUploadForm({
         `Esse arquivo tem ${formatMegabytes(selected.size)}, e o máximo é ${formatMegabytes(MAX_MESH_FILE_SIZE_BYTES)} (teto do plano gratuito do Supabase). Reduza a malha (menos triângulos) ou exporte em binário antes de enviar.`,
       );
       setFile(null);
-      event.target.value = "";
       return;
     }
 
@@ -111,16 +112,30 @@ export function MeshUploadForm({
 
     if (extension === "3mf") {
       setIsDetecting(true);
-      try {
-        const states = await detectPaintedStates(selected);
-        setDetectedStates(states);
-      } catch {
-        // Arquivo não é um 3MF pintado (ou não deu pra ler) — trata como arquivo normal, sem erro pro admin.
-        setDetectedStates(null);
-      } finally {
-        setIsDetecting(false);
-      }
+      detectPaintedStates(selected)
+        .then(setDetectedStates)
+        .catch(() => {
+          // Arquivo não é um 3MF pintado (ou não deu pra ler) — trata como arquivo normal, sem erro pro admin.
+          setDetectedStates(null);
+        })
+        .finally(() => setIsDetecting(false));
     }
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0] ?? null;
+    if (!selected) {
+      setFile(null);
+      return;
+    }
+    processSelectedFile(selected);
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDraggingOver(false);
+    const dropped = event.dataTransfer.files?.[0];
+    if (dropped) processSelectedFile(dropped);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -147,7 +162,7 @@ export function MeshUploadForm({
       const { error: uploadError } = await supabase.storage
         .from(MODELS_BUCKET)
         .uploadToSignedUrl(prepared.path, prepared.token, file, {
-          contentType: CONTENT_TYPE_BY_EXTENSION[extension],
+          contentType: MESH_CONTENT_TYPE_BY_EXTENSION[extension],
         });
       if (uploadError) {
         setError(`Falha ao enviar o arquivo: ${uploadError.message}`);
@@ -172,37 +187,24 @@ export function MeshUploadForm({
         }
       }
 
+      // 5) Peso e dimensões são sempre derivados do arquivo — preenche
+      // automaticamente, sem precisar de um clique extra (diferente do
+      // preço, que segue exigindo confirmação por afetar cobrança direta).
+      if (weightEstimate && suggestedDimensionsCm) {
+        const [weightResult, dimensionsResult] = await Promise.all([
+          applySuggestedWeight(productId, weightEstimate.weightGrams),
+          applySuggestedDimensions(productId, suggestedDimensionsCm),
+        ]);
+        if (weightResult.error || dimensionsResult.error) {
+          toast.error(weightResult.error ?? dimensionsResult.error ?? "Não foi possível salvar peso/dimensões.");
+        } else {
+          setAppliedPhysicalProps({ weightGrams: weightEstimate.weightGrams, ...suggestedDimensionsCm });
+        }
+      }
+
       setFile(null);
       setDetectedStates(null);
       setSuccess(true);
-      // Mantém a medida (e a sugestão de peso/preço) visível depois do envio
-      // — o admin ainda pode querer clicar "usar" nelas.
-    });
-  }
-
-  function handleApplyWeight() {
-    if (!weightEstimate) return;
-    startSuggestionTransition(async () => {
-      const result = await applySuggestedWeight(productId, weightEstimate.weightGrams);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(`Peso do produto atualizado pra ~${Math.round(weightEstimate.weightGrams)}g.`);
-    });
-  }
-
-  function handleApplyDimensions() {
-    if (!suggestedDimensionsCm) return;
-    startSuggestionTransition(async () => {
-      const result = await applySuggestedDimensions(productId, suggestedDimensionsCm);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(
-        `Dimensões da embalagem atualizadas pra ${suggestedDimensionsCm.heightCm} × ${suggestedDimensionsCm.widthCm} × ${suggestedDimensionsCm.lengthCm} cm.`,
-      );
     });
   }
 
@@ -219,62 +221,69 @@ export function MeshUploadForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-col gap-2 rounded-lg border-2 border-dashed border-border p-3"
-    >
-      <div className="flex items-center justify-between">
-        <label htmlFor={inputId} className="text-sm font-medium">
-          {hasMesh ? "Substituir arquivo 3D" : "Enviar arquivo 3D"}
-        </label>
-        <span className="text-xs text-muted-foreground">Máximo {formatMegabytes(MAX_MESH_FILE_SIZE_BYTES)}</span>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDraggingOver(true);
+        }}
+        onDragLeave={() => setIsDraggingOver(false)}
+        onDrop={handleDrop}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") inputRef.current?.click();
+        }}
+        className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+          isDraggingOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/60 hover:bg-muted/40"
+        }`}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          className="size-8 text-muted-foreground"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9m0 0-3 3m3-3 3 3" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z"
+          />
+        </svg>
+        <p className="text-sm font-semibold">{hasMesh ? "Substituir arquivo 3D" : "Enviar arquivo 3D"}</p>
+        <p className="text-xs text-muted-foreground">
+          Arraste o arquivo aqui ou <span className="font-medium text-primary underline-offset-2">clique pra escolher</span>
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          STL, OBJ ou 3MF — máximo {formatMegabytes(MAX_MESH_FILE_SIZE_BYTES)}
+        </p>
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="file"
+          accept=".stl,.obj,.3mf"
+          onChange={handleFileChange}
+          onClick={(event) => event.stopPropagation()}
+          className="sr-only"
+        />
       </div>
-
-      <input id={inputId} type="file" accept=".stl,.obj,.3mf" onChange={handleFileChange} className="text-sm" />
-      <p className="text-xs text-muted-foreground">Formatos aceitos: STL, OBJ ou 3MF.</p>
 
       {file ? (
         <p className="text-xs text-muted-foreground">
-          Selecionado: {file.name} ({formatMegabytes(file.size)})
+          Selecionado: <span className="font-medium text-foreground">{file.name}</span> ({formatMegabytes(file.size)})
         </p>
       ) : null}
 
       {measurements ? (
         <p className="text-xs text-muted-foreground">
           Medidas detectadas: {(measurements.widthMm / 10).toFixed(1)} × {(measurements.heightMm / 10).toFixed(1)} ×{" "}
-          {(measurements.depthMm / 10).toFixed(1)} cm — usadas pra sugerir os tamanhos, se o produto ainda não tiver
-          nenhum.
-        </p>
-      ) : null}
-
-      {weightEstimate ? (
-        <p className="text-xs text-muted-foreground">
-          Peso estimado: ~{Math.round(weightEstimate.weightGrams)}g ({weightEstimate.assumptionLabel} — aproximado,
-          ajuste se usar outra configuração).{" "}
-          <button
-            type="button"
-            disabled={isApplyingSuggestion}
-            onClick={handleApplyWeight}
-            className="font-medium text-primary underline-offset-2 hover:underline disabled:opacity-50"
-          >
-            Usar esse peso
-          </button>
-        </p>
-      ) : null}
-
-      {suggestedDimensionsCm ? (
-        <p className="text-xs text-muted-foreground">
-          Dimensões de embalagem estimadas: {suggestedDimensionsCm.heightCm} × {suggestedDimensionsCm.widthCm} ×{" "}
-          {suggestedDimensionsCm.lengthCm} cm (tamanho do próprio arquivo, sem margem extra — ajuste se a embalagem
-          real precisar ser maior).{" "}
-          <button
-            type="button"
-            disabled={isApplyingSuggestion}
-            onClick={handleApplyDimensions}
-            className="font-medium text-primary underline-offset-2 hover:underline disabled:opacity-50"
-          >
-            Usar essas dimensões
-          </button>
+          {(measurements.depthMm / 10).toFixed(1)} cm, ~{weightEstimate ? Math.round(weightEstimate.weightGrams) : "?"}
+          g estimados ({weightEstimate?.assumptionLabel}) — ao confirmar o envio, tamanhos, peso e dimensões de
+          embalagem são preenchidos automaticamente a partir dessas medidas.
         </p>
       ) : null}
 
@@ -303,12 +312,19 @@ export function MeshUploadForm({
         </p>
       ) : null}
 
-      <Button type="submit" size="sm" disabled={isPending || isDetecting || !file} className="mt-1 self-start">
+      <Button type="submit" disabled={isPending || isDetecting || !file} className="mt-1 self-start">
         {isPending ? "Enviando..." : "Confirmar envio"}
       </Button>
 
       {hasMesh ? <span className="text-xs text-muted-foreground">Malha 3D cadastrada ✓</span> : null}
-      {success ? <span className="text-xs font-medium text-primary">Arquivo enviado com sucesso.</span> : null}
+      {success ? (
+        <span className="text-xs font-medium text-primary">
+          Arquivo enviado com sucesso.
+          {appliedPhysicalProps
+            ? ` Peso (~${Math.round(appliedPhysicalProps.weightGrams)}g) e dimensões (${appliedPhysicalProps.heightCm} × ${appliedPhysicalProps.widthCm} × ${appliedPhysicalProps.lengthCm} cm) atualizados automaticamente.`
+            : ""}
+        </span>
+      ) : null}
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
     </form>
   );

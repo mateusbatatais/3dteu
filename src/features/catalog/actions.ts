@@ -2,7 +2,6 @@
 
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { createStorageClient, MEDIA_BUCKET, MODELS_BUCKET } from "@/lib/supabase/storage";
 import { ALLOWED_MEDIA_EXTENSIONS, ALLOWED_MESH_EXTENSIONS, type MediaExtension, type MeshExtension } from "@/lib/supabase/storage-constants";
@@ -64,41 +63,37 @@ function toRow(values: ProductFormValues) {
     categoryId: values.categoryId || null,
     basePriceCents: Math.round(values.basePriceReais * 100),
     status: values.status,
-    weightGrams: values.weightGrams || null,
-    heightCm: values.heightCm || null,
-    widthCm: values.widthCm || null,
-    lengthCm: values.lengthCm || null,
     metaTitle: values.metaTitle || null,
     metaDescription: values.metaDescription || null,
   };
 }
 
-export async function createProduct(values: ProductFormValues): Promise<ProductActionResult> {
+export interface CreateProductDraftResult extends ProductActionResult {
+  productId?: string;
+}
+
+/**
+ * Cria só a linha do produto — nenhuma parte, nenhum arquivo, nenhum
+ * material. A tela de cadastro (NewProductForm) orquestra o resto (partes +
+ * upload + materiais) no cliente antes de navegar pro produto criado, tudo
+ * num único "Criar produto" — por isso essa action não redireciona nem cria
+ * uma parte default sozinha (ao contrário do antigo `createProduct`).
+ */
+export async function createProductDraft(values: ProductFormValues): Promise<CreateProductDraftResult> {
   const parsed = productFormSchema.safeParse(values);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  let productId: string;
   try {
     const [row] = await db.insert(products).values(toRow(parsed.data)).returning({ id: products.id });
-    productId = row.id;
-    // Já cria a primeira parte ("corpo") — sem isso o admin precisava de um
-    // passo manual extra ("Adicionar parte") antes de conseguir enviar
-    // qualquer arquivo 3D. O caso comum (peça única) já sai pronto pra
-    // upload; produtos multi-peça continuam podendo adicionar mais partes.
-    await db.insert(productParts).values({ productId, name: "corpo" });
+    revalidatePath("/admin/produtos");
+    return { productId: row.id };
   } catch (error) {
     return {
       error: isUniqueViolation(error) ? "Já existe um produto com esse slug." : "Não foi possível salvar o produto.",
     };
   }
-
-  revalidatePath("/admin/produtos");
-  // Manda direto pra aba de Partes — o fluxo esperado é subir o arquivo 3D
-  // primeiro (as medidas/peso/preço sugeridos vêm dele), não preencher tudo
-  // manualmente antes.
-  redirect(`/admin/produtos/${productId}?tab=partes`);
 }
 
 export async function updateProduct(id: string, values: ProductFormValues): Promise<ProductActionResult> {
@@ -266,6 +261,26 @@ export async function addProductPart(productId: string, formData: FormData) {
 
   await db.insert(productParts).values({ productId, name });
   await revalidateProductPages(productId);
+}
+
+export interface CreateProductPartResult extends ProductActionResult {
+  id?: string;
+}
+
+/** Mesma coisa que `addProductPart`, mas devolve o id — usado pelo fluxo de
+ * cadastro em tela única (NewProductForm), que precisa do id da parte na
+ * hora pra subir o arquivo/materiais logo em seguida, sem passar por um
+ * `<form>`. */
+export async function createProductPart(productId: string, name: string): Promise<CreateProductPartResult> {
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Dê um nome pra peça." };
+
+  try {
+    const [row] = await db.insert(productParts).values({ productId, name: trimmed }).returning({ id: productParts.id });
+    return { id: row.id };
+  } catch {
+    return { error: "Não foi possível criar a peça." };
+  }
 }
 
 export async function deleteProductPart(productId: string, partId: string) {

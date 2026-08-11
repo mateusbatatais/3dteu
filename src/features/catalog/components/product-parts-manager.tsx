@@ -124,38 +124,47 @@ export function ProductPartsManager({
                       página do produto.
                     </p>
                     <div className="mt-2 flex flex-col gap-2">
-                      {allMaterials.map((material) => (
-                        <div key={material.id} className="flex items-center gap-3 text-sm">
-                          <label className="flex flex-1 items-center gap-1.5">
-                            <input
-                              type="checkbox"
-                              name="filamentOptionId"
-                              value={material.id}
-                              defaultChecked={selectedIds.has(material.id)}
-                              className="size-4"
-                            />
-                            <span
-                              className="inline-block size-3.5 rounded-full border"
-                              style={{
-                                background: material.hexColorSecondary
-                                  ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
-                                  : (material.hexColor ?? "#a1a1aa"),
-                              }}
-                            />
-                            {material.name}
-                          </label>
-                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <input
-                              type="radio"
-                              name="defaultFilamentOptionId"
-                              value={material.id}
-                              defaultChecked={part.defaultFilamentOptionId === material.id}
-                              className="size-3.5"
-                            />
-                            Padrão
-                          </label>
-                        </div>
-                      ))}
+                      {allMaterials.map((material, index) => {
+                        // Peça nova (nenhum material salvo ainda) já nasce com todas as
+                        // cores disponíveis marcadas — evita publicar sem nenhuma cor pra
+                        // escolher só porque o admin esqueceu de marcar. Uma vez que já
+                        // existe uma seleção salva, ela é a fonte da verdade de novo.
+                        const isChecked = selectedIds.size === 0 ? true : selectedIds.has(material.id);
+                        const isDefault =
+                          part.defaultFilamentOptionId === null ? index === 0 : part.defaultFilamentOptionId === material.id;
+                        return (
+                          <div key={material.id} className="flex items-center gap-3 text-sm">
+                            <label className="flex flex-1 items-center gap-1.5">
+                              <input
+                                type="checkbox"
+                                name="filamentOptionId"
+                                value={material.id}
+                                defaultChecked={isChecked}
+                                className="size-4"
+                              />
+                              <span
+                                className="inline-block size-3.5 rounded-full border"
+                                style={{
+                                  background: material.hexColorSecondary
+                                    ? `linear-gradient(135deg, ${material.hexColor} 50%, ${material.hexColorSecondary} 50%)`
+                                    : (material.hexColor ?? "#a1a1aa"),
+                                }}
+                              />
+                              {material.name}
+                            </label>
+                            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <input
+                                type="radio"
+                                name="defaultFilamentOptionId"
+                                value={material.id}
+                                defaultChecked={isDefault}
+                                className="size-3.5"
+                              />
+                              Padrão
+                            </label>
+                          </div>
+                        );
+                      })}
                     </div>
                     <Button type="submit" size="sm" variant="outline" className="mt-3">
                       Salvar materiais desta parte

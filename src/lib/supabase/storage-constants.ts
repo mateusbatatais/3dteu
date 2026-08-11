@@ -18,6 +18,14 @@ export function getMeshExtension(filename: string): MeshExtension | null {
   return (ALLOWED_MESH_EXTENSIONS as readonly string[]).includes(ext ?? "") ? (ext as MeshExtension) : null;
 }
 
+// Usado por qualquer upload direto pro Storage (signed URL) que precisa
+// declarar o content-type certo — MeshUploadForm e NewProductForm.
+export const MESH_CONTENT_TYPE_BY_EXTENSION: Record<MeshExtension, string> = {
+  stl: "model/stl",
+  obj: "model/obj",
+  "3mf": "model/3mf",
+};
+
 // Bucket separado do de malhas 3D — fotos/gifs do produto impresso, usadas
 // na galeria da página pública e como imagem de Open Graph.
 export const MEDIA_BUCKET = "product-media";

@@ -66,7 +66,11 @@ export function PartThumbnailCapture({
   }
 
   return (
-    <div className="w-full max-w-40 shrink-0">
+    // max-w-64 (256px, era max-w-40/160px) — junto com o dpr mais alto do
+    // Canvas quando onCanvasReady está presente, dá uma foto capturada bem
+    // mais nítida; 160px renderizava uma foto visivelmente borrada quando
+    // exibida grande na galeria/lightbox do produto.
+    <div className="w-full max-w-64 shrink-0">
       <ProductViewer3D
         parts={[part]}
         onCanvasReady={(canvas) => {
