@@ -54,6 +54,23 @@ function ColorSwatches({
   );
 }
 
+// Fase 3 do ROADMAP.md: explica pra que a cor/tipo escolhido é indicado
+// (ex.: "Cristal: translúcida, ótima pra decoração") — texto livre que o
+// admin escreve por Tipo em /admin/materiais. Sem descrição cadastrada,
+// não mostra nada (não força um texto genérico).
+function MaterialTypeDescription({ color }: { color: MaterialColor | undefined }) {
+  if (!color?.type.description) return null;
+
+  return (
+    <p className="mt-2 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">
+        {color.materialName} · {color.type.name}:
+      </span>{" "}
+      {color.type.description}
+    </p>
+  );
+}
+
 // Cor pré-selecionada pelo admin pra essa parte — cai pra primeira da lista
 // se não tiver padrão definido, ou se o padrão salvo não estiver mais entre
 // as cores aceitas (admin pode ter desmarcado depois).
@@ -313,6 +330,7 @@ export function ProductConfigurator({
           // vez por região, que crescia muito rápido em arquivos com várias
           // regiões pintadas (ex.: 6 no Bulbasaur).
           if (part.regions.length === 0) {
+            const selectedColor = part.availableColors.find((c) => c.id === colorByPart[part.id]);
             return (
               <div key={part.id}>
                 <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.name}</h2>
@@ -321,6 +339,7 @@ export function ProductConfigurator({
                   selectedId={colorByPart[part.id]}
                   onSelect={(colorId) => setColorByPart((prev) => ({ ...prev, [part.id]: colorId }))}
                 />
+                <MaterialTypeDescription color={selectedColor} />
               </div>
             );
           }
@@ -369,6 +388,9 @@ export function ProductConfigurator({
                     onSelect={(colorId) =>
                       setColorByRegion((prev) => ({ ...prev, [activeRegion.id]: colorId }))
                     }
+                  />
+                  <MaterialTypeDescription
+                    color={part.availableColors.find((c) => c.id === colorByRegion[activeRegion.id])}
                   />
                 </div>
               ) : null}

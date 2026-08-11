@@ -141,15 +141,22 @@ não só no código.
 
 ## Fase 3 — Textos explicativos de material/tipo/cor
 
-**Status: 🔜 próximo** (o campo `description` já existe em `material_types`
-— o admin já pode preencher em `/admin/materiais`; só falta a loja exibir).
+**Status: ✅ feito**. O campo `description` já existia em `material_types`
+desde a Fase 1 (editável em `/admin/materiais` via `MaterialTypeForm`) mas
+nunca era exibido em lugar nenhum — só faltava a loja mostrar.
 
-Ideia de UI: no configurador, ao lado do nome do Tipo selecionado, um texto
-curto (tipo o tooltip da Fase 0) explicando pra que serve — ex.: "Resina
-Cristal: translúcida, ótima pra decoração; mais frágil que a Resistente."
-O texto vem do campo `description` do Tipo (editável no admin), não
-hardcoded — você escreve o texto de cada tipo como quiser, o código só
-exibe.
+`ProductConfigurator` ganhou `MaterialTypeDescription`: sempre que o cliente
+tem uma cor selecionada (parte sem regiões ou região pintada ativa) e o Tipo
+dessa cor tem uma `description` preenchida, aparece um texto curto logo
+abaixo dos swatches — ex.: "Resina · Cristal: Translúcida, ótima pra
+decoração — mais frágil que a Resistente." Sem descrição cadastrada pro
+Tipo, não mostra nada (não força um texto genérico). Nenhuma mudança de
+schema ou de admin foi necessária — só a exibição no configurador.
+
+**Testado**: página mockada com duas cores (PLA sem `description`, Resina
+Cristal com `description`) confirmou via Playwright que a cor padrão (PLA)
+não mostra nenhum texto, e clicar na cor com Resina Cristal faz aparecer o
+texto exato cadastrado — sem erro de console.
 
 ---
 

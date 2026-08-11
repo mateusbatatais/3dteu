@@ -2055,6 +2055,42 @@ teste automatizado poderia "passar" só por causa da cor ser diferente,
 mascarando se o material em si estava sendo aplicado certo. `npm run
 lint`, `npm run test` (10/10) e `npm run build` passaram limpos.
 
+### Rodada 31: Fase 3 — textos explicativos de material/tipo/cor na loja
+
+Última etapa "rápida" do roadmap original desta leva (item pedido junto com
+o resto na rodada 27: "Explicar cada material escolhido: se escolhe resina,
+mostra as opcoes e o para o que é mais indicado... Ai se seleciona a
+'cristal' explica que é translucida e otima para decorar"). O campo
+`description` por Tipo já existia no banco e no admin desde a Fase 1 — só
+não era lido em lugar nenhum da loja.
+
+**Implementado**: `MaterialTypeDescription`, componente novo dentro de
+`product-configurator.tsx`, mostra `"{material} · {tipo}: {description}"`
+logo abaixo dos swatches de cor sempre que a cor selecionada (parte sem
+regiões, ou a região pintada ativa) tiver um Tipo com `description`
+preenchida — sem descrição cadastrada, não mostra nada, não inventa texto
+genérico. Reaproveita 100% dado que já existia (`MaterialColor.type
+.description`, presente em `types.ts` desde a Fase 1); nenhuma migração,
+nenhuma mudança de action, nenhum campo novo no admin.
+
+**Testado de ponta a ponta com Playwright** contra o dev server real (`npm
+run dev` local, página mockada em `src/app/dev-preview-temp/`, removida
+depois): produto de teste com duas cores — PLA sem `description` e Resina
+Cristal com `description: "Translúcida, ótima pra decoração — mais frágil
+que a Resistente."`. Confirmado que a cor padrão (PLA) não mostra nenhum
+texto (`hasCristalTextDefault: false`), e que clicar na cor Resina Cristal
+faz aparecer exatamente o texto cadastrado (`hasCristalTextAfter: true`,
+conferido também via screenshot) — zero erros de console. `npx tsc
+--noEmit`, `npm run lint` e `npm run build` (com `.next` limpo) passaram
+limpos antes do teste visual.
+
+Com isso, as 3 primeiras fases do `ROADMAP.md` (hierarquia Material→Tipo→
+Cor + calculadora de preço, recomendação por categoria, diferenciação
+visual Resina/Plástico, textos explicativos) estão todas ✅ feitas. Restam
+Fase 4 (pedido de modelo customizado via IA — `⏸ aguardando decisão de
+custo/cobrança`, não avança sozinha) e Fase 5 (modelo 3D animado na home —
+`💤 bloqueada`, esperando o usuário fornecer o arquivo).
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com
