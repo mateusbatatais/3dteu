@@ -2,16 +2,16 @@
 
 import { Bounds, Environment, OrbitControls, useAnimations, useGLTF } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { Printer } from "lucide-react";
 import { Component, Suspense, useEffect, useRef, type ReactNode } from "react";
 import type { Group } from "three";
 
-// Fase 5 do ROADMAP.md: reserva o espaço na home pra 2 modelos 3D animados
-// (impressora FDM + resina) antes de o usuário conseguir os arquivos de
-// verdade. Mesmo princípio do MeshErrorBoundary em
-// catalog/components/product-viewer-3d.tsx: um arquivo ausente/corrompido
-// não pode derrubar a seção inteira — aqui isso é usado de propósito
-// enquanto o arquivo ainda nem existe (ver public/animatedfile1|2/LEIA-ME.txt).
+// Fase 5 do ROADMAP.md: modelo 3D animado só como um toque visual — sem
+// legenda, sem explicar o que é (o usuário foi explícito: "não era pra
+// falar nada, só deixa o modelo lá rodando"). Mesmo princípio do
+// MeshErrorBoundary em catalog/components/product-viewer-3d.tsx: um
+// arquivo ausente/corrompido não pode derrubar a seção inteira — aqui cai
+// pra um espaço em branco discreto (ver Placeholder abaixo), nunca um erro
+// visível nem um texto tipo "em breve".
 class ModelErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
 
@@ -46,14 +46,10 @@ function AnimatedGltf({ src }: { src: string }) {
   return <primitive ref={group} object={scene} />;
 }
 
-function Placeholder({ label }: { label: string }) {
-  return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-center">
-      <Printer className="size-8 text-muted-foreground" />
-      <p className="text-sm font-medium">{label}</p>
-      <p className="text-xs text-muted-foreground">Em breve</p>
-    </div>
-  );
+// Sem ícone/texto de propósito — é só um espaço vazio discreto enquanto
+// carrega ou se o arquivo falhar, nunca chama atenção pra si mesmo.
+function Placeholder() {
+  return <div className="size-full" />;
 }
 
 /**
@@ -61,13 +57,14 @@ function Placeholder({ label }: { label: string }) {
  * `ProductViewer3D` (STL/OBJ/3MF estáticos, tingidos por cor escolhida),
  * este só reproduz a animação e os materiais originais do arquivo, sem
  * nenhuma customização. Não-interativo de propósito (decorativo, não é um
- * produto configurável).
+ * produto configurável) — flutua direto no fundo da página, sem card/caixa
+ * ao redor.
  */
-export function AnimatedModelViewer({ src, label }: { src: string; label: string }) {
+export function AnimatedModelViewer({ src, className = "" }: { src: string; className?: string }) {
   return (
-    <div className="aspect-square w-full overflow-hidden rounded-xl bg-muted/30 ring-1 ring-foreground/10">
-      <ModelErrorBoundary fallback={<Placeholder label={label} />}>
-        <Canvas camera={{ position: [2.5, 2, 2.5], fov: 40 }}>
+    <div className={`aspect-square w-full ${className}`}>
+      <ModelErrorBoundary fallback={<Placeholder />}>
+        <Canvas camera={{ position: [2.5, 2, 2.5], fov: 40 }} gl={{ alpha: true }}>
           <ambientLight intensity={0.7} />
           <directionalLight position={[3, 5, 2]} intensity={1.2} />
           {/* Suspense precisa ficar DENTRO do Canvas (mesmo padrão de

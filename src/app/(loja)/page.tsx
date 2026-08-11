@@ -1,4 +1,4 @@
-import { Box, Palette, Truck } from "lucide-react";
+import { Box, Palette, Sparkles, Truck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -52,17 +52,23 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
         <div aria-hidden className="pointer-events-none absolute -top-24 -left-24 size-72 rounded-full bg-primary/25 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -right-24 -bottom-24 size-72 rounded-full bg-brand-orange/25 blur-3xl" />
 
-        <div className="relative mx-auto flex w-full max-w-5xl flex-col items-center gap-6 px-6 py-24 text-center">
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-            Peças em 3D pra <RotatingTeu />.
-          </h1>
-          <p className="max-w-xl text-lg text-muted-foreground">
-            Fidgets, decoração, presentes ou qualquer ideia — escolha o modelo, veja o preview em 3D e
-            personalize cor e tamanho, impresso especialmente pra você.
-          </p>
-          <Button render={<Link href="#catalogo" />} nativeButton={false} size="lg" className="rounded-full px-8">
-            Ver catálogo
-          </Button>
+        <div className="relative mx-auto flex w-full max-w-5xl flex-col items-center gap-10 px-6 py-16 text-center lg:flex-row lg:justify-between lg:py-24 lg:text-left">
+          <div className="flex max-w-xl flex-col items-center gap-6 lg:items-start">
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+              Peças em 3D pra <RotatingTeu />.
+            </h1>
+            <p className="text-lg text-muted-foreground">
+              Fidgets, decoração, presentes ou qualquer ideia — escolha o modelo, veja o preview em 3D e
+              personalize cor e tamanho, impresso especialmente pra você.
+            </p>
+            <Button render={<Link href="#catalogo" />} nativeButton={false} size="lg" className="rounded-full px-8">
+              Ver catálogo
+            </Button>
+          </div>
+          {/* Só um toque visual — gira sozinho, sem legenda nem explicação. */}
+          <div className="w-full max-w-52 shrink-0 sm:max-w-64">
+            <AnimatedModelViewer src="/animatedfile2/model.glb" />
+          </div>
         </div>
       </section>
 
@@ -80,19 +86,29 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-5xl px-6 py-16">
-        <h2 className="text-2xl font-semibold tracking-tight">Como imprimimos</h2>
-        <p className="mt-1 text-muted-foreground">
-          Duas tecnologias, cada uma melhor pra um tipo de peça (ver diferença de material no configurador).
-        </p>
-        <div className="mt-6 grid gap-6 sm:grid-cols-2">
-          <div>
-            <AnimatedModelViewer src="/animatedfile1/model.glb" label="Impressora FDM" />
-            <p className="mt-2 text-center text-sm font-medium">Impressora FDM</p>
+      <section className="border-b bg-gradient-to-br from-brand-orange/5 via-background to-primary/5">
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-10 px-6 py-16 text-center lg:flex-row lg:justify-between lg:text-left">
+          <div className="flex max-w-md flex-col items-center gap-4 lg:items-start">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-orange/10 px-3 py-1 text-xs font-medium text-brand-orange">
+              <Sparkles className="size-3.5" /> Novidade
+            </span>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Imprima algo customizado</h2>
+            <p className="text-muted-foreground">
+              Tem uma ideia específica em mente? Mande fotos do que você quer e a gente gera um modelo 3D com IA —
+              você vê o preview antes de decidir se quer imprimir de verdade.
+            </p>
+            <Button
+              render={<Link href="/conta/modelo-3d" />}
+              nativeButton={false}
+              size="lg"
+              variant="outline"
+              className="rounded-full px-8"
+            >
+              Pedir modelo customizado
+            </Button>
           </div>
-          <div>
-            <AnimatedModelViewer src="/animatedfile2/model.glb" label="Impressora de resina (SLA)" />
-            <p className="mt-2 text-center text-sm font-medium">Impressora de resina (SLA)</p>
+          <div className="w-full max-w-64 shrink-0 sm:max-w-72">
+            <AnimatedModelViewer src="/animatedfile1/model.glb" />
           </div>
         </div>
       </section>

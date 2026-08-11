@@ -2326,6 +2326,41 @@ limpos.
 `model.glb` dentro de `public/animatedfile1/` e `public/animatedfile2/`
 respectivamente — nenhuma mudança de código necessária depois disso.
 
+### Rodada 34: modelos animados viram só flourish visual + "Imprima algo customizado" na home
+
+Usuário rejeitou o enquadramento didático da rodada 33 ("Como imprimimos" +
+legenda "Impressora FDM"/"Impressora de resina") — queria só um toque
+visual, sem explicar nada: "só deixa o modelo lá rodando". Pediu pra
+colocar um modelo ao lado do texto do banner e o outro "numa área legal".
+No meio da implementação, acrescentou mais um pedido: faltava uma seção
+"imprima algo customizado" com texto explicativo (dando destaque de
+verdade na home pro recurso da Fase 4, que só existia dentro de `/conta`)
+— e sugeriu trocar as posições (cubo no banner, carro nessa seção nova),
+"veja o que funciona legal".
+
+**Implementado**: `AnimatedModelViewer` perdeu a prop `label` visível e o
+card com fundo/anel ao redor (`bg-muted/30 ring-1`) — agora é só o
+`<Canvas>` transparente (`gl={{ alpha: true }}`), flutuando direto no
+fundo gradiente da seção, sem parecer uma "foto de produto". O placeholder
+de erro/carregamento virou uma div vazia (nada de ícone/texto) — qualquer
+coisa visível ali contrariaria o pedido de "não falar nada". Removida a
+seção "Como imprimimos". Hero (banner) virou 2 colunas em telas largas
+(texto à esquerda, cubo girando à direita, empilha no mobile). Nova seção
+"Imprima algo customizado" (badge "Novidade", texto curto, botão "Pedir
+modelo customizado" linkando pra `/conta/modelo-3d`) com o jipe ao lado —
+fica entre os cards de destaque e a lista de categorias.
+
+**Testado**: Playwright confirmou, desktop e mobile, que nenhum texto tipo
+"Impressora"/"Em breve" aparece em lugar nenhum da página, que a nova
+seção e o CTA existem, e que os dois modelos renderizam nas posições
+certas — zero erros de console. `npm run lint`, `npx tsc --noEmit`, `npm
+run test` (10/10) e `npm run build` (`.next` limpo) passaram limpos.
+
+**Lembrete já registrado, vale repetir**: os arquivos em
+`animatedfile1/2` continuam sendo um jipe e um cubo mágico de teste, não
+impressoras — trocar pelos modelos reais quando o usuário conseguir, sem
+precisar mexer em código.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

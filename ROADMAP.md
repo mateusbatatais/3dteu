@@ -276,50 +276,42 @@ sessão.
 
 ## Fase 5 — Modelo 3D animado na home
 
-**Status: 💤 espaço reservado, aguardando os 2 arquivos** — usuário decidiu
-por 2 modelos (impressora FDM + impressora de resina/SLA) em vez de 1.
-Formato ideal confirmado: **GLB** (glTF binário), não FBX — arquivo bem
-menor, PBR nativo, e o projeto já usa `@react-three/drei`, cujo `useGLTF` +
-`useAnimations` foi feito exatamente pra isso. Se só sobrar um FBX (ex.:
-baixado de um site como Sketchfab), dá pra converter no Blender
-(importar o FBX → exportar como glTF Binary, marcando "Include
-Animations") sem precisar mudar nada no código depois.
+**Status: 🔜 UI pronta, aguardando os arquivos finais de verdade.** Formato
+confirmado: **GLB** (glTF binário), não FBX — arquivo bem menor, PBR
+nativo, `@react-three/drei` (`useGLTF`+`useAnimations`) já cobre o caso de
+uso sem dependência nova. Se só sobrar um FBX, converte no Blender
+(importar → exportar como glTF Binary, marcando "Include Animations").
 
-**Implementado nesta rodada**: `AnimatedModelViewer`
-(`src/components/animated-model-viewer.tsx`) — componente novo, carrega um
-GLB via `useGLTF`, toca o primeiro clipe de animação embutido em loop via
-`useAnimations`, com `Bounds fit clip` (sem `observe` — ver comentário no
-código, `observe` com conteúdo animado entra num loop de reenquadramento
-que trava o WebGL) pra funcionar em qualquer escala de arquivo, e um Error
-Boundary dedicado (mesmo princípio do `MeshErrorBoundary` do
-`ProductViewer3D`) que mostra um placeholder "Em breve" em vez de quebrar
-enquanto o arquivo não existe. Seção nova "Como imprimimos" na home,
-com 2 slots lado a lado apontando pra `/animatedfile1/model.glb` (FDM) e
-`/animatedfile2/model.glb` (resina) — pastas já criadas em `public/`, cada
-uma com um `LEIA-ME.txt` explicando o nome/formato esperado do arquivo.
-Usuário só precisa soltar o `model.glb` de cada impressora dentro da pasta
-certa — nenhuma mudança de código necessária depois disso.
+**Decisão de design revisada**: o usuário pediu explicitamente pra tirar
+qualquer legenda/explicação dos modelos — "não era pra falar nada, só
+deixa o modelo lá rodando", puramente decorativo. `AnimatedModelViewer`
+(`src/components/animated-model-viewer.tsx`) perdeu a prop `label` visível
+e o placeholder de erro/carregamento virou um espaço em branco discreto
+(sem ícone nem texto) em vez de "Em breve". A seção educativa "Como
+imprimimos" (que explicava FDM vs resina) foi removida — os dois modelos
+viraram só flourish visual em dois lugares novos:
+- Um gira ao lado do texto do **hero** (banner principal).
+- O outro ilustra a nova seção **"Imprima algo customizado"** — bloco
+  novo, com badge "Novidade", texto curto e botão linkando pra
+  `/conta/modelo-3d` (a Fase 4), dando destaque de verdade pra esse
+  recurso na home, que antes só existia dentro de `/conta`.
 
-**Testado**: gerei um GLB sintético (um cubo com uma animação de posição
-real, via `GLTFExporter` do three-stdlib) só pra confirmar o caminho feliz
-— Playwright confirmou o modelo carregando, enquadrado corretamente e a
-animação tocando de verdade (frames do canvas mudando ao longo do tempo).
-Achei e corrigi um bug real nesse processo: a primeira versão colocava o
-`Suspense` por fora do `<Canvas>` inteiro (em vez de por dentro, como o
-`ProductViewer3D` já fazia) — isso deixava o carregamento assíncrono
-instável o bastante pra derrubar o contexto WebGL de vez em quando
-("THREE.WebGLRenderer: Context Lost"), reproduzido de verdade em testes
-locais antes da correção. Também testado o caminho de erro (arquivo
-ausente = 404) — mostra o placeholder "Em breve" sem quebrar a seção,
-inclusive com outro slot carregando normal ao lado.
+**Arquivos atuais**: o usuário forneceu 2 arquivos de teste pra validar o
+pipeline (`public/animatedfile1/model.glb` = um jipe, `animatedfile2/
+model.glb` = um cubo mágico) — **não são impressoras de verdade**, só
+placeholders com animação real pra confirmar que tudo funciona. Trocar
+pelos modelos definitivos de impressora é só substituir esses dois
+arquivos (mesmo nome, mesmo caminho) — nenhuma mudança de código.
 
-**Quando os arquivos chegarem**, ainda preciso saber:
-- Cada um já tem animação embutida de verdade (keyframes no próprio
-  arquivo), ou é só a geometria estática e a "animação de imprimir"
-  precisa ser desenhada à parte?
-- Tamanho do arquivo — se for pesado (muitos MB), vale rodar por uma
-  ferramenta de compressão (`gltf-transform`, Draco/Meshopt) antes de
-  colocar na pasta, pra não pesar o carregamento da home.
+**Testado**: Playwright confirmou visualmente (desktop e mobile) que os
+dois modelos giram nos lugares certos, sem nenhuma legenda/texto
+"Impressora"/"Em breve" vazando na página, com zero erros de console.
+Também confirmado (rodada anterior) o caminho de carregamento de verdade
+com um GLB real (bug de `Suspense` fora do `<Canvas>` já corrigido — ver
+CLAUDE.md).
+
+**Ainda pendente**: os 2 modelos reais de impressora (FDM + resina/SLA)
+animados, exportados em `.glb`.
 
 ---
 
