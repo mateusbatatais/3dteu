@@ -45,6 +45,8 @@ interface ColorRow {
   name: string;
   hexColor: string | null;
   hexColorSecondary: string | null;
+  /** Numeric do Postgres chega como string via Drizzle. */
+  opacity: string;
 }
 
 interface TypeRow {
@@ -205,13 +207,18 @@ function MaterialColorRow({
         initialValues={{
           name: color.name,
           hexColor: color.hexColor ?? "#2563eb",
-          hexColorSecondary: color.hexColorSecondary ?? "#f97316",
+          // Preserva null de verdade (não substitui por um fallback de cor)
+          // — é o que diz pro form se essa cor já é dual-color ou não.
+          hexColorSecondary: color.hexColorSecondary,
+          opacity: Number(color.opacity),
         }}
         onSubmit={(input) => updateMaterialColor(color.id, materialTypeId, input)}
         onDone={() => setIsEditing(false)}
       />
     );
   }
+
+  const opacity = Number(color.opacity);
 
   return (
     <div className="flex items-center gap-3 text-sm">
@@ -221,9 +228,15 @@ function MaterialColorRow({
           background: color.hexColorSecondary
             ? `linear-gradient(135deg, ${color.hexColor} 50%, ${color.hexColorSecondary} 50%)`
             : (color.hexColor ?? "#a1a1aa"),
+          opacity,
         }}
       />
-      <span className="flex-1">{color.name}</span>
+      <span className="flex-1">
+        {color.name}
+        {opacity < 1 ? (
+          <span className="ml-1 text-xs text-muted-foreground">(transparência {Math.round((1 - opacity) * 100)}%)</span>
+        ) : null}
+      </span>
       <Button type="button" size="sm" variant="outline" onClick={() => setIsEditing(true)}>
         Editar
       </Button>
@@ -455,6 +468,14 @@ function MaterialColorForm({
   onDone: () => void;
 }) {
   const [values, setValues] = useState<MaterialColorInput>(initialValues);
+  // Independente de `allowsDualColor` (flag do Material inteiro — ex.:
+  // "Plástico" permite dual-color): a maioria das cores cadastradas ainda é
+  // sólida, só algumas são realmente dual-color (filamento dual custa mais).
+  // Bug real: antes, `allowsDualColor` sozinho já bastava pra sempre mostrar
+  // e enviar uma 2ª cor (um <input type="color"> nunca fica vazio), então
+  // não dava pra cadastrar uma cor sólida sob um material que permite dual.
+  // Esse checkbox decide por COR, não por material.
+  const [isDualColor, setIsDualColor] = useState(Boolean(initialValues.hexColorSecondary));
   const [isPending, startTransition] = useTransition();
 
   function update<K extends keyof MaterialColorInput>(key: K, value: MaterialColorInput[K]) {
@@ -463,7 +484,11 @@ function MaterialColorForm({
 
   function handleSubmit() {
     startTransition(async () => {
-      const ok = await runAction(() => onSubmit(values), "Cor salva.");
+      const input: MaterialColorInput = {
+        ...values,
+        hexColorSecondary: isDualColor ? (values.hexColorSecondary ?? "#f97316") : null,
+      };
+      const ok = await runAction(() => onSubmit(input), "Cor salva.");
       if (ok) onDone();
     });
   }
@@ -479,6 +504,17 @@ function MaterialColorForm({
         <Input type="color" value={values.hexColor} onChange={(e) => update("hexColor", e.target.value)} className="w-16 p-1" />
       </div>
       {allowsDualColor ? (
+        <label className="flex items-center gap-1.5 pb-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isDualColor}
+            onChange={(e) => setIsDualColor(e.target.checked)}
+            className="size-4"
+          />
+          Cor dupla (dual-color)
+        </label>
+      ) : null}
+      {allowsDualColor && isDualColor ? (
         <div className="flex flex-col gap-1.5">
           <Label>2ª cor</Label>
           <Input
@@ -489,6 +525,22 @@ function MaterialColorForm({
           />
         </div>
       ) : null}
+      <div className="flex flex-col gap-1.5">
+        {/* Slider mostrado como "transparência" (0% = opaco de sempre, mais
+        pra direita = mais transparente) pro admin pensar do jeito natural —
+        o valor salvo continua sendo `opacity` (1 = opaco), que é o que o
+        preview 3D e o CSS de opacidade esperam. */}
+        <Label>Transparência ({Math.round((1 - values.opacity) * 100)}%)</Label>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={1 - values.opacity}
+          onChange={(e) => update("opacity", 1 - Number(e.target.value))}
+          className="w-32"
+        />
+      </div>
       <div className="flex gap-2">
         <Button type="button" size="sm" disabled={isPending || !values.name.trim()} onClick={handleSubmit}>
           {isPending ? "Salvando..." : "Salvar"}
@@ -502,7 +554,7 @@ function MaterialColorForm({
 }
 
 function NewMaterialColorForm({ materialTypeId, allowsDualColor }: { materialTypeId: string; allowsDualColor: boolean }) {
-  const EMPTY: MaterialColorInput = { name: "", hexColor: "#2563eb", hexColorSecondary: "#f97316" };
+  const EMPTY: MaterialColorInput = { name: "", hexColor: "#2563eb", hexColorSecondary: null, opacity: 1 };
   const [values, setValues] = useState<MaterialColorInput>(EMPTY);
   const [isOpen, setIsOpen] = useState(false);
 

@@ -9,6 +9,7 @@ function makeColor(id: string, name: string, overrides: Partial<MaterialColor> =
     name,
     hexColor: "#2563eb",
     hexColorSecondary: null,
+    opacity: 1,
     materialName: "Plástico",
     printProcess: "fdm",
     postProcessingFeeCents: 0,

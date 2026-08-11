@@ -16,6 +16,50 @@ import { encodeSelectionForShareUrl, SHARE_SELECTION_PARAM } from "../selection-
 import type { MaterialColor, Product, ProductPartRegion, ProductSelection } from "../types";
 import { ProductViewer3D, type ViewerPart } from "./product-viewer-3d";
 
+function swatchBackground(color: MaterialColor): string {
+  return color.hexColorSecondary
+    ? `linear-gradient(135deg, ${color.hexColor} 50%, ${color.hexColorSecondary} 50%)`
+    : (color.hexColor ?? "#a1a1aa");
+}
+
+function ColorSwatchButton({
+  color,
+  isSelected,
+  onSelect,
+}: {
+  color: MaterialColor;
+  isSelected: boolean;
+  onSelect: (colorId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={color.name}
+      aria-label={color.name}
+      aria-pressed={isSelected}
+      onClick={() => onSelect(color.id)}
+      className={`size-9 rounded-full bg-[length:8px_8px] bg-[image:repeating-conic-gradient(#d4d4d4_0%_25%,transparent_0%_50%)] transition-shadow ${
+        isSelected
+          ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+          : "ring-1 ring-border hover:ring-foreground/30"
+      }`}
+    >
+      {/* Camada separada pra cor por cima do fundo quadriculado — assim uma
+      cor com opacity < 1 (resina translúcida) deixa o quadriculado aparecer
+      através dela, em vez de só parecer uma cor mais pálida/lavada. */}
+      <span
+        className="block size-full rounded-full"
+        style={{ background: swatchBackground(color), opacity: color.opacity }}
+      />
+    </button>
+  );
+}
+
+// Agrupa por Tipo (não só por Material) — dois tipos do mesmo Material (ex.:
+// Plástico → PLA e ABS) têm preço/velocidade diferentes, então a separação
+// visual ajuda mesmo dentro do mesmo Material. Um separador aparece só
+// quando a parte realmente aceita mais de um grupo — a maioria das peças
+// tem um só, e não faz sentido mostrar um rótulo repetindo o que já esperado.
 export function ColorSwatches({
   colors,
   selectedId,
@@ -25,48 +69,50 @@ export function ColorSwatches({
   selectedId: string | undefined;
   onSelect: (colorId: string) => void;
 }) {
+  const groups = useMemo(() => {
+    const byType = new Map<string, { label: string; colors: MaterialColor[] }>();
+    for (const color of colors) {
+      const key = color.type.id;
+      const group = byType.get(key);
+      if (group) group.colors.push(color);
+      else byType.set(key, { label: `${color.materialName} · ${color.type.name}`, colors: [color] });
+    }
+    return [...byType.values()];
+  }, [colors]);
+
   return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {colors.map((color) => {
-        const isSelected = selectedId === color.id;
-        return (
-          <button
-            key={color.id}
-            type="button"
-            title={color.name}
-            aria-label={color.name}
-            aria-pressed={isSelected}
-            onClick={() => onSelect(color.id)}
-            className={`size-9 rounded-full transition-shadow ${
-              isSelected
-                ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                : "ring-1 ring-border hover:ring-foreground/30"
-            }`}
-            style={{
-              background: color.hexColorSecondary
-                ? `linear-gradient(135deg, ${color.hexColor} 50%, ${color.hexColorSecondary} 50%)`
-                : (color.hexColor ?? "#a1a1aa"),
-            }}
-          />
-        );
-      })}
+    <div className="mt-2 flex flex-col gap-3">
+      {groups.map((group) => (
+        <div key={group.label}>
+          {groups.length > 1 ? (
+            <p className="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              {group.label}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {group.colors.map((color) => (
+              <ColorSwatchButton key={color.id} color={color} isSelected={selectedId === color.id} onSelect={onSelect} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-// Fase 3 do ROADMAP.md: explica pra que a cor/tipo escolhido é indicado
-// (ex.: "Cristal: translúcida, ótima pra decoração") — texto livre que o
-// admin escreve por Tipo em /admin/materiais. Sem descrição cadastrada,
-// não mostra nada (não força um texto genérico).
+// Fase 3 do ROADMAP.md: mostra o nome da cor selecionada (sempre) + explica
+// pra que o Tipo é indicado quando o admin cadastrou uma descrição (ex.:
+// "Cristal: translúcida, ótima pra decoração") — texto livre em
+// /admin/materiais. Sem descrição, mostra só o nome, nunca inventa texto.
 export function MaterialTypeDescription({ color }: { color: MaterialColor | undefined }) {
-  if (!color?.type.description) return null;
+  if (!color) return null;
 
   return (
     <p className="mt-2 text-xs text-muted-foreground">
       <span className="font-medium text-foreground">
-        {color.materialName} · {color.type.name}:
-      </span>{" "}
-      {color.type.description}
+        {color.materialName} · {color.type.name} · {color.name}
+      </span>
+      {color.type.description ? <>: {color.type.description}</> : null}
     </p>
   );
 }
@@ -199,6 +245,7 @@ export function ProductConfigurator({
       color: color?.hexColor ?? "#a1a1aa",
       colorSecondary: color?.hexColorSecondary ?? null,
       printProcess: color?.printProcess,
+      opacity: color?.opacity,
     };
   });
 
@@ -398,7 +445,12 @@ export function ProductConfigurator({
           );
         })}
 
-        <div className="mt-auto rounded-xl bg-muted/40 p-4">
+        {/* Antes ficava "mt-auto" (grudado no rodapé da coluna, que estica
+        até a altura do preview 3D à esquerda) — isso deixava um vão enorme
+        entre as cores e o preço em produtos com pouco conteúdo à direita.
+        Agora fica logo depois das cores, e "sticky" mantém visível ao rolar
+        a página (comum em loja: preço/comprar sempre à vista). */}
+        <div className="sticky top-6 rounded-xl bg-muted/40 p-4">
           <p className="text-2xl font-semibold">{priceCents !== null ? formatPriceCents(priceCents) : "—"}</p>
           <Button className="mt-4 w-full" size="lg" disabled={priceCents === null} onClick={handleAddToCart}>
             Adicionar ao carrinho

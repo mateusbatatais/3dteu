@@ -1,0 +1,1 @@
+ALTER TABLE "material_colors" ADD COLUMN "opacity" numeric(3, 2) DEFAULT '1' NOT NULL;

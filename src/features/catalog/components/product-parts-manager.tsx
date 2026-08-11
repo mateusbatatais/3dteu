@@ -32,6 +32,7 @@ interface MaterialColorOption {
   name: string;
   hexColor: string | null;
   hexColorSecondary: string | null;
+  opacity?: number;
   materialName: string;
   typeName: string;
   printProcess?: MaterialPrintProcess;
@@ -118,6 +119,7 @@ export function ProductPartsManager({
                       color: defaultColor?.hexColor ?? "#a1a1aa",
                       colorSecondary: defaultColor?.hexColorSecondary ?? null,
                       printProcess: defaultColor?.printProcess,
+                      opacity: defaultColor?.opacity,
                     }}
                   />
                   <div className="flex-1">

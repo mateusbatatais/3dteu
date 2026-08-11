@@ -238,6 +238,11 @@ export const materialColors = pgTable("material_colors", {
   // Só permitido quando materials.allowsDualColor = true pro material dono
   // do tipo desta cor (validado em material-actions.ts, nunca só no form).
   hexColorSecondary: text("hex_color_secondary"),
+  // 1 = opaco (padrão, comportamento de sempre). Menor que 1 deixa a peça
+  // translúcida no preview 3D — pensado pra resina tipo "Cristal", mas
+  // disponível em qualquer cor (numeric pra permitir qualquer grau, não só
+  // "transparente sim/não").
+  opacity: numeric("opacity", { precision: 3, scale: 2 }).default("1").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

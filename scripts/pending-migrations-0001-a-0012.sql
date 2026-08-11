@@ -1,4 +1,4 @@
--- SQL idempotente cobrindo TODAS as migrações pendentes (0001 a 0011).
+-- SQL idempotente cobrindo TODAS as migrações pendentes (0001 a 0012).
 -- Seguro rodar de uma vez no SQL Editor do Supabase, mesmo que parte já
 -- tenha sido aplicada antes (manualmente ou em rodadas anteriores) — cada
 -- bloco usa IF NOT EXISTS / DO $$ ... EXCEPTION WHEN duplicate_object pra
@@ -271,3 +271,8 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN
   ALTER TABLE "custom_model_requests" ADD CONSTRAINT "custom_model_requests_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE set null ON UPDATE no action;
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- ---------------------------------------------------------------------
+-- 0012: transparência por cor (resina translúcida tipo "Cristal")
+-- ---------------------------------------------------------------------
+ALTER TABLE "material_colors" ADD COLUMN IF NOT EXISTS "opacity" numeric(3, 2) DEFAULT '1' NOT NULL;

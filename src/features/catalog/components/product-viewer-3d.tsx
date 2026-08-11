@@ -42,6 +42,8 @@ export interface ViewerPart {
   regions?: Array<{ paintState: number; color: string }>;
   /** Muda o acabamento do material no preview (fosco/FDM vs liso e brilhante/resina) — undefined cai no fosco padrão. */
   printProcess?: MaterialPrintProcess;
+  /** 1 (ou undefined) = opaco. Menor que 1 deixa a peça translúcida — pra resina tipo "Cristal". Regiões pintadas (MMU) não suportam isso, é recurso específico de FDM. */
+  opacity?: number;
 }
 
 // Diferenciação visual por processo de impressão (Fase 2 do ROADMAP.md):
@@ -67,11 +69,21 @@ function buildPartMaterial(
   colorSecondary?: string | null,
   geometry?: THREE.BufferGeometry,
   printProcess?: MaterialPrintProcess,
+  opacity?: number,
 ): THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial {
   const material =
     printProcess === "resin"
       ? new THREE.MeshPhysicalMaterial({ color, ...RESIN_MATERIAL_PROPS })
       : new THREE.MeshStandardMaterial({ color, ...FDM_MATERIAL_PROPS });
+
+  // `transparent` precisa estar ligado pro WebGL respeitar `opacity` < 1 —
+  // deixado desligado (padrão) pra peças opacas não pagarem o custo extra
+  // de blending por engano.
+  if (opacity !== undefined && opacity < 1) {
+    material.transparent = true;
+    material.opacity = opacity;
+  }
+
   if (!colorSecondary || !geometry) return material;
 
   geometry.computeBoundingBox();
@@ -115,15 +127,16 @@ interface PartColorProps {
   color: string;
   colorSecondary?: string | null;
   printProcess?: MaterialPrintProcess;
+  opacity?: number;
 }
 
 // STL só descreve geometria (sem cor/material), então basta aplicar a cor
 // escolhida direto no material — sem precisar clonar/percorrer uma cena.
-function StlPart({ meshUrl, color, colorSecondary, printProcess }: PartColorProps) {
+function StlPart({ meshUrl, color, colorSecondary, printProcess, opacity }: PartColorProps) {
   const geometry = useLoader(STLLoader, meshUrl);
   const material = useMemo(
-    () => buildPartMaterial(color, colorSecondary, geometry, printProcess),
-    [geometry, color, colorSecondary, printProcess],
+    () => buildPartMaterial(color, colorSecondary, geometry, printProcess, opacity),
+    [geometry, color, colorSecondary, printProcess, opacity],
   );
 
   return <mesh geometry={geometry} material={material} />;
@@ -138,30 +151,31 @@ function retint(
   color: string,
   colorSecondary?: string | null,
   printProcess?: MaterialPrintProcess,
+  opacity?: number,
 ): THREE.Object3D {
   const clone = object.clone(true);
   clone.traverse((child) => {
     if (child instanceof THREE.Mesh) {
-      child.material = buildPartMaterial(color, colorSecondary, child.geometry, printProcess);
+      child.material = buildPartMaterial(color, colorSecondary, child.geometry, printProcess, opacity);
     }
   });
   return clone;
 }
 
-function ObjPart({ meshUrl, color, colorSecondary, printProcess }: PartColorProps) {
+function ObjPart({ meshUrl, color, colorSecondary, printProcess, opacity }: PartColorProps) {
   const object = useLoader(OBJLoader, meshUrl);
   const tinted = useMemo(
-    () => retint(object, color, colorSecondary, printProcess),
-    [object, color, colorSecondary, printProcess],
+    () => retint(object, color, colorSecondary, printProcess, opacity),
+    [object, color, colorSecondary, printProcess, opacity],
   );
   return <primitive object={tinted} />;
 }
 
-function ThreeMfPart({ meshUrl, color, colorSecondary, printProcess }: PartColorProps) {
+function ThreeMfPart({ meshUrl, color, colorSecondary, printProcess, opacity }: PartColorProps) {
   const object = useLoader(ThreeMFLoader, meshUrl);
   const tinted = useMemo(
-    () => retint(object, color, colorSecondary, printProcess),
-    [object, color, colorSecondary, printProcess],
+    () => retint(object, color, colorSecondary, printProcess, opacity),
+    [object, color, colorSecondary, printProcess, opacity],
   );
   return <primitive object={tinted} />;
 }
@@ -184,23 +198,63 @@ function MmuPart({ meshUrl, regions }: { meshUrl: string; regions: NonNullable<V
 }
 
 // Usado enquanto a parte ainda não tem um arquivo 3D cadastrado no admin.
-function PlaceholderPart({ color, colorSecondary }: { color: string; colorSecondary?: string | null }) {
+//
+// Material construído via useMemo (instância nova a cada troca de cor/
+// opacidade), não via <meshStandardMaterial> declarativo — descoberto na
+// prática que o react-three-fiber, ao mutar `transparent`/`opacity` num
+// material JÁ existente via prop-diff, não força o WebGLRenderer a recompor
+// a lista de objetos transparentes (precisaria de `material.needsUpdate =
+// true`, que o r3f não aplica sozinho pra essas props) — o resultado visual
+// fica idêntico ao opaco, mesmo com os valores corretos já gravados no
+// objeto (confirmado inspecionando o material real na cena via Playwright).
+// Trocar a instância inteira a cada mudança (mesmo padrão já usado em
+// `buildPartMaterial`/`StlPart` pro mesh real) evita o bug por completo.
+function PlaceholderPart({
+  color,
+  colorSecondary,
+  opacity,
+}: {
+  color: string;
+  colorSecondary?: string | null;
+  opacity?: number;
+}) {
+  const material = useMemo(() => {
+    const mat = new THREE.MeshStandardMaterial({ color });
+    if (opacity !== undefined && opacity < 1) {
+      mat.transparent = true;
+      mat.opacity = opacity;
+    }
+    return mat;
+  }, [color, opacity]);
+
+  const secondaryMaterial = useMemo(() => {
+    if (!colorSecondary) return null;
+    const mat = new THREE.MeshStandardMaterial({ color: colorSecondary });
+    if (opacity !== undefined && opacity < 1) {
+      mat.transparent = true;
+      mat.opacity = opacity;
+    }
+    return mat;
+  }, [colorSecondary, opacity]);
+
   return (
     <group>
-      <RoundedBox args={[1, 1, 1]} radius={0.15} smoothness={4}>
-        <meshStandardMaterial color={color} />
-      </RoundedBox>
-      {colorSecondary ? (
-        <RoundedBox args={[1.02, 0.2, 1.02]} radius={0.08} smoothness={4} position={[0, 0.5, 0]}>
-          <meshStandardMaterial color={colorSecondary} />
-        </RoundedBox>
+      <RoundedBox args={[1, 1, 1]} radius={0.15} smoothness={4} material={material} />
+      {secondaryMaterial ? (
+        <RoundedBox
+          args={[1.02, 0.2, 1.02]}
+          radius={0.08}
+          smoothness={4}
+          position={[0, 0.5, 0]}
+          material={secondaryMaterial}
+        />
       ) : null}
     </group>
   );
 }
 
 function Part({ part }: { part: ViewerPart }) {
-  const placeholder = <PlaceholderPart color={part.color} colorSecondary={part.colorSecondary} />;
+  const placeholder = <PlaceholderPart color={part.color} colorSecondary={part.colorSecondary} opacity={part.opacity} />;
 
   if (!part.meshUrl) {
     return placeholder;
@@ -209,19 +263,38 @@ function Part({ part }: { part: ViewerPart }) {
   const extension = getMeshExtension(part.meshUrl);
   let content;
   if (part.regions && part.regions.length > 0) {
+    // Regiões pintadas (MMU) não suportam opacidade — é recurso de FDM, ver ViewerPart.opacity.
     content = <MmuPart meshUrl={part.meshUrl} regions={part.regions} />;
   } else if (extension === "obj") {
     content = (
-      <ObjPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} printProcess={part.printProcess} />
+      <ObjPart
+        meshUrl={part.meshUrl}
+        color={part.color}
+        colorSecondary={part.colorSecondary}
+        printProcess={part.printProcess}
+        opacity={part.opacity}
+      />
     );
   } else if (extension === "3mf") {
     content = (
-      <ThreeMfPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} printProcess={part.printProcess} />
+      <ThreeMfPart
+        meshUrl={part.meshUrl}
+        color={part.color}
+        colorSecondary={part.colorSecondary}
+        printProcess={part.printProcess}
+        opacity={part.opacity}
+      />
     );
   } else {
     // STL é o padrão — também cai aqui se a extensão vier ausente/desconhecida.
     content = (
-      <StlPart meshUrl={part.meshUrl} color={part.color} colorSecondary={part.colorSecondary} printProcess={part.printProcess} />
+      <StlPart
+        meshUrl={part.meshUrl}
+        color={part.color}
+        colorSecondary={part.colorSecondary}
+        printProcess={part.printProcess}
+        opacity={part.opacity}
+      />
     );
   }
 

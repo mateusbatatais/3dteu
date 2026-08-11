@@ -2410,6 +2410,160 @@ disse "esfera", o bug do cubo provou que não), ler o código-fonte real da
 lib antes de tentar mais um ajuste de valor no escuro — resolveu de
 primeira depois disso, em vez de mais uma rodada de tentativa e erro.
 
+### Rodada 36: mais formatos de imagem (AVIF), exclusão segura de material, bug do dual-color, transparência de cor + polimento do configurador
+
+Leva de pedidos menores encadeados na mesma sessão.
+
+**Mais formatos de imagem no admin**: usuário pediu suporte a AVIF (além do
+WebP que já existia) pra upload de produto/categoria/material. `AVIF`
+adicionado a `ALLOWED_MEDIA_EXTENSIONS`
+(`src/lib/supabase/storage-constants.ts`); consolidei dois mapas
+`CONTENT_TYPE_BY_EXTENSION` duplicados (um em
+`product-images-manager.tsx`, outro em `category-image-upload.tsx`) num
+único `MEDIA_CONTENT_TYPE_BY_EXTENSION` compartilhado, e troquei várias
+mensagens de erro hardcoded ("Use jpg, png, webp ou gif") por texto
+derivado da própria lista de extensões permitidas — evita esse tipo de
+mensagem ficar desatualizada de novo na próxima extensão nova.
+Confirmado que materiais não têm upload de imagem (cores são só hex),
+nada a mudar lá.
+
+**Exclusão de material sem checagem de uso (bug real, não hipotético)**:
+usuário perguntou "se eu deletar um material que tá em uso, o que
+acontece? e se for o padrão de uma parte?" — investigando,
+`deleteMaterialColor`/`Type`/`Material` não tinham NENHUMA checagem: o
+`ON DELETE CASCADE`/`SET NULL` do banco simplesmente apagava a atribuição
+silenciosamente, sem avisar o admin do impacto. Perguntei ao usuário o
+comportamento desejado; resposta (não uma das opções sugeridas, texto
+livre): "deixa excluir e remove do produto. se for a cor padrão, pergunta
+por qual cor deve substituir". Implementado exatamente isso:
+- `getMaterialColorDeletionImpact(colorIds)` (`queries.ts`) — lista toda
+  parte/região que tem uma dessas cores como padrão, com as cores
+  restantes disponíveis pra reatribuir.
+- `checkMaterialColorDeletionImpact`/`checkMaterialTypeDeletionImpact`/
+  `checkMaterialDeletionImpact` (`material-actions.ts`) — versões pra cada
+  nível da hierarquia (excluir um Tipo ou um Material inteiro afeta todas
+  as cores dele de uma vez).
+- `deleteMaterial`/`deleteMaterialType`/`deleteMaterialColor` passaram a
+  aceitar uma lista de `{ kind, id, newDefaultColorId }` e rodam a
+  reatribuição + o delete na MESMA transação (`db.transaction`) — nunca os
+  dois separados, pra não ter um estado intermediário inconsistente se o
+  segundo passo falhar.
+- `ConfirmDeleteMaterialButton` (novo componente) — ao abrir o diálogo,
+  chama o `checkImpact()` correspondente; sem impacto, é uma confirmação
+  normal; com impacto, mostra cada parte/região afetada com um `Select`
+  pra escolher a cor substituta (ou "nenhuma", via sentinel
+  `NO_DEFAULT_VALUE`) antes de liberar o "Confirmar exclusão".
+
+**Bug real do dual-color (achado no meio da mesma leva)**: usuário
+reportou "todo plástico que cadastro só permite duas cores" — causa raiz:
+o campo "2ª cor" (`<input type="color">`) NUNCA fica vazio no navegador,
+então mesmo escolhendo criar uma cor sólida sob um Material com
+`allowsDualColor=true`, o formulário sempre mandava um `hexColorSecondary`
+de verdade, e a action salvava sem questionar — todo material sob um
+Material dual-color virava dual-color na prática, sem o admin escolher
+isso. Fix: checkbox "Cor dupla (dual-color)" NOVO por cor (não mais só a
+flag do Material), inicializado a partir de `Boolean(hexColorSecondary)` —
+o campo "2ª cor" só aparece quando o checkbox está marcado. Achei e
+corrigi de brinde um bug secundário no mesmo código: dois lugares usavam
+`?? "#f97316"` como fallback de `hexColorSecondary`, o que fazia esse
+fallback SEMPRE truthy e o checkbox nascer marcado por engano mesmo pra
+cores que eram `null` de verdade — trocado pra preservar o `null` real.
+
+**Transparência de cor (pra resina tipo "Cristal")**: nova coluna
+`material_colors.opacity` (migração `0012_soft_mole_man.sql`, numeric(3,2)
+default 1, aditiva) — 1 = opaco de sempre, menor que 1 deixa a peça
+translúcida no preview 3D. Slider "Transparência" no formulário de cor do
+admin (exibido como `100% - opacity` pra ficar intuitivo: "80% de
+transparência" em vez de "0.2 de opacidade"). Threading completo até o
+viewer: `MaterialColor`/`ViewerPart`/`PartColorProps` ganharam `opacity`,
+`buildPartMaterial()` liga `material.transparent=true` +
+`material.opacity` quando `< 1`.
+
+**Bug real e nada óbvio pego durante o teste** (não teria achado sem
+comparar duas capturas de tela pixel a pixel): a primeira versão de
+`PlaceholderPart` (usado enquanto a parte não tem arquivo 3D — o caso do
+produto mockado testado) aplicava opacidade via
+`<meshStandardMaterial transparent={...} opacity={...} />`
+**declarativo**, igual a qualquer outra prop React-Three-Fiber. Isso NÃO
+funciona nesta versão de r3f: `applyProps` mutava corretamente
+`material.transparent`/`.opacity` na instância real (confirmado
+inspecionando o objeto Three.js de verdade via um hook de debug
+temporário), mas sem `material.needsUpdate = true`, o `WebGLRenderer`
+nunca reclassifica o objeto pra fila de renderização "transparente" —
+resultado: visualmente idêntico ao opaco, não importa o valor de opacity
+(testei até com 0.05, praticamente invisível — zero diferença). Confirmei
+isolando num R3F mínimo (só um `<mesh><boxGeometry/><meshStandardMaterial
+transparent opacity/></mesh>`, sem nenhum código deste projeto) que o
+mesmo bug se reproduz — não é peculiaridade de `PlaceholderPart`, é do
+padrão declarativo em si nesta versão de r3f/three. Mutar o mesmo material
+via `page.evaluate()` direto (bypassando React) reproduziu a transparência
+corretamente, confirmando que o problema é a ausência do
+`needsUpdate`/recriação, não o WebGL em si. **Fix**: `PlaceholderPart`
+passou a construir o material via `useMemo` (nova instância a cada troca
+de cor/opacidade) e anexar via prop `material={...}` do `<RoundedBox>`, em
+vez de JSX declarativo mutável — o mesmo padrão que `buildPartMaterial()`
+já usava pra STL/OBJ/3MF reais (por isso esses nunca tiveram esse bug: já
+recriavam o material do zero a cada mudança via `useMemo`). Confirmado via
+Playwright que as duas capturas (opaco vs. opacity 0.35) agora produzem
+arquivos PNG genuinamente diferentes — antes do fix eram **byte-a-byte
+idênticos**, uma prova bem mais forte que "parece igual" de que o bug era
+real e o fix funcionou. `MmuPart` (regiões pintadas) não foi tocado —
+continua sem suporte a opacidade, decisão já registrada na rodada 12/30
+(recurso específico de resina, MMU é FDM).
+
+**4 melhorias pedidas na tela de produto**, todas na mesma leva:
+1. **Separador por Tipo de material**: `ColorSwatches` agora agrupa as
+   cores por `color.type.id` (não só por Material — Plástico→PLA e
+   Plástico→ABS viram grupos separados, já que têm preço/descrição
+   diferentes), com um rótulo "Material · Tipo" acima de cada grupo — só
+   aparece quando há mais de um grupo, pra não repetir informação óbvia
+   no caso comum de uma parte com um material só.
+2. **Nome da cor sempre visível**: `MaterialTypeDescription` mostra
+   "Material · Tipo · Cor" sempre que alguma cor está selecionada (não só
+   quando o Tipo tem descrição cadastrada, como na rodada 31) — a
+   descrição (quando existe) some no final, mas o nome nunca falta.
+3. **Swatch com preview de transparência real**: `ColorSwatchButton`
+   ganhou um fundo quadriculado (`repeating-conic-gradient`) atrás de uma
+   camada de cor com `opacity` aplicada via CSS — uma cor de resina
+   translúcida mostra o quadriculado por trás em vez de só parecer uma
+   cor mais pálida.
+4. **Espaço vazio entre cores e preço**: a caixa de preço/botões usava
+   `mt-auto` (grudava no fim da coluna, que esticava até a altura do
+   preview 3D à esquerda) — trocado por `sticky top-6`, eliminando o vão
+   e mantendo o preço visível ao rolar a página (padrão comum de loja).
+
+**Testado com Playwright contra uma página mockada** (produto com 3 cores
+de Plástico em 2 Tipos — PLA e ABS — e uma cor de Resina Cristal
+translúcida): confirmei os 3 grupos com rótulo certo
+("Plástico · PLA"/"Plástico · ABS"/"Resina · Cristal"), o texto completo
+"Resina · Cristal · Transparente: Translúcida, ótima pra decoração..." ao
+selecionar a cor translúcida, o nome "Plástico · PLA · Azul" ao selecionar
+uma cor sem descrição, a opacidade 0.35 aplicada de verdade no `<span>` do
+swatch, e a caixa de preço permanecendo visível (sticky) depois de rolar
+300px — zero erros de console em todos os passos. `npm run lint`, `npx
+tsc --noEmit`, `npm run test` (10/10) e `npm run build` (`.next` limpo)
+passaram limpos depois do fix do bug de opacidade.
+
+**Pendente**: rodar a migração `0012` contra o Supabase real — atualizei
+`scripts/pending-migrations-0001-a-0012.sql` (renomeado de
+`...-0011.sql`) pra incluir esse `ALTER TABLE` novo, então um usuário que
+ainda não rodou nada das rodadas 10-32 só precisa desse arquivo único
+atualizado; quem já rodou até a 0011 só precisa da linha nova
+(`ALTER TABLE "material_colors" ADD COLUMN IF NOT EXISTS "opacity"
+numeric(3, 2) DEFAULT '1' NOT NULL;`).
+
+**Ainda não iniciado (grande, aguardando esta ser a próxima rodada)**: o
+usuário confirmou explicitamente ("Sim, calcular ao vivo por
+material/cor") que quer reverter a decisão da Fase 1 (rodada 28) de preço
+fixo por produto — o preço deve mudar ao vivo conforme o cliente troca de
+material/cor no configurador, não só ao trocar tamanho. Isso é uma mudança
+de arquitetura maior (precisa de peso/altura por PARTE, não só agregado
+por produto; conceito de taxa extra por dual-color; recalcular
+`calculateProductPriceCents` incluindo o custo do material de cada parte
+selecionada) — nada implementado ainda, planejar com cuidado antes de
+mexer, dado que envolve a mesma fórmula de preço já usada no checkout de
+verdade.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

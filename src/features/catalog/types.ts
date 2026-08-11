@@ -20,6 +20,8 @@ export interface MaterialColor {
   materialName: string; // "Resina" | "Plástico" — pro texto explicativo (Fase 3) e diferenciação visual (Fase 2)
   printProcess: MaterialPrintProcess;
   postProcessingFeeCents: number;
+  /** 1 = opaco (padrão). Menor que 1 deixa a peça translúcida no preview 3D — pra resina tipo "Cristal". */
+  opacity: number;
   type: MaterialTypeInfo;
 }
 
