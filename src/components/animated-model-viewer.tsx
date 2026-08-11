@@ -87,8 +87,17 @@ export function AnimatedModelViewer({ src, className = "" }: { src: string; clas
             animação), então `observe` ficaria re-enquadrando a câmera a
             cada frame (a bounding box muda com o movimento). `fit clip`
             sem `observe` enquadra uma vez, no carregamento, e não mexe
-            mais depois. */}
-            <Bounds fit clip margin={1.4}>
+            mais depois.
+            Margin baixo (perto de 1, sem quase nenhuma folga): o Bounds
+            calcula a distância pela ESFERA que envolve a caixa do objeto
+            (não só a caixa em si), pra nunca cortar nada enquanto o
+            OrbitControls gira a câmera ao redor — isso é ainda mais
+            conservador pra um objeto alongado (ex.: um carro, bem mais
+            comprido num eixo que nos outros), onde a esfera fica bem maior
+            que a "vista de frente" do objeto e ele acaba parecendo pequeno
+            dentro do quadro — ver verificação real (rotação completa, sem
+            corte em nenhum ângulo) na rodada correspondente do CLAUDE.md. */}
+            <Bounds fit clip margin={1.1}>
               <AnimatedGltf src={src} />
             </Bounds>
             <Environment preset="city" />
