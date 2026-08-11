@@ -6,17 +6,16 @@ import { useId, useState, useTransition } from "react";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { getMediaExtension, MAX_MEDIA_FILE_SIZE_BYTES, MEDIA_BUCKET } from "@/lib/supabase/storage-constants";
+import {
+  ALLOWED_MEDIA_EXTENSIONS,
+  ALLOWED_MEDIA_EXTENSIONS_ACCEPT,
+  getMediaExtension,
+  MAX_MEDIA_FILE_SIZE_BYTES,
+  MEDIA_BUCKET,
+  MEDIA_CONTENT_TYPE_BY_EXTENSION,
+} from "@/lib/supabase/storage-constants";
 
 import { confirmProductImage, createProductImageUploadUrl, deleteProductImage } from "../actions";
-
-const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-  gif: "image/gif",
-};
 
 function formatMegabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
@@ -43,7 +42,7 @@ export function ProductImagesManager({ productId, images }: { productId: string;
     }
 
     if (!getMediaExtension(selected.name)) {
-      setError("Formato não suportado. Use jpg, png, webp ou gif.");
+      setError(`Formato não suportado. Use ${ALLOWED_MEDIA_EXTENSIONS.join(", ")}.`);
       setFile(null);
       event.target.value = "";
       return;
@@ -80,7 +79,7 @@ export function ProductImagesManager({ productId, images }: { productId: string;
       const { error: uploadError } = await supabase.storage
         .from(MEDIA_BUCKET)
         .uploadToSignedUrl(prepared.path, prepared.token, file, {
-          contentType: CONTENT_TYPE_BY_EXTENSION[extension],
+          contentType: MEDIA_CONTENT_TYPE_BY_EXTENSION[extension],
         });
       if (uploadError) {
         setError(`Falha ao enviar o arquivo: ${uploadError.message}`);
@@ -144,7 +143,7 @@ export function ProductImagesManager({ productId, images }: { productId: string;
           <span className="text-xs text-muted-foreground">Máximo {formatMegabytes(MAX_MEDIA_FILE_SIZE_BYTES)}</span>
         </div>
 
-        <input id={inputId} type="file" accept=".jpg,.jpeg,.png,.webp,.gif" onChange={handleFileChange} className="text-sm" />
+        <input id={inputId} type="file" accept={ALLOWED_MEDIA_EXTENSIONS_ACCEPT} onChange={handleFileChange} className="text-sm" />
 
         {file ? (
           <p className="text-xs text-muted-foreground">

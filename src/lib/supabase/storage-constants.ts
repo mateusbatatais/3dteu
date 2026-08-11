@@ -33,13 +33,30 @@ export const MEDIA_BUCKET = "product-media";
 // Fotos/gifs não precisam do teto de 50MB usado pra malha 3D.
 export const MAX_MEDIA_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
-export const ALLOWED_MEDIA_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif"] as const;
+export const ALLOWED_MEDIA_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "avif", "gif"] as const;
 export type MediaExtension = (typeof ALLOWED_MEDIA_EXTENSIONS)[number];
 
 export function getMediaExtension(filename: string): MediaExtension | null {
   const ext = filename.toLowerCase().split(".").pop();
   return (ALLOWED_MEDIA_EXTENSIONS as readonly string[]).includes(ext ?? "") ? (ext as MediaExtension) : null;
 }
+
+// Usado por qualquer upload direto pro Storage (signed URL) de foto/imagem —
+// produto, categoria, modelo customizado. Centralizado aqui (antes vivia
+// duplicado, igualzinho, em product-images-manager.tsx e
+// category-image-upload.tsx) pra nunca ficar desalinhado da lista acima.
+export const MEDIA_CONTENT_TYPE_BY_EXTENSION: Record<MediaExtension, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  avif: "image/avif",
+  gif: "image/gif",
+};
+
+// Extensões com ponto e vírgula, prontas pro atributo `accept` de um
+// `<input type="file">` (ex.: ".jpg,.jpeg,.png,.webp,.avif,.gif").
+export const ALLOWED_MEDIA_EXTENSIONS_ACCEPT = ALLOWED_MEDIA_EXTENSIONS.map((ext) => `.${ext}`).join(",");
 
 // Fase 4 do ROADMAP.md: fotos que o cliente sobe pra pedir um modelo 3D
 // customizado via IA — bucket separado do de mídia da loja (product-media)

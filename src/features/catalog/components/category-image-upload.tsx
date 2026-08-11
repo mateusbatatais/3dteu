@@ -6,17 +6,16 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { getMediaExtension, MAX_MEDIA_FILE_SIZE_BYTES, MEDIA_BUCKET } from "@/lib/supabase/storage-constants";
+import {
+  ALLOWED_MEDIA_EXTENSIONS,
+  ALLOWED_MEDIA_EXTENSIONS_ACCEPT,
+  getMediaExtension,
+  MAX_MEDIA_FILE_SIZE_BYTES,
+  MEDIA_BUCKET,
+  MEDIA_CONTENT_TYPE_BY_EXTENSION,
+} from "@/lib/supabase/storage-constants";
 
 import { confirmCategoryImage, createCategoryImageUploadUrl } from "../category-actions";
-
-const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-  gif: "image/gif",
-};
 
 function formatMegabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
@@ -41,7 +40,7 @@ export function CategoryImageUpload({ categoryId, imageUrl }: { categoryId: stri
     }
 
     if (!getMediaExtension(selected.name)) {
-      setError("Formato não suportado. Use jpg, png, webp ou gif.");
+      setError(`Formato não suportado. Use ${ALLOWED_MEDIA_EXTENSIONS.join(", ")}.`);
       setFile(null);
       event.target.value = "";
       return;
@@ -76,7 +75,7 @@ export function CategoryImageUpload({ categoryId, imageUrl }: { categoryId: stri
       const { error: uploadError } = await supabase.storage
         .from(MEDIA_BUCKET)
         .uploadToSignedUrl(prepared.path, prepared.token, file, {
-          contentType: CONTENT_TYPE_BY_EXTENSION[extension],
+          contentType: MEDIA_CONTENT_TYPE_BY_EXTENSION[extension],
         });
       if (uploadError) {
         setError(`Falha ao enviar o arquivo: ${uploadError.message}`);
@@ -113,7 +112,7 @@ export function CategoryImageUpload({ categoryId, imageUrl }: { categoryId: stri
 
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <input id={inputId} type="file" accept=".jpg,.jpeg,.png,.webp,.gif" onChange={handleFileChange} className="text-xs" />
+          <input id={inputId} type="file" accept={ALLOWED_MEDIA_EXTENSIONS_ACCEPT} onChange={handleFileChange} className="text-xs" />
           <Button type="button" size="sm" variant="outline" disabled={isPending || !file} onClick={handleUpload}>
             {isPending ? "Enviando..." : "Enviar"}
           </Button>

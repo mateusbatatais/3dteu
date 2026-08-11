@@ -41,7 +41,7 @@ export function NewCustomModelRequestForm() {
 
     for (const file of incoming) {
       if (!getMediaExtension(file.name)) {
-        setError(`"${file.name}" não é jpg/png/webp/gif.`);
+        setError(`"${file.name}" não é ${ALLOWED_MEDIA_EXTENSIONS.join("/")}.`);
         return;
       }
       if (file.size > MAX_CUSTOM_MODEL_PHOTO_BYTES) {

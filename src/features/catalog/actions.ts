@@ -511,7 +511,7 @@ export async function createProductImageUploadUrl(
 ): Promise<CreateMeshUploadUrlResult> {
   const normalizedExt = extension.toLowerCase().replace(/^\./, "");
   if (!(ALLOWED_MEDIA_EXTENSIONS as readonly string[]).includes(normalizedExt)) {
-    return { error: `Formato .${normalizedExt} não suportado. Use jpg, png, webp ou gif.` };
+    return { error: `Formato .${normalizedExt} não suportado. Use ${ALLOWED_MEDIA_EXTENSIONS.join(", ")}.` };
   }
 
   try {
