@@ -374,7 +374,8 @@ real nem contra a API da Woovi de verdade):**
   `drizzle/0002_flawless_runaways.sql`, `drizzle/0003_curvy_boom_boom.sql`,
   `drizzle/0004_empty_amphibian.sql`, `drizzle/0005_solid_lucky_pierre.sql`,
   `drizzle/0006_nappy_banshee.sql`, `drizzle/0007_tan_xavin.sql`,
-  `drizzle/0008_rapid_chamber.sql` e `drizzle/0009_tiny_zeigeist.sql` contra o
+  `drizzle/0008_rapid_chamber.sql`, `drizzle/0009_tiny_zeigeist.sql` e
+  `drizzle/0010_known_tarantula.sql` contra o
   Supabase real (`npm run db:migrate` ou colar o SQL no SQL Editor) — sem
   isso, nada da rodada 10 (Superfrete completo, imagens de produto), da
   rodada 12 (regiões pintadas), da rodada 13 (material padrão por parte),
@@ -382,11 +383,12 @@ real nem contra a API da Woovi de verdade):**
   cliente — `orders.customer_id` — e avaliações de produto —
   `product_reviews`), da rodada 18 (imagem de categoria —
   `categories.image_url`), da rodada 22 (`store_settings.price_per_gram_cents`/
-  `fixed_fee_cents`, usados pra sugerir preço a partir do peso estimado) nem
-  da rodada 28 (hierarquia de materiais Material→Tipo→Cor + calculadora de
+  `fixed_fee_cents`, usados pra sugerir preço a partir do peso estimado), da
+  rodada 28 (hierarquia de materiais Material→Tipo→Cor + calculadora de
   preço — a 0009 é a que mais precisa de atenção: reaponta cores já
   atribuídas em produtos existentes, ver o próprio comentário dentro do
-  arquivo SQL antes de rodar) funciona contra produção. Todas são só
+  arquivo SQL antes de rodar) nem da rodada 29 (materiais recomendados por
+  categoria) funciona contra produção. Todas são só
   aditivas (CREATE TABLE / ALTER TABLE ADD COLUMN), seguras. **Atenção
   pro mesmo problema da rodada 11**: se a 0001 já foi parcialmente aplicada
   antes, rodar de novo pode dar "already exists" num `CREATE TYPE` — nesse
@@ -1978,6 +1980,46 @@ de sempre — sem `DATABASE_URL` nesta sessão), incluindo se o `DELETE`/
 `UPDATE` de limpeza realmente evita a violação de FK num banco com dados
 de verdade. Primeira vez que o usuário rodar essa migração em produção é o
 teste real disso.
+
+### Rodada 29: Fase 1b — recomendar material por categoria
+
+Usuário confirmou as duas decisões em aberto da Fase 1 (preço único por
+produto está ok, sem repreçamento ao vivo por cor; desatribuir cores de
+produtos existentes na migração é aceitável) e pediu pra seguir direto pra
+próxima fase depois do commit/push.
+
+**Implementado**: tabela nova `category_recommended_material_types`
+(`category_id` + `material_type_id`, par único) — migração
+`0010_known_tarantula.sql`, pura adição, sem a dor de cabeça de rename
+ambíguo da rodada 28 (nada mudou de nome, só uma tabela nova). Em
+`/admin/categorias`, cada categoria ganhou uma seção "Materiais
+recomendados" (`CategoryMaterialRecommendations`, novo) com um checklist
+de todos os Tipos do catálogo — marcar um não restringe nada, só define o
+que vem pré-selecionado depois. Em `NewProductForm`, escolher uma
+categoria com recomendação configurada troca a seleção de cor de TODAS as
+peças pra só as cores dos tipos recomendados (com toast explicando),
+sobrescrevendo qualquer seleção manual anterior — decisão consciente: a
+categoria normalmente é a primeira coisa que o admin escolhe, antes de
+mexer em cores, então sobrescrever nesse momento é mais previsível do que
+tentar "mesclar" com o que já estava marcado. Categoria sem recomendação
+continua caindo no "marca tudo" de sempre (rodada 26), sem regressão.
+
+`getAllMaterialColorsForAdmin()` ganhou um campo `typeId` (antes só tinha
+`typeName`, um texto) — precisei do id de verdade pra comparar contra a
+lista de tipos recomendados; sem isso o front teria que casar por nome,
+frágil se dois materiais tiverem um tipo com o mesmo nome.
+
+**Testado**: Playwright contra `CategoryRow` e `NewProductForm` mockados —
+o checklist de recomendação mostra exatamente os tipos marcados
+(`Cristal` marcado, `PLA` não, batendo com o mock); selecionar a categoria
+"Decoração" (com Cristal recomendado) no cadastro de produto de fato
+desmarca `Azul` (PLA) e marca `Transparente` (Cristal) na peça, com o
+toast aparecendo. `npm run lint`, `npm run test` (10/10) e `npm run build`
+passaram limpos. Um aviso de console do Base UI sobre o `Select` de
+categoria mudando de uncontrolled pra controlled apareceu no teste, mas é
+pré-existente (o padrão `value={categoryId || undefined}` já vinha da
+rodada 26, não mexi nele) — não é uma regressão desta rodada, só não
+peguei antes por falta de teste real desse fluxo específico.
 
 ## Preferências do usuário (importante)
 

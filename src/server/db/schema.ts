@@ -252,6 +252,28 @@ export const productPartMaterialOptions = pgTable(
   ],
 );
 
+// Quais Tipos de material o admin recomenda pra produtos de uma categoria
+// (ex.: "Decoração" recomenda Resina Cristal + Plástico PLA) — Fase 1b do
+// ROADMAP.md. Recomendação no nível de Tipo, não de Cor específica: mais
+// simples de configurar ("recomendo PLA", não "recomendo o PLA azul"). Só
+// afeta o que vem marcado por padrão ao cadastrar um produto nessa
+// categoria — o admin sempre pode marcar outras cores manualmente.
+export const categoryRecommendedMaterialTypes = pgTable(
+  "category_recommended_material_types",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    materialTypeId: uuid("material_type_id")
+      .notNull()
+      .references(() => materialTypes.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("category_recommended_material_type_unique").on(table.categoryId, table.materialTypeId),
+  ],
+);
+
 export const sizeOptions = pgTable("size_options", {
   id: uuid("id").defaultRandom().primaryKey(),
   productId: uuid("product_id")
@@ -442,6 +464,18 @@ export const adminUsers = pgTable("admin_users", {
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
+  recommendedMaterialTypes: many(categoryRecommendedMaterialTypes),
+}));
+
+export const categoryRecommendedMaterialTypesRelations = relations(categoryRecommendedMaterialTypes, ({ one }) => ({
+  category: one(categories, {
+    fields: [categoryRecommendedMaterialTypes.categoryId],
+    references: [categories.id],
+  }),
+  materialType: one(materialTypes, {
+    fields: [categoryRecommendedMaterialTypes.materialTypeId],
+    references: [materialTypes.id],
+  }),
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({

@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createStorageClient, MEDIA_BUCKET } from "@/lib/supabase/storage";
 import { ALLOWED_MEDIA_EXTENSIONS, type MediaExtension } from "@/lib/supabase/storage-constants";
 import { db } from "@/server/db/client";
-import { categories } from "@/server/db/schema";
+import { categories, categoryRecommendedMaterialTypes } from "@/server/db/schema";
 
 export interface CategoryActionResult {
   error?: string;
@@ -74,6 +74,33 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
 export async function deleteCategory(id: string) {
   await db.delete(categories).where(eq(categories.id, id));
   await revalidateCategoryPages();
+}
+
+// Fase 1b do ROADMAP.md — quais Tipos de material o admin recomenda pra
+// produtos dessa categoria (só afeta o que vem marcado por padrão ao
+// cadastrar um produto, nunca restringe as opções). Substitui o conjunto
+// inteiro, mesmo padrão de setPartMaterials em catalog/actions.ts.
+export async function updateCategoryRecommendedMaterialTypes(
+  categoryId: string,
+  materialTypeIds: string[],
+): Promise<CategoryActionResult> {
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(categoryRecommendedMaterialTypes)
+        .where(eq(categoryRecommendedMaterialTypes.categoryId, categoryId));
+      if (materialTypeIds.length > 0) {
+        await tx
+          .insert(categoryRecommendedMaterialTypes)
+          .values(materialTypeIds.map((materialTypeId) => ({ categoryId, materialTypeId })));
+      }
+    });
+  } catch {
+    return { error: "Não foi possível salvar os materiais recomendados." };
+  }
+
+  revalidatePath("/admin/categorias");
+  return {};
 }
 
 export interface CategoryImageUploadResult {

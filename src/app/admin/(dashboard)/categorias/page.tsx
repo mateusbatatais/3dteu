@@ -1,10 +1,18 @@
 import { CategoryForm } from "@/features/catalog/components/category-form";
 import { CategoryRow } from "@/features/catalog/components/category-row";
 import { createCategory } from "@/features/catalog/category-actions";
-import { getCategories } from "@/features/catalog/queries";
+import { getCategories, getCategoryRecommendedMaterialTypesMap, getMaterialCatalog } from "@/features/catalog/queries";
 
 export default async function AdminCategoriasPage() {
-  const categoryList = await getCategories();
+  const [categoryList, materialCatalog, recommendationsMap] = await Promise.all([
+    getCategories(),
+    getMaterialCatalog(),
+    getCategoryRecommendedMaterialTypesMap(),
+  ]);
+
+  const allMaterialTypes = materialCatalog.flatMap((material) =>
+    material.types.map((type) => ({ id: type.id, name: type.name, materialName: material.name })),
+  );
 
   return (
     <div>
@@ -24,7 +32,12 @@ export default async function AdminCategoriasPage() {
       ) : (
         <div className="mt-6 flex flex-col gap-3">
           {categoryList.map((category) => (
-            <CategoryRow key={category.id} category={category} />
+            <CategoryRow
+              key={category.id}
+              category={category}
+              allMaterialTypes={allMaterialTypes}
+              recommendedTypeIds={recommendationsMap[category.id] ?? []}
+            />
           ))}
         </div>
       )}

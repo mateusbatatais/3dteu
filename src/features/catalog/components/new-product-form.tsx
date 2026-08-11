@@ -45,6 +45,7 @@ interface ColorOption {
   hexColor: string | null;
   hexColorSecondary: string | null;
   materialName: string;
+  typeId: string;
   typeName: string;
   printProcess: MaterialPrintProcess;
   postProcessingFeeCents: number;
@@ -88,10 +89,13 @@ function makePartDraft(key: string, name: string, allColorIds: string[]): PartDr
 export function NewProductForm({
   categories,
   allColors,
+  recommendedTypeIdsByCategory,
   pricingSettings,
 }: {
   categories: Array<{ id: string; name: string }>;
   allColors: ColorOption[];
+  /** Fase 1b do ROADMAP.md — categoryId -> materialTypeId[] recomendados. */
+  recommendedTypeIdsByCategory: Record<string, string[]>;
   pricingSettings: PricingSettings;
 }) {
   const router = useRouter();
@@ -169,6 +173,32 @@ export function NewProductForm({
   function handleNameChange(value: string) {
     setName(value);
     if (!slugTouched) setSlug(slugify(value));
+  }
+
+  // Fase 1b: escolher uma categoria com materiais recomendados troca a
+  // seleção padrão de cor de TODAS as peças pra só as cores dos tipos
+  // recomendados (em vez de "todas marcadas", padrão de quando a categoria
+  // não tem recomendação configurada) — o admin ainda pode marcar outras
+  // cores manualmente depois. Sobrescreve seleções já feitas de propósito:
+  // a categoria normalmente é a primeira coisa escolhida, antes de ajustar
+  // cores parte por parte.
+  function handleCategoryChange(value: string) {
+    setCategoryId(value);
+
+    const recommendedTypeIds = recommendedTypeIdsByCategory[value] ?? [];
+    if (recommendedTypeIds.length === 0) return;
+
+    const recommendedColorIds = allColors.filter((c) => recommendedTypeIds.includes(c.typeId)).map((c) => c.id);
+    if (recommendedColorIds.length === 0) return;
+
+    setParts((prev) =>
+      prev.map((part) => ({
+        ...part,
+        selectedColorIds: new Set(recommendedColorIds),
+        defaultColorId: recommendedColorIds[0],
+      })),
+    );
+    toast.success("Cores recomendadas pra esta categoria já vêm marcadas — ajuste se quiser outras.");
   }
 
   function updatePart(key: string, patch: Partial<PartDraft>) {
@@ -365,7 +395,7 @@ export function NewProductForm({
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="categoryId">Categoria</Label>
-          <Select value={categoryId || undefined} onValueChange={(value) => setCategoryId(value ?? "")}>
+          <Select value={categoryId || undefined} onValueChange={(value) => handleCategoryChange(value ?? "")}>
             <SelectTrigger id="categoryId" className="w-full">
               <SelectValue placeholder="Sem categoria" />
             </SelectTrigger>

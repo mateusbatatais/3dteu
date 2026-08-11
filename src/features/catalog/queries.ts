@@ -3,6 +3,7 @@ import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import {
   categories,
+  categoryRecommendedMaterialTypes,
   materialColors,
   materials,
   materialTypes,
@@ -99,6 +100,25 @@ export async function getCategoryBySlug(slug: string) {
 }
 
 /**
+ * Tipos de material recomendados por categoria (Fase 1b do ROADMAP.md) —
+ * um mapa `categoryId -> materialTypeId[]`, buscado de uma vez pra todas as
+ * categorias (evita N+1 tanto no admin de categorias quanto no cadastro de
+ * produto, que precisa saber a recomendação de qualquer categoria que o
+ * admin selecionar).
+ */
+export async function getCategoryRecommendedMaterialTypesMap(): Promise<Record<string, string[]>> {
+  const rows = await db
+    .select({ categoryId: categoryRecommendedMaterialTypes.categoryId, materialTypeId: categoryRecommendedMaterialTypes.materialTypeId })
+    .from(categoryRecommendedMaterialTypes);
+
+  const map: Record<string, string[]> = {};
+  for (const row of rows) {
+    (map[row.categoryId] ??= []).push(row.materialTypeId);
+  }
+  return map;
+}
+
+/**
  * Catálogo completo de materiais — Material (Resina/Plástico) → Tipo (PLA,
  * Cristal...) → Cor — usado no admin (CRUD de materiais) e em qualquer tela
  * que precise deixar escolher cores agrupadas por tipo (upload de arquivo,
@@ -135,6 +155,7 @@ export async function getAllMaterialColorsForAdmin() {
         hexColor: color.hexColor,
         hexColorSecondary: color.hexColorSecondary,
         materialName: material.name,
+        typeId: type.id,
         typeName: type.name,
         // Campos extras (não usados pra listar/marcar cores, só pela
         // calculadora de preço quando ela precisa saber o custo do tipo

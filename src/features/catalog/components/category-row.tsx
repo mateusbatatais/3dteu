@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { deleteCategory, updateCategory } from "../category-actions";
 import { CategoryForm } from "./category-form";
 import { CategoryImageUpload } from "./category-image-upload";
+import { CategoryMaterialRecommendations } from "./category-material-recommendations";
 
 interface CategoryRow {
   id: string;
@@ -17,7 +18,21 @@ interface CategoryRow {
   imageUrl: string | null;
 }
 
-export function CategoryRow({ category }: { category: CategoryRow }) {
+interface MaterialTypeOption {
+  id: string;
+  name: string;
+  materialName: string;
+}
+
+export function CategoryRow({
+  category,
+  allMaterialTypes,
+  recommendedTypeIds,
+}: {
+  category: CategoryRow;
+  allMaterialTypes: MaterialTypeOption[];
+  recommendedTypeIds: string[];
+}) {
   const [isEditing, setIsEditing] = useState(false);
 
   return (
@@ -48,6 +63,11 @@ export function CategoryRow({ category }: { category: CategoryRow }) {
             </div>
           </div>
           <CategoryImageUpload categoryId={category.id} imageUrl={category.imageUrl} />
+          <CategoryMaterialRecommendations
+            categoryId={category.id}
+            allMaterialTypes={allMaterialTypes}
+            recommendedTypeIds={recommendedTypeIds}
+          />
         </>
       )}
     </div>

@@ -13,9 +13,12 @@ do que já foi feito.
 
 ## ✅ Feito recentemente
 
+- **Fase 1b completa** (recomendar material por categoria) — ver detalhes
+  na seção da própria fase, mais abaixo.
 - **Fase 1 completa** (hierarquia Material→Tipo→Cor + calculadora de preço)
-  — ver detalhes na seção da própria fase, mais abaixo. Falta só rodar a
-  migração `0009_tiny_zeigeist.sql` em produção.
+  — ver detalhes na seção da própria fase, mais abaixo. Falta rodar as
+  migrações `0009_tiny_zeigeist.sql` e `0010_known_tarantula.sql` em
+  produção.
 - **Tooltip de tamanho**: no configurador do produto, ao lado do label
   "Tamanho", um ícone de info explica que o valor escolhido é a maior
   dimensão da peça — as outras acompanham proporcionalmente. Componente
@@ -79,22 +82,22 @@ Supabase ou `npm run db:migrate`).
 
 ## Fase 1b — Recomendar material por categoria
 
-**Status: 🔜 próximo** (schema de Material/Tipo/Cor da Fase 1 já existe).
+**Status: ✅ feito** (falta só rodar a migração `0010_known_tarantula.sql`
+em produção junto com a `0009` da Fase 1).
 
-Pedido: no admin, ao cadastrar/editar uma categoria, poder marcar quais
-Tipos de material são recomendados pra produtos dessa categoria (ex.:
-"Decoração" recomenda Resina Cristal + Plástico PLA; "Peças funcionais"
-recomenda Plástico ABS/Resistente). Na tela de cadastro de produto
-(`NewProductForm`), ao escolher a categoria, as cores dos tipos
-recomendados vêm marcadas primeiro/destacadas, em vez de simplesmente
-"todas marcadas" (comportamento de hoje, rodada 26) — uma categoria sem
-recomendação configurada continua caindo no "marca tudo" de sempre, não
-regride o comportamento atual.
+No admin, ao editar uma categoria (`/admin/categorias`), uma seção nova
+"Materiais recomendados" deixa marcar quais Tipos combinam com produtos
+dessa categoria (ex.: "Decoração" → Resina Cristal + Plástico PLA). Na
+tela de cadastro de produto (`NewProductForm`), escolher essa categoria
+troca a seleção padrão de cor de todas as peças pra só as cores dos tipos
+recomendados (com um toast avisando o porquê) — o admin ainda pode marcar
+outras cores manualmente. Categoria sem recomendação configurada continua
+caindo no "marca tudo" de sempre (rodada 26), sem regressão.
 
-Desenho técnico rápido: tabela nova `category_recommended_material_types`
-(`category_id` FK, `material_type_id` FK, par único) — recomendação no
-nível de Tipo, não de Cor específica (mais simples de configurar: "recomendo
-PLA pra essa categoria", não "recomendo especificamente o PLA azul"). UI
+Tabela nova: `category_recommended_material_types` (`category_id` FK,
+`material_type_id` FK, par único) — recomendação no nível de Tipo, não de
+Cor específica (mais simples de configurar: "recomendo PLA pra essa
+categoria", não "recomendo especificamente o PLA azul"). UI
 mais natural em `/admin/categorias` (editar categoria → checklist de tipos
 recomendados), já que é de lá que a decisão "que material combina com essa
 categoria" faz mais sentido sair.

@@ -1,5 +1,5 @@
 import { NewProductForm } from "@/features/catalog/components/new-product-form";
-import { getAllMaterialColorsForAdmin, getCategories } from "@/features/catalog/queries";
+import { getAllMaterialColorsForAdmin, getCategories, getCategoryRecommendedMaterialTypesMap } from "@/features/catalog/queries";
 import { getStoreSettings } from "@/features/shipping/queries";
 
 export default async function NovoProdutoPage() {
@@ -12,9 +12,10 @@ export default async function NovoProdutoPage() {
     return null;
   });
 
-  const [categories, allColors, storeSettings] = await Promise.all([
+  const [categories, allColors, recommendedTypeIdsByCategory, storeSettings] = await Promise.all([
     getCategories(),
     getAllMaterialColorsForAdmin(),
+    getCategoryRecommendedMaterialTypesMap(),
     storeSettingsPromise,
   ]);
 
@@ -32,7 +33,12 @@ export default async function NovoProdutoPage() {
         Envie o arquivo 3D de cada peça pra já preencher tamanhos, peso e dimensões automaticamente.
       </p>
       <div className="mt-6">
-        <NewProductForm categories={categories} allColors={allColors} pricingSettings={pricingSettings} />
+        <NewProductForm
+          categories={categories}
+          allColors={allColors}
+          recommendedTypeIdsByCategory={recommendedTypeIdsByCategory}
+          pricingSettings={pricingSettings}
+        />
       </div>
     </div>
   );
