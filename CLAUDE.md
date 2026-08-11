@@ -1641,6 +1641,47 @@ tratamento de erro, ainda que sem confirmar a gravação real no Supabase
 lint`, `npx tsc --noEmit`, `npm run test` (10/10) e `npm run build`
 passaram limpos.
 
+### Rodada 25: erro ao cadastrar produto em produção — `getStoreSettings()` sem proteção derrubava a página
+
+Usuário reportou erro ao cadastrar um produto, sem mais detalhes ("veja se
+falta algo ou alguma sql"). Investigando o código antes de pedir print:
+`createProduct` (rodada 23) agora redireciona pra
+`/admin/produtos/[id]?tab=partes` assim que o produto é criado, e essa
+página (desde a rodada 22) busca `getStoreSettings()` — que faz
+`db.query.storeSettings.findFirst(...)`, e o Drizzle gera um `SELECT`
+listando **todas** as colunas declaradas no schema TS da tabela, incluindo
+`price_per_gram_cents`/`fixed_fee_cents` (adicionadas na rodada 22,
+migração `0008_rapid_chamber.sql`). Combinando os dois: se a 0008 (ou
+qualquer uma das migrações 0001–0008 documentadas como pendentes) ainda
+não tiver sido rodada em produção, criar QUALQUER produto agora cai direto
+numa página que quebra com "column ... does not exist" — antes da rodada
+23 esse caminho nem existia (a criação ficava na aba Info, sem tocar
+`store_settings`).
+
+**Fix de código**: `getStoreSettings()` na página
+`/admin/produtos/[id]/page.tsx` passou a rodar fora do `Promise.all`
+crítico, com `.catch()` devolvendo `null` e logando o erro — mesmo
+princípio já usado no dashboard do admin (`getAdminDashboardStats`,
+rodada 10) e nas avaliações de produto (rodada 16): a sugestão de preço é
+um extra, nunca deveria derrubar a página inteira se a query falhar. Sem
+`storeSettings`, a página carrega normal e só a sugestão de preço fica
+indisponível (peso/dimensões continuam funcionando, já que não dependem
+dessa tabela).
+
+**Fix de dados**: passei pro usuário o SQL idempotente combinado das 8
+migrações pendentes (`0001` a `0008`, todo `CREATE TABLE IF NOT EXISTS` /
+`ADD COLUMN IF NOT EXISTS` / `CREATE TYPE`+`ADD CONSTRAINT` envolvidos em
+`DO $$ ... EXCEPTION WHEN duplicate_object` — mesmo padrão da rodada 11)
+pra rodar de uma vez no SQL Editor do Supabase, em vez de continuar
+adivinhando migração por migração a cada novo sintoma — isso já rendeu
+pelo menos 3 rodadas de "descobri depois" (11, 15, "Pós-rodada 18").
+
+**Lição gravada**: qualquer nova página/Server Component que passa a
+depender de uma tabela recém-migrada precisa considerar que a migração
+pode não ter sido aplicada ainda em produção — se a query for um "extra"
+(não o conteúdo principal da página), proteger com try/catch e fallback,
+não deixar propagar.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

@@ -21,11 +21,20 @@ export default async function EditarProdutoPage({
     ? (requestedTab as (typeof TAB_VALUES)[number])
     : "info";
 
+  // Configurações da loja só alimentam a sugestão de preço (rodada 22) — um
+  // extra, não pode derrubar a página do produto inteira se essa query
+  // falhar (ex.: migração de store_settings ainda não aplicada em produção).
+  // Mesmo princípio já usado no dashboard do admin (getAdminDashboardStats).
+  const storeSettingsPromise = getStoreSettings().catch((error: unknown) => {
+    console.error("[admin] falha ao buscar configurações da loja (sugestão de preço)", error);
+    return null;
+  });
+
   const [product, categories, allMaterials, storeSettings] = await Promise.all([
     getProductWithConfigForAdmin(id),
     getCategories(),
     getAllFilamentOptions(),
-    getStoreSettings(),
+    storeSettingsPromise,
   ]);
 
   if (!product) notFound();
