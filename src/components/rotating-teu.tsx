@@ -27,7 +27,7 @@ export function RotatingTeu({ interval = 2400 }: { interval?: number }) {
     <span
       className={`inline-block text-brand-orange transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
     >
-      Teu {WORDS[index]}
+      teu {WORDS[index]}
     </span>
   );
 }

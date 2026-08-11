@@ -55,7 +55,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
         <div className="relative mx-auto flex w-full max-w-5xl flex-col items-center gap-10 px-6 py-16 text-center lg:flex-row lg:justify-between lg:py-24 lg:text-left">
           <div className="flex max-w-xl flex-col items-center gap-6 lg:items-start">
             <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-              Peças em 3D pra <RotatingTeu />.
+              Peças em 3D pro <RotatingTeu />.
             </h1>
             <p className="text-lg text-muted-foreground">
               Fidgets, decoração, presentes ou qualquer ideia — escolha o modelo, veja o preview em 3D e
