@@ -1820,6 +1820,42 @@ aplicados de verdade) — só a parte client-side e a falha graciosa contra
 a ausência de banco/credenciais nesta sessão. Primeira vez que o usuário
 cadastrar um produto pelo fluxo novo em produção é o teste real disso.
 
+### Rodada 27: início do ROADMAP.md — tooltip de tamanho implementado, resto planejado
+
+Usuário trouxe 6 pedidos grandes de uma vez (hierarquia de material/tipo/cor
++ calculadora de preço, pedido de modelo customizado via IA, diferenciação
+visual de material no 3D, tooltip de tamanho, textos explicativos de
+material, modelo 3D animado na home) e pediu explicitamente um documento de
+roadmap pra ir trabalhando por partes, implementando de cara o que desse e
+planejando o resto.
+
+**`ROADMAP.md` criado** (novo arquivo na raiz, fora do `CLAUDE.md` de
+propósito — este último é o diário de bordo do que já foi feito; o roadmap
+é o inverso, o que falta, com perguntas em aberto pro usuário responder
+antes de cada fase maior começar). Cobre as 5 fases pendentes com desenho
+técnico já pensado (schema proposto pra material→tipo→cor, fórmula de preço
+com material+energia+pós-processamento, pesquisa real de APIs de
+imagem-pra-3D — Meshy/Neural4D/Tripo3D/Hyper3D/3D AI Studio — e confirmação
+de que GLB é o formato certo pro modelo animado da home, não FBX).
+
+**Implementado nesta rodada** (o único item pequeno o suficiente pra não
+precisar de planejamento): tooltip explicando que o tamanho selecionado é a
+maior dimensão da peça, as outras acompanham proporcionalmente. Não existia
+nenhum componente de tooltip no design system ainda — criado
+`src/components/ui/tooltip.tsx` a partir de `@base-ui/react/tooltip`,
+seguindo o mesmo padrão dos outros componentes (`select.tsx`, `tabs.tsx`).
+Usado em `product-configurator.tsx`, ao lado do label "Tamanho".
+
+**Testado**: Playwright contra o configurador real com produto mockado —
+confirmei que o gatilho (ícone de info) existe e que passar o mouse mostra
+o texto certo do tooltip, sem erro de console. `npm run lint`, `npm run
+test` (10/10) e `npm run build` passaram limpos.
+
+**Todas as outras 5 fases ficaram no ROADMAP.md, aguardando decisão do
+usuário** (schema/fórmula de preço da Fase 1 em especial — errar isso é
+caro de desfazer com dado real de cliente em cima) — ver o arquivo pra
+detalhes completos de cada uma.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

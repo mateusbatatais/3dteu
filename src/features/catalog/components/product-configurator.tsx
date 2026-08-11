@@ -1,12 +1,13 @@
 "use client";
 
-import { Share2 } from "lucide-react";
+import { Info, Share2 } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCartStore } from "@/features/checkout/cart-store";
 import { formatPriceCents } from "@/lib/format";
 
@@ -271,7 +272,21 @@ export function ProductConfigurator({
 
       <div className="flex flex-col gap-6">
         <div>
-          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Tamanho</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Tamanho</h2>
+            <Tooltip>
+              <TooltipTrigger
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="O que o tamanho representa"
+              >
+                <Info className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent>
+                O tamanho se refere à maior dimensão da peça — as outras medidas acompanham
+                proporcionalmente, mantendo as proporções originais do modelo.
+              </TooltipContent>
+            </Tooltip>
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {product.sizeOptions.map((size) => (
               <Button
