@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { NewCustomModelRequestForm } from "@/features/custom-models/components/new-custom-model-request-form";
-import { CUSTOM_MODEL_REQUEST_STATUS_BADGE_CLASSES, CUSTOM_MODEL_REQUEST_STATUS_LABELS } from "@/features/custom-models/types";
+import {
+  CUSTOM_MODEL_REQUEST_ORIGIN_LABELS,
+  CUSTOM_MODEL_REQUEST_STATUS_BADGE_CLASSES,
+  CUSTOM_MODEL_REQUEST_STATUS_LABELS,
+} from "@/features/custom-models/types";
 import { getCustomModelRequestsByCustomerId } from "@/features/custom-models/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -22,10 +26,11 @@ export default async function CustomModelRequestsPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">Pedir modelo customizado</h1>
+      <h1 className="text-3xl font-semibold tracking-tight">Modelo customizado</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Descreva o que você quer e mande fotos — a IA gera um preview 3D antes de qualquer cobrança. Se gostar, você
-        escolhe o material e confirma o pedido. Limite de 1 geração por dia.
+        Já tem o arquivo 3D? Envie direto e receba um orçamento na hora. Prefere que a gente gere um modelo a partir de
+        fotos? A IA cria um preview antes de qualquer cobrança (limite de 1 geração por dia). Nos dois casos, você
+        escolhe o material e confirma o pedido só se gostar.
       </p>
 
       <div className="mt-6">
@@ -44,7 +49,9 @@ export default async function CustomModelRequestsPage() {
               >
                 <div>
                   <p className="line-clamp-1 font-medium">{request.description}</p>
-                  <p className="text-sm text-muted-foreground">{request.createdAt.toLocaleDateString("pt-BR")}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {request.createdAt.toLocaleDateString("pt-BR")} · {CUSTOM_MODEL_REQUEST_ORIGIN_LABELS[request.origin]}
+                  </p>
                 </div>
                 <Badge variant="outline" className={CUSTOM_MODEL_REQUEST_STATUS_BADGE_CLASSES[request.status]}>
                   {CUSTOM_MODEL_REQUEST_STATUS_LABELS[request.status]}

@@ -1,4 +1,4 @@
--- SQL idempotente cobrindo TODAS as migrações pendentes (0001 a 0013).
+-- SQL idempotente cobrindo TODAS as migrações pendentes (0001 a 0014).
 -- Seguro rodar de uma vez no SQL Editor do Supabase, mesmo que parte já
 -- tenha sido aplicada antes (manualmente ou em rodadas anteriores) — cada
 -- bloco usa IF NOT EXISTS / DO $$ ... EXCEPTION WHEN duplicate_object pra
@@ -282,3 +282,12 @@ ALTER TABLE "material_colors" ADD COLUMN IF NOT EXISTS "opacity" numeric(3, 2) D
 -- ---------------------------------------------------------------------
 ALTER TABLE "materials" ADD COLUMN IF NOT EXISTS "dual_color_fee_cents" integer DEFAULT 0 NOT NULL;
 ALTER TABLE "product_parts" ADD COLUMN IF NOT EXISTS "weight_grams" integer;
+
+-- ---------------------------------------------------------------------
+-- 0014 (Fase 4b): enviar STL próprio pra orçamento (sem geração por IA)
+-- ---------------------------------------------------------------------
+DO $$ BEGIN
+  CREATE TYPE "public"."custom_model_request_origin" AS ENUM('ai', 'upload');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+ALTER TABLE "custom_model_requests" ADD COLUMN IF NOT EXISTS "origin" "public"."custom_model_request_origin" DEFAULT 'ai' NOT NULL;

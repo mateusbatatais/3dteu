@@ -1,0 +1,2 @@
+CREATE TYPE "public"."custom_model_request_origin" AS ENUM('ai', 'upload');--> statement-breakpoint
+ALTER TABLE "custom_model_requests" ADD COLUMN "origin" "custom_model_request_origin" DEFAULT 'ai' NOT NULL;

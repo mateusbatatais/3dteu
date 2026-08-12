@@ -1,5 +1,14 @@
 export type CustomModelRequestStatus = "pending" | "generating" | "ready" | "failed" | "confirmed";
 
+/** ai = fotos + geração via Meshy (Fase 4). upload = cliente já tinha o
+ * próprio STL/OBJ/3MF, pediu só orçamento (Fase 4b) — nasce direto "ready". */
+export type CustomModelRequestOrigin = "ai" | "upload";
+
+export const CUSTOM_MODEL_REQUEST_ORIGIN_LABELS: Record<CustomModelRequestOrigin, string> = {
+  ai: "Gerado por IA",
+  upload: "Arquivo próprio",
+};
+
 export const CUSTOM_MODEL_REQUEST_STATUS_LABELS: Record<CustomModelRequestStatus, string> = {
   pending: "Na fila",
   generating: "Gerando modelo 3D...",
@@ -24,6 +33,7 @@ export interface CustomModelRequestView {
   id: string;
   description: string;
   status: CustomModelRequestStatus;
+  origin: CustomModelRequestOrigin;
   meshFileUrl: string | null;
   thumbnailUrl: string | null;
   weightGrams: string | null;

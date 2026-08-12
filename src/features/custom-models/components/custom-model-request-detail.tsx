@@ -236,8 +236,12 @@ export function CustomModelRequestDetail({
               <p className="text-muted-foreground">
                 Material: {formatPriceCents(priceBreakdown.materialCostCents)} + Energia:{" "}
                 {formatPriceCents(priceBreakdown.energyCostCents)} + Pós-processamento:{" "}
-                {formatPriceCents(priceBreakdown.postProcessingFeeCents)} + Modelagem customizada:{" "}
-                {formatPriceCents(priceBreakdown.customModelFeeCents)}
+                {formatPriceCents(priceBreakdown.postProcessingFeeCents)}
+                {/* Só se aplica ao fluxo de geração por IA (origin="ai") —
+                quem já mandou o próprio arquivo não paga essa taxa. */}
+                {priceBreakdown.customModelFeeCents > 0 ? (
+                  <> + Modelagem customizada: {formatPriceCents(priceBreakdown.customModelFeeCents)}</>
+                ) : null}
               </p>
               <p className="mt-1 text-lg font-semibold">{formatPriceCents(priceBreakdown.totalPriceCents)}</p>
             </div>

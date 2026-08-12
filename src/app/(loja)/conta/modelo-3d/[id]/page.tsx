@@ -33,6 +33,7 @@ export default async function CustomModelRequestDetailPage({ params }: PageProps
           id: request.id,
           description: request.description,
           status: request.status,
+          origin: request.origin,
           meshFileUrl: request.meshFileUrl,
           thumbnailUrl: request.thumbnailUrl,
           weightGrams: request.weightGrams,

@@ -13,6 +13,9 @@ do que já foi feito.
 
 ## ✅ Feito recentemente
 
+- **Fase 4b completa** (enviar STL próprio pra orçamento, sem IA) — mesma
+  tela `/conta/modelo-3d` da Fase 4, com um toggle novo. Falta rodar a
+  migração `0014_omniscient_sister_grimm.sql` em produção.
 - **Fase 1c completa** (preço ao vivo por material/cor, reverte a decisão
   de preço fixo da Fase 1) — ver detalhes na seção da própria fase, mais
   abaixo. Falta rodar a migração `0013_quiet_timeslip.sql` em produção.
@@ -316,6 +319,32 @@ imprimir qualquer pedido (customizado ou não) sem nenhuma tela nova.
 Ver a rodada correspondente no `CLAUDE.md` pra detalhes completos de
 arquitetura, arquivos alterados e o que foi (e não pôde ser) testado nesta
 sessão.
+
+### Fase 4b — Enviar STL próprio pra orçamento (sem IA)
+
+**Status: ✅ feito** (falta rodar a migração `0014_omniscient_sister_grimm.sql`
+em produção).
+
+Extensão direta da Fase 4 pra quem já TEM o próprio arquivo 3D e só quer um
+orçamento — mesma tela `/conta/modelo-3d`, com um toggle no topo ("Já tenho
+o arquivo 3D" vs "Quero que a IA gere um modelo"). Cliente sobe o
+STL/OBJ/3MF direto (mesmo bucket `models` já usado pro catálogo), o
+servidor mede o arquivo de verdade e a request nasce já em `status:
+"ready"` — pula `pending`/`generating`/Meshy inteiramente. Todo o resto
+(viewer 3D, seletor de material, preço ao vivo, formulário de entrega,
+confirmação que cria produto oculto + pedido) é o MESMO código da Fase 4,
+sem nenhuma mudança — só precisa que a linha em `custom_model_requests` já
+esteja em "ready" com peso/dimensões preenchidos.
+
+Coluna nova `custom_model_requests.origin` (`"ai" | "upload"`, default
+`"ai"`) diferencia os dois casos em dois pontos que precisavam mesmo:
+**não cobra** a taxa de "modelagem customizada" (`customModelFeeCents`) de
+quem já mandou o arquivo — essa taxa cobre o crédito de IA gasto, que não
+existe aqui — e o guardrail de 1 geração/dia passou a contar só `origin =
+"ai"` (upload direto não gasta crédito nenhum, não devia ser bloqueado por
+esse limite nem contar pra ele).
+
+Ver a rodada correspondente no `CLAUDE.md` pra detalhes completos.
 
 ---
 

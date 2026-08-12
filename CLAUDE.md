@@ -2651,6 +2651,98 @@ de sempre — sem `DATABASE_URL` nesta sessão): a lógica de
 primeiro teste de verdade é o usuário reenviando um arquivo de uma peça de
 produto multi-peça em produção.
 
+### Rodada 38 (Fase 4b): enviar STL próprio pra orçamento (sem IA)
+
+Usuário perguntou qual seria a melhor forma de deixar um cliente que já
+tem seu próprio STL mandar pra loja pra receber um orçamento — perguntando
+explicitamente se seria "a mesma forma da geração por IA". Investiguei a
+fundo `src/features/custom-models/` antes de responder e confirmei que
+sim: quase todo o fluxo pós-"ready" da Fase 4 (viewer 3D, seletor de
+material, preço ao vivo, formulário de entrega, confirmação que cria
+produto oculto + pedido) já é agnóstico de como o request chegou lá —
+recomendei reaproveitar isso e só pular a etapa de geração/polling da
+Meshy. Usuário aprovou e, numa segunda pergunta de esclarecimento (via
+`AskUserQuestion`, dado que a decisão envolve dinheiro e schema), confirmou
+duas coisas: (1) não cobrar a taxa de "modelagem customizada" de quem já
+manda o arquivo (ela cobre o crédito de IA gasto, que não existe aqui) e
+(2) manter tudo na mesma tela `/conta/modelo-3d`, com um toggle no topo,
+em vez de duplicar página.
+
+**Coluna nova**: `custom_model_requests.origin` (`"ai" | "upload"`,
+default `"ai"` — migração `0014_omniscient_sister_grimm.sql`, gerada
+limpa, sem risco de rename). Só precisou tocar em 2 pontos que realmente
+dependiam do tipo de request:
+- `computeCustomModelPrice` (`custom-models/pricing.ts`): quando
+  `origin === "upload"`, pula inteiramente a checagem/soma de
+  `customModelFeeCents` (nem bloqueia mais a confirmação se a loja não
+  tiver configurado essa taxa — faz sentido, já que ela não se aplica).
+  Quando `origin === "ai"`, comportamento idêntico ao de antes.
+- Rate-limit de 1 geração/dia em `submitCustomModelRequest`: a query de
+  contagem contava QUALQUER request do cliente no dia, sem filtrar por
+  tipo — isso bloquearia incorretamente uma geração por IA só porque o
+  cliente também tinha feito um upload direto no mesmo dia (ou vice-versa).
+  Adicionei `eq(customModelRequests.origin, "ai")` na condição, restrita
+  só às gerações de verdade.
+
+**Ação nova, bem menor que `submitCustomModelRequest`**:
+`submitDirectMeshModelRequest({ description, meshPath, extension })` —
+baixa os bytes do arquivo recém-enviado via
+`storage.storage.from(MODELS_BUCKET).download(path)` (método do SDK do
+Supabase não usado ainda no projeto, mas mesmo objeto já usado pra
+`.upload()`/`.getPublicUrl()` em outros lugares), mede com
+`measureMeshFromBuffer` (a MESMA função já usada pelo resultado da Meshy
+— zero código de medição novo) + `estimatePrintWeight`, e insere a linha
+já com `status: "ready"`, `photoUrls: []`, `thumbnailUrl: null` — nunca
+passa por `pending`/`generating`. `createDirectMeshUploadUrl(extension)`
+é o gêmeo de `createCustomModelPhotoUploadUrl`, só mirando `MODELS_BUCKET`
+em vez do bucket de fotos.
+
+**UI**: `NewCustomModelRequestForm` virou mode-aware (`mode: "ai" |
+"upload"`, dois botões toggle no topo, mesmo padrão visual já usado pro
+toggle Retirada/Correio no componente de detalhe). No modo upload, a
+descrição vira opcional-de-fato-mas-obrigatória-no-schema com um label
+mais leve ("Alguma observação sobre a peça?") e o dropzone de fotos é
+substituído por um dropzone de arquivo 3D único — visual copiado ícone-
+por-ícone de `MeshUploadForm` (seta pra cima + textos), com a mesma
+medição client-side (`measureMesh`) só pra feedback imediato ("Detectamos:
+2.0 × 2.0 × 2.0 cm") — a medida que vale pro preço é sempre a do servidor.
+`CustomModelRequestDetail` precisou de UMA mudança: a linha "Modelagem
+customizada: X" no breakdown de preço só aparece quando
+`customModelFeeCents > 0` (antes sempre aparecia). Todo o resto do
+componente (spinner de geração, viewer, seletor de cor, formulário de
+entrega, confirmação) funciona sem nenhuma mudança — o bloco
+`pending`/`generating` simplesmente nunca chega a renderizar pra uma
+request que nasce direto em "ready". Lista de pedidos
+(`/conta/modelo-3d`) ganhou um rótulo extra por linha ("Gerado por IA" /
+"Arquivo próprio") pra diferenciar os dois tipos numa lista compartilhada.
+
+**Testado**: `npx tsc --noEmit` limpo de primeira (nenhum call site
+esquecido — `origin` flui automaticamente por toda query que já buscava a
+row inteira). Via Playwright contra `NewCustomModelRequestForm` e
+`CustomModelRequestDetail` mockados: confirmei que o toggle troca
+corretamente entre os dois formulários (dropzone de fotos some no modo
+upload), que subir um STL de teste de 20mm real mostra a medida exata
+"2.0 × 2.0 × 2.0 cm" (mesmo cubo de teste já usado em rodadas anteriores,
+validando que `measureMesh` no client bate com a mesma função usada no
+servidor), que a validação do modo IA ainda barra submit sem descrição, e
+que `CustomModelRequestDetail` com `origin: "upload"` renderiza o estado
+"ready" (viewer + seletor de cor) sem quebrar — zero erros de console em
+todos os passos. A linha condicional do breakdown de preço não pôde ser
+verificada visualmente contra um preço real (a chamada de preço depende
+de sessão Supabase + banco, ambos ausentes nesta sessão — mesma limitação
+de sempre; falhou de forma limpa com "Sessão expirada", confirmando que o
+`origin` novo não quebra esse caminho, mas não prova o ternário em tela).
+A condicional em si (`customModelFeeCents > 0 ? ... : null`) é simples o
+bastante pra revisão de código bastar. `npm run lint`, `npm run test`
+(13/13, suíte de catálogo não afetada por esta rodada) e `npm run build`
+(`.next` limpo) passaram limpos.
+
+**Pendente**: rodar a migração `0014` contra o Supabase real — SQL
+combinado atualizado em `scripts/pending-migrations-0001-a-0014.sql`
+(renomeado de `...-0013.sql`). Fluxo de ponta a ponta contra o Supabase
+real (upload de verdade, medição, preço, confirmação de pedido) é o
+primeiro teste de verdade, a cargo do usuário — mesma ressalva de sempre.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

@@ -21,14 +21,18 @@ export interface CustomModelPriceResult {
 /**
  * Mesma calculadora da Fase 1 (`estimateMaterialCost`) usada pelo admin pra
  * sugerir preço de produto — só que aqui o peso/altura vêm de uma medição
- * real do arquivo gerado pela Meshy (nunca do cliente), e soma-se por cima
- * `storeSettings.customModelFeeCents` (cobre o crédito de IA gasto + o
- * trabalho de acompanhar o pedido). Reaproveitado tanto pra mostrar o preço
- * ao vivo na tela de confirmação quanto pra recalcular no servidor na hora
- * de confirmar o pedido de verdade — nunca confia no preço mostrado antes.
+ * real do arquivo (gerado pela Meshy, ou já enviado pelo próprio cliente —
+ * ver `origin`), nunca do cliente. Quando `origin === "ai"`, soma-se por
+ * cima `storeSettings.customModelFeeCents` (cobre o crédito de IA gasto +
+ * o trabalho de acompanhar o pedido); quando `origin === "upload"`, essa
+ * taxa não se aplica (não houve geração nenhuma) — preço fica só
+ * material+energia+pós-processamento, igual um produto normal do
+ * catálogo. Reaproveitado tanto pra mostrar o preço ao vivo na tela de
+ * confirmação quanto pra recalcular no servidor na hora de confirmar o
+ * pedido de verdade — nunca confia no preço mostrado antes.
  */
 export async function computeCustomModelPrice(
-  request: Pick<CustomModelRequest, "weightGrams" | "heightMm">,
+  request: Pick<CustomModelRequest, "weightGrams" | "heightMm" | "origin">,
   materialColorId: string,
 ): Promise<CustomModelPriceResult> {
   if (!request.weightGrams || !request.heightMm) {
@@ -43,15 +47,19 @@ export async function computeCustomModelPrice(
   const energyPriceCentsPerKwh = settings?.energyPriceCentsPerKwh;
   const printerPowerWatts = settings?.printerPowerWatts;
   const profitMarginPercent = settings?.profitMarginPercent ? Number(settings.profitMarginPercent) : null;
-  const customModelFeeCents = settings?.customModelFeeCents;
 
   if (!energyPriceCentsPerKwh || !printerPowerWatts || !profitMarginPercent) {
     return {
       error: "A loja ainda não configurou a calculadora de preço (energia/potência/margem) em /admin/configuracoes.",
     };
   }
-  if (!customModelFeeCents) {
-    return { error: "A loja ainda não configurou a taxa de modelagem customizada em /admin/configuracoes." };
+
+  let customModelFeeCents = 0;
+  if (request.origin === "ai") {
+    if (!settings?.customModelFeeCents) {
+      return { error: "A loja ainda não configurou a taxa de modelagem customizada em /admin/configuracoes." };
+    }
+    customModelFeeCents = settings.customModelFeeCents;
   }
 
   const suggestion = estimateMaterialCost(

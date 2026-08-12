@@ -71,6 +71,13 @@ export const customModelRequestStatusEnum = pgEnum("custom_model_request_status"
   "confirmed",
 ]);
 
+// ai = cliente subiu fotos, a Meshy gerou a malha (fluxo original acima).
+// upload = cliente já tinha o próprio STL/OBJ/3MF e só quer um orçamento —
+// pula pending/generating inteiramente, nasce direto em "ready" (ver
+// submitDirectMeshModelRequest). Não cobra customModelFeeCents (essa taxa
+// cobre o crédito de IA gasto, que não existe nesse caminho).
+export const customModelRequestOriginEnum = pgEnum("custom_model_request_origin", ["ai", "upload"]);
+
 // ---------------------------------------------------------------------------
 // Catálogo
 // ---------------------------------------------------------------------------
@@ -442,7 +449,8 @@ export const customModelRequests = pgTable("custom_model_requests", {
   id: uuid("id").defaultRandom().primaryKey(),
   customerId: uuid("customer_id").notNull(),
   description: text("description").notNull(),
-  photoUrls: jsonb("photo_urls").notNull(), // string[] — URLs públicas no bucket custom-model-photos
+  photoUrls: jsonb("photo_urls").notNull(), // string[] — URLs públicas no bucket custom-model-photos; [] pra origin="upload"
+  origin: customModelRequestOriginEnum("origin").default("ai").notNull(),
   status: customModelRequestStatusEnum("status").default("pending").notNull(),
   meshyTaskId: text("meshy_task_id"),
   // Arquivo/preview gerados pela Meshy são re-hospedados nos buckets já

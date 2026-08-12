@@ -13,7 +13,12 @@ import { wooviProvider } from "@/features/payments/woovi";
 import type { DeliveryMethod, ShippingAddress } from "@/features/shipping/types";
 import { createClient } from "@/lib/supabase/server";
 import { createStorageClient, CUSTOM_MODEL_PHOTOS_BUCKET, MEDIA_BUCKET, MODELS_BUCKET } from "@/lib/supabase/storage";
-import { ALLOWED_MEDIA_EXTENSIONS, type MediaExtension } from "@/lib/supabase/storage-constants";
+import {
+  ALLOWED_MEDIA_EXTENSIONS,
+  ALLOWED_MESH_EXTENSIONS,
+  type MediaExtension,
+  type MeshExtension,
+} from "@/lib/supabase/storage-constants";
 import { db } from "@/server/db/client";
 import { customModelRequests, orderItems, orders, payments, productParts } from "@/server/db/schema";
 
@@ -86,13 +91,21 @@ export async function submitCustomModelRequest(input: {
 
   // Guardrail contra abuso: cada geração custa crédito real, então 1 pedido
   // grátis por cliente por dia (confirmado com o usuário) — primeiro
-  // rate-limit do projeto, fica só aqui, não vale generalizar ainda.
+  // rate-limit do projeto, fica só aqui, não vale generalizar ainda. Só
+  // conta gerações por IA (origin="ai") — upload direto (Fase 4b) não gasta
+  // crédito nenhum, não devia contar nem ser bloqueado por este limite.
   const startOfDayUtc = new Date();
   startOfDayUtc.setUTCHours(0, 0, 0, 0);
   const [{ value: requestsToday }] = await db
     .select({ value: count() })
     .from(customModelRequests)
-    .where(and(eq(customModelRequests.customerId, customerId), gte(customModelRequests.createdAt, startOfDayUtc)));
+    .where(
+      and(
+        eq(customModelRequests.customerId, customerId),
+        eq(customModelRequests.origin, "ai"),
+        gte(customModelRequests.createdAt, startOfDayUtc),
+      ),
+    );
 
   if (requestsToday >= 1) {
     return { error: "Você já pediu um modelo customizado hoje — tente de novo amanhã." };
@@ -125,6 +138,97 @@ export async function submitCustomModelRequest(input: {
 
   revalidatePath("/conta/modelo-3d");
   return { requestId: row.id };
+}
+
+export interface CreateDirectMeshUploadUrlResult {
+  error?: string;
+  path?: string;
+  token?: string;
+}
+
+/** Mesmo padrão de createCustomModelPhotoUploadUrl (signed URL, sem
+ * productId/partId ainda) — só que mirando o bucket de malhas (o mesmo já
+ * usado pro STL de produtos de catálogo), pro fluxo de cliente que já tem
+ * o próprio arquivo 3D (Fase 4b: "enviar arquivo pra orçamento"). */
+export async function createDirectMeshUploadUrl(extension: string): Promise<CreateDirectMeshUploadUrlResult> {
+  const normalizedExt = extension.toLowerCase().replace(/^\./, "");
+  if (!(ALLOWED_MESH_EXTENSIONS as readonly string[]).includes(normalizedExt)) {
+    return { error: `Formato .${normalizedExt} não suportado. Use .stl, .obj ou .3mf.` };
+  }
+
+  try {
+    const storage = createStorageClient();
+    const path = `${randomUUID()}.${normalizedExt as MeshExtension}`;
+
+    const { data, error } = await storage.storage.from(MODELS_BUCKET).createSignedUploadUrl(path);
+    if (error || !data) {
+      return { error: `Falha ao preparar o upload: ${error?.message ?? "erro desconhecido"}` };
+    }
+
+    return { path: data.path, token: data.token };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido.";
+    return { error: `Falha ao preparar o upload: ${message}` };
+  }
+}
+
+/**
+ * Cliente que já tem o próprio STL/OBJ/3MF — pula fotos/Meshy inteiramente
+ * e vai direto pro estado "ready" (mede o arquivo de verdade no servidor,
+ * nunca confia em nada vindo do cliente). Sem o guardrail de 1/dia: não
+ * gasta crédito de IA nenhum, só armazenamento (mesmo teto de 50MB já
+ * aplicado a qualquer STL do projeto).
+ */
+export async function submitDirectMeshModelRequest(input: {
+  description: string;
+  meshPath: string;
+  extension: MeshExtension;
+}): Promise<SubmitCustomModelRequestResult> {
+  const customerId = await requireCustomerId();
+  if (!customerId) return { error: "Entre na sua conta antes de enviar um arquivo." };
+
+  const description = input.description.trim();
+  if (!description) return { error: "Escreva uma breve descrição da peça." };
+
+  try {
+    const storage = createStorageClient();
+
+    const { data: fileBlob, error: downloadError } = await storage.storage
+      .from(MODELS_BUCKET)
+      .download(input.meshPath);
+    if (downloadError || !fileBlob) {
+      return { error: `Não foi possível ler o arquivo enviado: ${downloadError?.message ?? "erro desconhecido"}` };
+    }
+
+    const buffer = await fileBlob.arrayBuffer();
+    const measurements = await measureMeshFromBuffer(buffer, input.extension);
+    if (!measurements) return { error: "Não foi possível medir o arquivo enviado — confira se ele não está corrompido." };
+
+    const { weightGrams } = estimatePrintWeight(measurements.volumeMm3, measurements.surfaceAreaMm2);
+    const meshFileUrl = storage.storage.from(MODELS_BUCKET).getPublicUrl(input.meshPath).data.publicUrl;
+
+    const [row] = await db
+      .insert(customModelRequests)
+      .values({
+        customerId,
+        description,
+        photoUrls: [],
+        origin: "upload",
+        status: "ready",
+        meshFileUrl,
+        weightGrams: weightGrams.toFixed(2),
+        widthMm: measurements.widthMm.toFixed(2),
+        heightMm: measurements.heightMm.toFixed(2),
+        depthMm: measurements.depthMm.toFixed(2),
+      })
+      .returning({ id: customModelRequests.id });
+
+    revalidatePath("/conta/modelo-3d");
+    return { requestId: row.id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido.";
+    return { error: `Não foi possível processar o arquivo: ${message}` };
+  }
 }
 
 /**
