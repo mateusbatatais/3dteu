@@ -1,4 +1,4 @@
--- SQL idempotente cobrindo TODAS as migrações pendentes (0001 a 0014).
+-- SQL idempotente cobrindo TODAS as migrações pendentes (0001 a 0015).
 -- Seguro rodar de uma vez no SQL Editor do Supabase, mesmo que parte já
 -- tenha sido aplicada antes (manualmente ou em rodadas anteriores) — cada
 -- bloco usa IF NOT EXISTS / DO $$ ... EXCEPTION WHEN duplicate_object pra
@@ -291,3 +291,8 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 ALTER TABLE "custom_model_requests" ADD COLUMN IF NOT EXISTS "origin" "public"."custom_model_request_origin" DEFAULT 'ai' NOT NULL;
+
+-- ---------------------------------------------------------------------
+-- 0015: ângulo inicial customizado do visualizador 3D
+-- ---------------------------------------------------------------------
+ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "viewer_camera_position" jsonb;

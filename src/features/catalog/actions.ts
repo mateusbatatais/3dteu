@@ -169,12 +169,22 @@ export async function createSizeOption(productId: string, input: SizeOptionInput
   const validationError = validateSizeInput(input);
   if (validationError) return { error: validationError };
 
+  // Sempre no fim da lista — sem isso, `sortOrder` caía no default da
+  // coluna (0) e colidia com o P gerado automaticamente
+  // (autoGenerateSizeOptions), fazendo o tamanho novo aparecer no INÍCIO
+  // da lista em vez do fim.
+  const [{ value: maxSortOrder }] = await db
+    .select({ value: sql<number>`coalesce(max(${sizeOptions.sortOrder}), -1)` })
+    .from(sizeOptions)
+    .where(eq(sizeOptions.productId, productId));
+
   await db.insert(sizeOptions).values({
     productId,
     label: input.label.trim(),
     scaleFactor: input.scaleFactor.toString(),
     priceModifierCents: Math.round(input.priceModifierReais * 100),
     weightModifierGrams: Math.round(input.weightModifierGrams),
+    sortOrder: maxSortOrder + 1,
   });
 
   await revalidateProductPages(productId);
@@ -356,6 +366,34 @@ export async function applySuggestedPrice(productId: string, priceCents: number)
   return {};
 }
 
+/**
+ * Salva o ângulo inicial da câmera no visualizador 3D interativo da loja —
+ * admin gira o preview até achar um enquadramento bom e clica em "usar
+ * este ângulo" (ver ProductViewerAngleControl). Só a DIREÇÃO do ponto
+ * importa (o Bounds do drei recalcula a distância sozinho), por isso não
+ * valida escala — só que os 3 números são finitos e não formam um vetor
+ * nulo (quebraria o `.normalize()` do Bounds).
+ */
+export async function updateProductViewerAngle(
+  productId: string,
+  position: { x: number; y: number; z: number } | null,
+): Promise<ProductActionResult> {
+  if (position) {
+    const { x, y, z } = position;
+    if (![x, y, z].every(Number.isFinite)) return { error: "Ângulo inválido." };
+    if (x === 0 && y === 0 && z === 0) return { error: "Ângulo inválido." };
+  }
+
+  try {
+    await db.update(products).set({ viewerCameraPosition: position }).where(eq(products.id, productId));
+  } catch {
+    return { error: "Não foi possível salvar o ângulo. Tente novamente." };
+  }
+
+  await revalidateProductPages(productId);
+  return {};
+}
+
 // ---------------------------------------------------------------------------
 // Upload de STL em duas etapas: o arquivo NUNCA passa pelo servidor Next.js.
 // Vercel Functions (inclusive Server Actions) têm um teto de 4,5MB por
@@ -417,6 +455,23 @@ function defaultRegionLabel(paintState: number): string {
  * sobrescrevia o peso do produto com o peso de UMA peça só, apagando a
  * contribuição das outras em produtos multi-peça.
  */
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Recalcula `products.weightGrams` (usado na cotação de frete) como a
+ * SOMA do peso de todas as peças que já têm peso próprio — chamado sempre
+ * que o peso de uma peça muda (upload novo ou correção manual), pra nunca
+ * deixar o agregado do produto dessincronizado das peças. */
+async function recalculateProductWeightGrams(tx: Transaction, productId: string) {
+  const parts = await tx.query.productParts.findMany({
+    where: eq(productParts.productId, productId),
+    columns: { weightGrams: true },
+  });
+  const totalWeightGrams = parts.reduce((sum, part) => sum + (part.weightGrams ?? 0), 0);
+  if (totalWeightGrams > 0) {
+    await tx.update(products).set({ weightGrams: totalWeightGrams }).where(eq(products.id, productId));
+  }
+}
+
 export async function confirmPartMesh(
   productId: string,
   partId: string,
@@ -454,14 +509,7 @@ export async function confirmPartMesh(
       }
 
       if (weightGrams !== undefined) {
-        const parts = await tx.query.productParts.findMany({
-          where: eq(productParts.productId, productId),
-          columns: { weightGrams: true },
-        });
-        const totalWeightGrams = parts.reduce((sum, part) => sum + (part.weightGrams ?? 0), 0);
-        if (totalWeightGrams > 0) {
-          await tx.update(products).set({ weightGrams: totalWeightGrams }).where(eq(products.id, productId));
-        }
+        await recalculateProductWeightGrams(tx, productId);
       }
     });
 
@@ -471,6 +519,29 @@ export async function confirmPartMesh(
     const message = error instanceof Error ? error.message : "Erro desconhecido.";
     return { error: `Falha ao confirmar o upload: ${message}` };
   }
+}
+
+/** Correção manual do peso de UMA peça — pro admin ajustar quando a
+ * estimativa automática (medida no upload) estiver errada. Recalcula o
+ * agregado do produto do mesmo jeito que um upload novo faria. */
+export async function updatePartWeight(
+  productId: string,
+  partId: string,
+  weightGrams: number,
+): Promise<ProductActionResult> {
+  if (!Number.isFinite(weightGrams) || weightGrams <= 0) return { error: "Peso inválido." };
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx.update(productParts).set({ weightGrams: Math.round(weightGrams) }).where(eq(productParts.id, partId));
+      await recalculateProductWeightGrams(tx, productId);
+    });
+  } catch {
+    return { error: "Não foi possível salvar o peso. Tente novamente." };
+  }
+
+  await revalidateProductPages(productId);
+  return {};
 }
 
 export interface RegionSettingsInput {

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useId, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
@@ -28,34 +28,41 @@ interface ProductImageRow {
 
 export function ProductImagesManager({ productId, images }: { productId: string; images: ProductImageRow[] }) {
   const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
+  function processSelectedFile(selected: File) {
     setError(null);
-
-    if (!selected) {
-      setFile(null);
-      return;
-    }
 
     if (!getMediaExtension(selected.name)) {
       setError(`Formato não suportado. Use ${ALLOWED_MEDIA_EXTENSIONS.join(", ")}.`);
       setFile(null);
-      event.target.value = "";
       return;
     }
 
     if (selected.size > MAX_MEDIA_FILE_SIZE_BYTES) {
       setError(`Esse arquivo tem ${formatMegabytes(selected.size)}, e o máximo é ${formatMegabytes(MAX_MEDIA_FILE_SIZE_BYTES)}.`);
       setFile(null);
-      event.target.value = "";
       return;
     }
 
     setFile(selected);
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0];
+    event.target.value = "";
+    if (selected) processSelectedFile(selected);
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDraggingOver(false);
+    const dropped = event.dataTransfer.files?.[0];
+    if (dropped) processSelectedFile(dropped);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -132,22 +139,60 @@ export function ProductImagesManager({ productId, images }: { productId: string;
         </div>
       ) : null}
 
-      <form
-        onSubmit={handleSubmit}
-        className="mt-4 flex max-w-sm flex-col gap-2 rounded-lg border-2 border-dashed border-border p-3"
-      >
-        <div className="flex items-center justify-between">
-          <label htmlFor={inputId} className="text-sm font-medium">
-            Adicionar foto/gif
-          </label>
-          <span className="text-xs text-muted-foreground">Máximo {formatMegabytes(MAX_MEDIA_FILE_SIZE_BYTES)}</span>
+      <form onSubmit={handleSubmit} className="mt-4 flex max-w-sm flex-col gap-2">
+        <div
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDraggingOver(true);
+          }}
+          onDragLeave={() => setIsDraggingOver(false)}
+          onDrop={handleDrop}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") inputRef.current?.click();
+          }}
+          className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+            isDraggingOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/60 hover:bg-muted/40"
+          }`}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            className="size-8 text-muted-foreground"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9m0 0-3 3m3-3 3 3" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z"
+            />
+          </svg>
+          <p className="text-sm font-semibold">Enviar foto ou gif</p>
+          <p className="text-xs text-muted-foreground">
+            Arraste o arquivo aqui ou <span className="font-medium text-primary underline-offset-2">clique pra escolher</span>
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {ALLOWED_MEDIA_EXTENSIONS.join(", ").toUpperCase()} — máximo {formatMegabytes(MAX_MEDIA_FILE_SIZE_BYTES)}
+          </p>
+          <input
+            ref={inputRef}
+            id={inputId}
+            type="file"
+            accept={ALLOWED_MEDIA_EXTENSIONS_ACCEPT}
+            onChange={handleFileChange}
+            onClick={(event) => event.stopPropagation()}
+            className="sr-only"
+          />
         </div>
-
-        <input id={inputId} type="file" accept={ALLOWED_MEDIA_EXTENSIONS_ACCEPT} onChange={handleFileChange} className="text-sm" />
 
         {file ? (
           <p className="text-xs text-muted-foreground">
-            Selecionado: {file.name} ({formatMegabytes(file.size)})
+            Selecionado: <span className="font-medium text-foreground">{file.name}</span> ({formatMegabytes(file.size)})
           </p>
         ) : null}
 

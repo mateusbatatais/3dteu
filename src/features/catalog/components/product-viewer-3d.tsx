@@ -4,7 +4,7 @@ import { Component, Suspense, useEffect, useMemo, type ReactNode } from "react";
 import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { Bounds, Environment, OrbitControls, RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
-import { OBJLoader, STLLoader, ThreeMFLoader } from "three-stdlib";
+import { OBJLoader, STLLoader, ThreeMFLoader, type OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 import { getMeshExtension } from "@/lib/supabase/storage-constants";
 
@@ -315,21 +315,49 @@ function CanvasCaptureBridge({ onReady }: { onReady: (canvas: HTMLCanvasElement)
   return null;
 }
 
+// Expõe os controles de órbita já registrados (via `makeDefault`) pro
+// componente pai — usado só pelo admin, pra ler a posição atual da câmera
+// na hora de salvar um ângulo inicial customizado (ver
+// ProductViewerAngleControl). Não precisa de ref no <OrbitControls>: o
+// próprio drei já guarda a instância no estado global do r3f quando
+// `makeDefault` está presente, e é isso que o Bounds também usa.
+function CameraControlsBridge({ onReady }: { onReady: (controls: OrbitControlsImpl) => void }) {
+  const controls = useThree((state) => state.controls) as OrbitControlsImpl | null;
+  useEffect(() => {
+    if (controls) onReady(controls);
+  }, [controls, onReady]);
+  return null;
+}
+
+const DEFAULT_CAMERA_POSITION: [number, number, number] = [2.5, 2, 2.5];
+
 export function ProductViewer3D({
   parts,
   interactive = true,
   onCanvasReady,
+  initialCameraPosition,
+  onControlsReady,
 }: {
   parts: ViewerPart[];
   /** false = sem controles de câmera; usado nas miniaturas do catálogo. */
   interactive?: boolean;
   /** Recebe o <canvas> real do WebGL — usado pra capturar a vista atual como foto (`canvas.toDataURL()`). */
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
+  /** Ângulo inicial customizado (admin, ver ProductViewerAngleControl) — só
+   * a DIREÇÃO desse ponto importa (o Bounds recalcula a distância sozinho
+   * pra enquadrar o conteúdo), null/undefined usa o ângulo padrão de sempre. */
+  initialCameraPosition?: { x: number; y: number; z: number } | null;
+  /** Recebe os controles de órbita — usado só pelo admin pra ler a câmera atual ao salvar um ângulo. */
+  onControlsReady?: (controls: OrbitControlsImpl) => void;
 }) {
+  const cameraPosition: [number, number, number] = initialCameraPosition
+    ? [initialCameraPosition.x, initialCameraPosition.y, initialCameraPosition.z]
+    : DEFAULT_CAMERA_POSITION;
+
   return (
     <div className="aspect-square w-full overflow-hidden rounded-xl bg-muted/30 ring-1 ring-foreground/10">
       <Canvas
-        camera={{ position: [2.5, 2, 2.5], fov: 40 }}
+        camera={{ position: cameraPosition, fov: 40 }}
         // preserveDrawingBuffer é necessário pra toDataURL() funcionar (por
         // padrão o WebGL limpa o buffer depois de cada frame) — só liga
         // quando alguém realmente vai capturar, custa um pouco de performance.
@@ -354,6 +382,7 @@ export function ProductViewer3D({
           <Environment preset="city" />
         </Suspense>
         {onCanvasReady ? <CanvasCaptureBridge onReady={onCanvasReady} /> : null}
+        {onControlsReady ? <CameraControlsBridge onReady={onControlsReady} /> : null}
         {/* makeDefault registra os controles no estado global do r3f — sem isso o
         Bounds não os enxerga e não ajusta o maxDistance, então um objeto maior
         que a distância fixa antiga (6) ficava com a câmera grudada nele. */}

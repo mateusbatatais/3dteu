@@ -160,7 +160,11 @@ export function ProductConfigurator({
   const [sizeId, setSizeId] = useState(() => {
     const shared = initialSelection?.sizeId;
     if (shared && product.sizeOptions.some((s) => s.id === shared)) return shared;
-    return product.sizeOptions[0]?.id ?? "";
+    // Padrão é o tamanho ORIGINAL do arquivo (scaleFactor 1 — o "M" que
+    // autoGenerateSizeOptions cria a partir da medida real), não o
+    // primeiro da lista por posição — P nasce com sortOrder 0, então
+    // `sizeOptions[0]` sempre resolvia pro menor tamanho por engano.
+    return product.sizeOptions.find((s) => s.scaleFactor === 1)?.id ?? product.sizeOptions[0]?.id ?? "";
   });
   const [colorByPart, setColorByPart] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -304,7 +308,7 @@ export function ProductConfigurator({
   return (
     <div className="grid gap-8 md:grid-cols-2">
       <div>
-        <ProductViewer3D parts={viewerParts} />
+        <ProductViewer3D parts={viewerParts} initialCameraPosition={product.viewerCameraPosition} />
 
         {product.images.length > 0 ? (
           <div className="mt-4">

@@ -2743,6 +2743,107 @@ combinado atualizado em `scripts/pending-migrations-0001-a-0014.sql`
 real (upload de verdade, medição, preço, confirmação de pedido) é o
 primeiro teste de verdade, a cargo do usuário — mesma ressalva de sempre.
 
+### Rodada 39: 4 ajustes no admin de produtos (tamanho padrão, peso, ângulo da câmera, upload de mídia)
+
+Usuário reportou 4 problemas de uma vez no fluxo de cadastro/edição de
+produto. Dado o tamanho (schema novo + vários componentes), entrei em
+`EnterPlanMode` e investiguei os 4 a fundo (3 agentes Explore em paralelo)
+antes de escrever qualquer plano.
+
+**1. Bug real confirmado — tamanho padrão vinha o menor (P), não o
+original (M)**: `autoGenerateSizeOptions` (rodada 19) insere P/M/G com
+`sortOrder: 0/1/2` respectivamente, e `product-configurator.tsx` escolhia
+o tamanho padrão como `product.sizeOptions[0]?.id` — por POSIÇÃO no
+array, não por qual tamanho é "o real". Como P tem `sortOrder: 0`, ele
+sempre vencia. Fix: o padrão agora é explicitamente a opção com
+`scaleFactor === 1`, caindo pro `sizeOptions[0]` só se nenhuma tiver
+escala exatamente 1. **Fix lateral da mesma família**: `createSizeOption`
+(tamanho adicionado manualmente pelo admin) não definia `sortOrder`,
+caindo no default da coluna (`0`) — colidia com o P e fazia o tamanho novo
+aparecer no INÍCIO da lista do admin em vez do fim; agora calcula
+`sortOrder` como o maior existente + 1.
+
+**2. Peso nunca era visível persistente no admin, sem onde corrigir**:
+desde a Fase 1c (rodada 37), `productParts.weightGrams` só é preenchido
+automaticamente no upload — não existia NENHUMA exibição dele em lugar
+nenhum do admin (só um toast que some no upload), nem ação pra corrigir
+manualmente se a estimativa automática estivesse errada. Adicionado:
+`PartWeightEditor` (novo componente client, mesmo padrão de
+"clique Editar → vira formulário" já usado em `SizeRow`/
+`MaterialColorRow`/`CategoryRow`) mostra "Peso: ~Xg" persistente em cada
+card de parte, com edição manual via nova Server Action
+`updatePartWeight`. Extraí `recalculateProductWeightGrams(tx, productId)`
+de dentro de `confirmPartMesh` (que já fazia essa soma) pra reaproveitar
+nos dois lugares em vez de duplicar. Uma linha extra perto da calculadora
+de preço mostra o peso TOTAL do produto (soma das peças, usado no frete)
+como referência.
+
+**3. "Usar esse ângulo como foto" não era o que o usuário queria — ele
+queria escolher o ângulo INICIAL do visualizador interativo, não travar
+numa foto estática**: investigação do código-fonte do `Bounds` (drei)
+confirmou o mecanismo exato: `reset()`/`fit()` calculam a direção da
+câmera a partir de `camera.position` ATUAL menos o centro da bounding
+box, normalizam, e só recalculam a DISTÂNCIA (nunca o ângulo) pra
+enquadrar o conteúdo. Ou seja, bastava trocar a posição inicial hardcoded
+(`[2.5, 2, 2.5]`) por uma customizada por produto — o `Bounds` continua
+cuidando do zoom sozinho, sem precisar mexer em mais nada.
+
+Nova coluna `products.viewerCameraPosition` (jsonb nullable, migração
+`0015_eminent_fat_cobra.sql`, gerada limpa) guarda só um `{x,y,z}` — só a
+DIREÇÃO desse ponto importa. `ProductViewer3D` ganhou 2 props novas:
+`initialCameraPosition` (usada no `camera={{position: [...]}}` do
+`<Canvas>` em vez do array fixo) e `onControlsReady` (mesmo padrão já
+estabelecido de `CanvasCaptureBridge`/`onCanvasReady` — um componente
+filho dentro do `<Canvas>` usando `useThree(state => state.controls)`,
+que já existe registrado via `makeDefault` no `<OrbitControls>` de
+sempre, sem precisar de nenhum ref novo). Novo componente admin
+`ProductViewerAngleControl` renderiza a MONTAGEM INTEIRA do produto
+(todas as peças com a cor padrão — diferente do `PartThumbnailCapture`,
+que continua existindo do jeito que está, só pra gerar fotos de
+catálogo) com um botão "Usar este ângulo como padrão" (lê
+`controls.object.position` — a câmera de verdade — no clique) e, quando
+já existe um ângulo customizado, um botão "Restaurar padrão". Nova
+Server Action `updateProductViewerAngle` valida que os 3 números são
+finitos e não formam um vetor nulo (quebraria o `.normalize()` do
+Bounds). Threading completo: `Product` (`types.ts`) e `getProductBySlug`
+ganham o campo; `ProductConfigurator` passa `product.viewerCameraPosition`
+pro `ProductViewer3D` que o cliente vê.
+
+**4. Upload de foto/gif do produto era um `<input type="file">` cru**:
+`ProductImagesManager` tinha só isso dentro de um `<form>` com borda
+tracejada, mas sem ícone nem área clicável de verdade — trocado pelo
+MESMO dropzone já usado em `MeshUploadForm` (ícone SVG de upload, texto
+"Arraste o arquivo aqui ou **clique pra escolher**", drag-and-drop de
+verdade, `<input className="sr-only">` escondido). Reaproveita 100% a
+validação/constantes já importadas — só a camada visual do trigger
+mudou, a lógica de upload/confirmação continua idêntica.
+
+**Testado**: Playwright contra uma página mockada cobrindo os 3
+componentes de uma vez (produto com 3 tamanhos gerados automaticamente,
+peça com um STL de teste real de 20mm, `ProductImagesManager` vazio):
+confirmei que o tamanho M vem selecionado e destacado ao carregar (preço
+exibido bate com o base, sem nenhum modificador — antes seria o de P),
+que "Peso: ~85g" aparece persistente com um botão Editar que realmente
+abre um `<input type="number">`, que a linha de peso total do produto
+aparece perto da calculadora, que o `ProductViewerAngleControl` renderiza
+o cubo de teste com o botão "Usar este ângulo como padrão" (clicar
+mostra um toast de erro gracioso — "Não foi possível salvar o ângulo" —
+já que não há banco nesta sessão, confirmando que o caminho de falha é
+limpo, não trava), e que o dropzone de foto/gif troca completamente o
+`<input>` cru por um ícone+texto+drag-and-drop, sem sobrar nenhum input
+de arquivo visível fora do padrão `sr-only`. Zero erros de console em
+todos os passos. `npm run lint`, `npx tsc --noEmit`, `npm run test`
+(13/13, suíte de catálogo não afetada) e `npm run build` (`.next` limpo)
+passaram limpos.
+
+**Pendente**: rodar a migração `0015` contra o Supabase real — SQL
+combinado atualizado em `scripts/pending-migrations-0001-a-0015.sql`
+(renomeado de `...-0014.sql`). Não testado contra o Supabase real (mesma
+limitação de sempre): a lógica de `updatePartWeight`/
+`updateProductViewerAngle` é direta (um `UPDATE` + revalidação) e já
+passa lint/build/type-check, mas o primeiro teste de verdade é o usuário
+usando os 4 ajustes em produção.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

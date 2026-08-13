@@ -8,7 +8,10 @@ import type { MaterialPrintProcess } from "@/features/catalog/types";
 import { MeshUploadForm } from "./mesh-upload-form";
 import { PartRegionsPanel } from "./part-regions-panel";
 import { PartThumbnailCapture } from "./part-thumbnail-capture";
+import { PartWeightEditor } from "./part-weight-editor";
 import { PriceSuggestionCalculator } from "./price-suggestion-calculator";
+import type { ViewerPart } from "./product-viewer-3d";
+import { ProductViewerAngleControl } from "./product-viewer-angle-control";
 
 interface RegionRow {
   id: string;
@@ -25,6 +28,7 @@ interface PartRow {
   materialOptions: Array<{ materialColorId: string }>;
   regions: RegionRow[];
   defaultMaterialColorId: string | null;
+  weightGrams: number | null;
 }
 
 interface MaterialColorOption {
@@ -65,6 +69,7 @@ export function ProductPartsManager({
   productWeightGrams,
   productHeightCm,
   pricingSettings,
+  viewerCameraPosition,
 }: {
   productId: string;
   parts: PartRow[];
@@ -73,7 +78,35 @@ export function ProductPartsManager({
   productWeightGrams: number | null;
   productHeightCm: number | null;
   pricingSettings: PricingSettings;
+  viewerCameraPosition: { x: number; y: number; z: number } | null;
 }) {
+  // Montagem inteira (todas as peças com a cor padrão de cada uma) — usada
+  // só pelo controle de ângulo abaixo, pra mostrar exatamente o que o
+  // cliente vê na página do produto (diferente do PartThumbnailCapture,
+  // que mostra uma peça de cada vez pra gerar fotos de catálogo).
+  const viewerParts: ViewerPart[] = parts.map((part) => {
+    const defaultColor = allColors.find((c) => c.id === part.defaultMaterialColorId);
+    if (part.regions.length > 0) {
+      return {
+        id: part.id,
+        meshUrl: part.meshFileUrl,
+        color: "#a1a1aa",
+        regions: part.regions.map((region) => ({
+          paintState: region.paintState,
+          color: allColors.find((c) => c.id === region.defaultMaterialColorId)?.hexColor ?? "#a1a1aa",
+        })),
+      };
+    }
+    return {
+      id: part.id,
+      meshUrl: part.meshFileUrl,
+      color: defaultColor?.hexColor ?? "#a1a1aa",
+      colorSecondary: defaultColor?.hexColorSecondary ?? null,
+      printProcess: defaultColor?.printProcess,
+      opacity: defaultColor?.opacity,
+    };
+  });
+
   return (
     <div>
       <h2 className="text-lg font-medium">Partes, materiais e arquivo 3D</h2>
@@ -81,6 +114,22 @@ export function ProductPartsManager({
         Um produto de peça única tem uma parte só. Produtos multi-cor têm uma parte por peça impressa
         separadamente — cada uma com seu próprio arquivo .stl.
       </p>
+
+      {parts.length > 0 ? (
+        <div className="mt-4 max-w-2xl rounded-xl bg-card p-4 ring-1 ring-foreground/10">
+          <h3 className={SECTION_LABEL_CLASS}>Ângulo inicial do visualizador</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Como o produto abre na página da loja — gire até achar um enquadramento bom e salve.
+          </p>
+          <div className="mt-2">
+            <ProductViewerAngleControl
+              productId={productId}
+              parts={viewerParts}
+              initialCameraPosition={viewerCameraPosition}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-col gap-4">
         {parts.map((part) => {
@@ -95,6 +144,10 @@ export function ProductPartsManager({
                   label="Excluir parte"
                   description={`Excluir a parte "${part.name}"? O arquivo 3D e os materiais atribuídos a ela também somem.`}
                 />
+              </div>
+
+              <div className="mt-1.5">
+                <PartWeightEditor productId={productId} partId={part.id} weightGrams={part.weightGrams} />
               </div>
 
               {part.regions.length > 0 ? (
@@ -210,6 +263,10 @@ export function ProductPartsManager({
 
       <div className="mt-4 max-w-2xl rounded-xl bg-card p-4 ring-1 ring-foreground/10">
         <h3 className={SECTION_LABEL_CLASS}>Calculadora de preço</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Peso total do produto (soma das peças, usado na cotação de frete):{" "}
+          {productWeightGrams !== null ? `~${productWeightGrams}g` : "ainda não medido"}
+        </p>
         <PriceSuggestionCalculator
           productId={productId}
           weightGrams={productWeightGrams}

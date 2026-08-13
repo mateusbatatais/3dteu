@@ -84,6 +84,10 @@ export interface Product {
   images: string[];
   parts: ProductPart[];
   sizeOptions: SizeOption[];
+  /** Ângulo inicial customizado pelo admin no visualizador 3D — null usa o
+   * ângulo padrão de sempre. Só a direção do ponto importa (ver
+   * ProductViewerAngleControl). */
+  viewerCameraPosition: { x: number; y: number; z: number } | null;
 }
 
 /**

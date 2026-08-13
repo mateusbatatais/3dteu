@@ -114,6 +114,12 @@ export const products = pgTable("products", {
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),
   ogImageUrl: text("og_image_url"),
+  // Posição inicial da câmera no preview 3D interativo — o admin escolhe
+  // girando o modelo (ver ProductViewerAngleControl) e salva o ponto
+  // atual; null usa o ângulo padrão de sempre (canto/diagonal). Só a
+  // DIREÇÃO importa (o Bounds do drei recalcula a distância/zoom sozinho
+  // a partir dela, nunca o ângulo) — por isso basta um vetor, sem escala.
+  viewerCameraPosition: jsonb("viewer_camera_position"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -345,6 +345,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     lengthCm: row.lengthCm,
     metaTitle: row.metaTitle,
     metaDescription: row.metaDescription,
+    viewerCameraPosition: row.viewerCameraPosition as { x: number; y: number; z: number } | null,
     images: row.images.map((image) => image.url),
     parts: row.parts.map((part) => ({
       id: part.id,

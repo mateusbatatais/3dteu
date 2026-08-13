@@ -91,6 +91,7 @@ export default async function EditarProdutoPage({
             productWeightGrams={product.weightGrams}
             productHeightCm={product.heightCm}
             pricingSettings={pricingSettings}
+            viewerCameraPosition={product.viewerCameraPosition as { x: number; y: number; z: number } | null}
           />
         </TabsContent>
 

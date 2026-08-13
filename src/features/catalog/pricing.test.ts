@@ -46,6 +46,7 @@ const produtoUmaPeca: Product = {
   lengthCm: 16,
   metaTitle: null,
   metaDescription: null,
+  viewerCameraPosition: null,
   images: [],
   parts: [
     {
@@ -77,6 +78,7 @@ const produtoDuasPecas: Product = {
   lengthCm: 18,
   metaTitle: null,
   metaDescription: null,
+  viewerCameraPosition: null,
   images: [],
   parts: [
     {
@@ -115,6 +117,7 @@ const produtoPintado: Product = {
   lengthCm: 10,
   metaTitle: null,
   metaDescription: null,
+  viewerCameraPosition: null,
   images: [],
   parts: [
     {

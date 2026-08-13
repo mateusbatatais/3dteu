@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "viewer_camera_position" jsonb;
