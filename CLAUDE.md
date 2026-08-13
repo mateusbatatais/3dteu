@@ -2844,6 +2844,38 @@ limitação de sempre): a lógica de `updatePartWeight`/
 passa lint/build/type-check, mas o primeiro teste de verdade é o usuário
 usando os 4 ajustes em produção.
 
+### Rodada 40: página 404 customizada
+
+Usuário pediu uma 404 "mais divertida", com liberdade criativa, pra um
+site de impressão 3D. `src/app/not-found.tsx` novo (não existia nenhum —
+confirmado por busca antes de criar) — piada em cima do clássico "print
+falhou e virou espaguete" (peça descola da mesa, o bico continua
+extrudendo no ar): squiggle SVG ondulado em laranja (balançando devagar
+via `@keyframes` inline), "404" grande em azul, texto "Essa peça saiu
+torta.", e um rodapé estilo log de impressora ("erro g-code:
+peça_não_encontrada (404)"). Reaproveita a mesma técnica de fundo com
+círculos desfocados azul/laranja já usada no hero da home (rodada 18) e
+o `SiteLogo`/`Button` (`render`+`nativeButton={false}`, padrão base-ui já
+estabelecido) — dois CTAs: "Voltar pro início" e "Imprimir algo de
+verdade" (linka pra `/conta/modelo-3d`, um cross-sell leve dentro da
+piada, em vez de repetir o link pra home).
+
+Confirmado que um `src/app/not-found.tsx` simples (não o
+`global-not-found.js` experimental) é suficiente aqui: só existe UM
+layout raiz no projeto todo (`src/app/layout.tsx`, único lugar com
+`<html>`/`<body>`) — `(loja)/layout.tsx` e `admin/layout.tsx` só
+aninham `<div>`s, não redeclaram `<html>`. Por isso o not-found raiz já
+cobre qualquer URL não encontrada no site inteiro.
+
+**Testado**: `curl` contra uma rota inexistente confirmou status HTTP
+**404** de verdade (não 200 com conteúdo de erro). Playwright contra o
+dev server real, claro e escuro: página renderiza certo nos dois temas,
+sem nenhum erro de console (o único "erro" logado é o esperado — o
+browser reportando que o próprio documento retornou 404, não um erro de
+JS). `npm run lint`, `npx tsc --noEmit`, `npm run test` (13/13) e `npm
+run build` (`.next` limpo, `/_not-found` aparece na lista de rotas)
+passaram limpos.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com
