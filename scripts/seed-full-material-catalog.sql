@@ -3,7 +3,7 @@
 -- opacity, dual_color_fee_cents e hex_color_secondary).
 --
 -- Catálogo comprehensive pra uma loja de impressão 3D em FDM + resina:
--- 3 Materiais (Plástico, Flexível/TPU, Resina), 8 Tipos, 49 Cores —
+-- 3 Materiais (Plástico, Flexível/TPU, Resina), 11 Tipos, 60 Cores —
 -- pensado pra cobrir o que a maioria das lojas precisa de cara, sem ser
 -- infinito. Ajuste/complete depois direto em /admin/materiais (a tela já
 -- tem CRUD completo pros 3 níveis).
@@ -11,16 +11,30 @@
 -- PLA/PLA Silk/ABS/PETG usam as cores REAIS vendidas pela Cliever
 -- (https://cliever3d.commercesuite.com.br/filamento, conferido produto a
 -- produto — PETG realmente só tem 2 cores no catálogo deles, Preto e
--- Branco; não é falta de dado, é a oferta real do fornecedor). TPU e
--- Resina não têm um fornecedor de referência aqui, continuam com uma
--- paleta razoável genérica — ajuste se você tiver um fornecedor
--- específico em mente.
+-- Branco; não é falta de dado, é a oferta real do fornecedor).
+--
+-- Os 6 Tipos de Resina (Padrão, Alta Definição, Resistente a Impacto,
+-- Flexível, Cristal, ABS-like) mesclam dois fornecedores conferidos
+-- produto a produto: 3D Cure
+-- (https://3dcure.com.br/categoria/resina-3d/ — Basic/Pixel/Gamer/Flex/
+-- ABS-like, com preço e cores reais de cada produto) e Quanton
+-- (https://quanton3d.com.br/resinas/ — Spin/PyroBlast/Spark, usados só
+-- pra ampliar a paleta de cor da linha "Padrão" e como referência da
+-- linha "Cristal"). Linhas de nicho dos dois sites (odontologia, joalheria,
+-- fundição/cera) ficaram de fora de propósito — não fazem sentido pra uma
+-- loja de impressão sob encomenda geral como a 3D Teu.
+--
+-- TPU não tem um fornecedor de referência aqui ainda, continua com uma
+-- paleta razoável genérica — manda um link se tiver um fornecedor em mente.
 --
 -- PREÇOS E VELOCIDADES SÃO CHUTES RAZOÁVEIS pro mercado brasileiro (os de
--- PLA/PLA Silk/ABS/PETG usam como referência os preços reais vistos no
--- site da Cliever, arredondados), não o custo exato do seu fornecedor —
--- a calculadora de preço (e o preço ao vivo por material da loja) só fica
--- precisa depois de você revisar cada Tipo em /admin/materiais.
+-- PLA/PLA Silk/ABS/PETG/Padrão/Alta Definição/Resistente a Impacto/
+-- Flexível(resina)/ABS-like(resina) usam como referência os preços reais
+-- vistos nos sites da Cliever/3D Cure, arredondados — só "Cristal" ficou
+-- sem preço real confirmado, é uma estimativa), não o custo exato do seu
+-- fornecedor — a calculadora de preço (e o preço ao vivo por material da
+-- loja) só fica precisa depois de você revisar cada Tipo em
+-- /admin/materiais.
 --
 -- Você confirmou que não tem muita coisa cadastrada ainda e autorizou
 -- apagar o catálogo de materiais atual pra evitar misturar com dado de
@@ -50,9 +64,12 @@ DECLARE
   v_petg_id uuid;
   v_abs_id uuid;
   v_tpu_id uuid;
+  v_padrao_id uuid;
+  v_alta_def_id uuid;
   v_cristal_id uuid;
   v_resistente_id uuid;
   v_resina_flex_id uuid;
+  v_abslike_id uuid;
 BEGIN
   -- ---------------------------------------------------------------------
   -- Materiais
@@ -106,17 +123,42 @@ BEGIN
   VALUES (v_flexivel_id, 'TPU 95A', 12000, 10.00, 'Material flexível e emborrachado — ideal pra capinhas, solados, peças que precisam dobrar ou absorver impacto. Imprime bem mais devagar que PLA/PETG.')
   RETURNING id INTO v_tpu_id;
 
+  -- Preço real da 3D Cure Basic (R$149,00/kg) — linha de uso geral,
+  -- equivalente à "Spin"/"PyroBlast" da Quanton.
   INSERT INTO "material_types" ("material_id", "name", "price_per_kg_cents", "print_speed_value", "description")
-  VALUES (v_resina_id, 'Cristal (Padrão)', 25000, 15.00, 'Translúcida, ótima pra decoração e peças com detalhe fino — mais frágil que a Resistente.')
-  RETURNING id INTO v_cristal_id;
+  VALUES (v_resina_id, 'Padrão', 14900, 15.00, 'Resina rígida de uso geral, ótimo custo-benefício e bom acabamento — a mais indicada pra quem tá começando ou quer o dia a dia da loja.')
+  RETURNING id INTO v_padrao_id;
 
+  -- Preço real da 3D Cure Pixel (R$189,00/kg) — feita pra impressoras LCD
+  -- 8K/12K/14K, pigmentação densa que realça muito detalhe.
   INSERT INTO "material_types" ("material_id", "name", "price_per_kg_cents", "print_speed_value", "description")
-  VALUES (v_resina_id, 'Resistente (Tough)', 28000, 15.00, 'Menos frágil que a Cristal — boa pra peça funcional e protótipo, não só decorativa.')
+  VALUES (v_resina_id, 'Alta Definição', 18900, 15.00, 'Detalhe superior pra impressoras LCD de alta resolução — ideal pra miniaturas, joias e maquetes. Mais indicada pra peça de exposição do que peça manuseada com frequência.')
+  RETURNING id INTO v_alta_def_id;
+
+  -- Preço real da 3D Cure Gamer (R$219,00/kg) — pensada pra ter mais
+  -- resistência a impacto que a Alta Definição, pra peças que são
+  -- manuseadas (miniaturas de jogo, action figures).
+  INSERT INTO "material_types" ("material_id", "name", "price_per_kg_cents", "print_speed_value", "description")
+  VALUES (v_resina_id, 'Resistente a Impacto', 21900, 15.00, 'Equilíbrio entre detalhe e resistência a queda/impacto — ideal pra figures e miniaturas que vão ser manuseados de verdade, não só expostos.')
   RETURNING id INTO v_resistente_id;
 
+  -- Preço real da 3D Cure Flex (R$179,00/kg).
   INSERT INTO "material_types" ("material_id", "name", "price_per_kg_cents", "print_speed_value", "description")
-  VALUES (v_resina_id, 'Flexível', 32000, 12.00, 'Resina elástica, pra peças que precisam dobrar ou vedar — mais cara e mais lenta de curar que as outras.')
+  VALUES (v_resina_id, 'Flexível', 17900, 12.00, 'Resina elástica, pra peças que precisam dobrar, vedar ou absorver impacto (pneus de miniatura, o-rings, protótipos funcionais) — não é biocompatível.')
   RETURNING id INTO v_resina_flex_id;
+
+  -- Sem preço real confirmado nos dois sites (a Quanton não lista preço
+  -- por kg claramente pra "Spark") — estimativa a partir do padrão de
+  -- preço das outras linhas de detalhe.
+  INSERT INTO "material_types" ("material_id", "name", "price_per_kg_cents", "print_speed_value", "description")
+  VALUES (v_resina_id, 'Cristal', 20000, 15.00, 'Transparente de verdade (não só translúcida) — pensada pra peças decorativas com efeito de vidro/cristal. Mais frágil que as outras linhas.')
+  RETURNING id INTO v_cristal_id;
+
+  -- Preço real da 3D Cure ABS-like (R$229,00/kg) — resina de engenharia,
+  -- simula a resistência mecânica do ABS.
+  INSERT INTO "material_types" ("material_id", "name", "price_per_kg_cents", "print_speed_value", "description")
+  VALUES (v_resina_id, 'ABS-like (Engenharia)', 22900, 15.00, 'Alta tenacidade e resistência a impacto, simulando o comportamento do ABS — pra peça técnica/funcional, não decorativa.')
+  RETURNING id INTO v_abslike_id;
 
   -- ---------------------------------------------------------------------
   -- Cores
@@ -190,18 +232,47 @@ BEGIN
     (v_tpu_id, 'Branco', '#FFFFFF', 1),
     (v_tpu_id, 'Transparente', '#E5F3FF', 0.45);
 
+  -- Padrão: mescla as cores reais da 3D Cure Basic (Cinza Claro, Clear,
+  -- Skin) com as da linha Spin/PyroBlast da Quanton (mesma categoria de
+  -- "uso geral" nos dois fornecedores) — paleta bem mais ampla que uma
+  -- resina de nicho, faz sentido pra linha mais vendida da loja.
   INSERT INTO "material_colors" ("material_type_id", "name", "hex_color", "opacity") VALUES
-    (v_cristal_id, 'Transparente', '#E0F2FE', 0.35),
-    (v_cristal_id, 'Branco', '#FFFFFF', 1),
-    (v_cristal_id, 'Cinza', '#9CA3AF', 1),
-    (v_cristal_id, 'Preto', '#171717', 1);
+    (v_padrao_id, 'Cinza Claro', '#B0B3B8', 1),
+    (v_padrao_id, 'Cinza Escuro', '#4B5563', 1),
+    (v_padrao_id, 'Branco', '#FFFFFF', 1),
+    (v_padrao_id, 'Preto', '#171717', 1),
+    (v_padrao_id, 'Skin', '#E8B796', 1),
+    (v_padrao_id, 'Azul', '#2563EB', 1),
+    (v_padrao_id, 'Verde', '#16A34A', 1),
+    (v_padrao_id, 'Amarelo', '#EAB308', 1),
+    (v_padrao_id, 'Ocre', '#C08552', 1),
+    (v_padrao_id, 'Transparente', '#E0F2FE', 0.4);
 
+  -- Alta Definição: só 1 cor mesmo — oferta real da 3D Cure Pixel hoje
+  -- (pigmentação pensada só pra realçar detalhe, não pra variedade de cor).
   INSERT INTO "material_colors" ("material_type_id", "name", "hex_color") VALUES
-    (v_resistente_id, 'Cinza', '#6B7280'),
-    (v_resistente_id, 'Preto', '#171717'),
-    (v_resistente_id, 'Branco', '#FFFFFF');
+    (v_alta_def_id, 'Cinza Claro', '#B0B3B8');
 
+  -- Resistente a Impacto: as 4 cores reais da 3D Cure Gamer.
   INSERT INTO "material_colors" ("material_type_id", "name", "hex_color", "opacity") VALUES
-    (v_resina_flex_id, 'Preto', '#171717', 1),
-    (v_resina_flex_id, 'Transparente', '#E0F2FE', 0.5);
+    (v_resistente_id, 'Cinza', '#6B7280', 1),
+    (v_resistente_id, 'Cinza Claro', '#B0B3B8', 1),
+    (v_resistente_id, 'Preto', '#171717', 1),
+    (v_resistente_id, 'Transparente', '#E0F2FE', 0.35);
+
+  -- Flexível: as 2 cores reais da 3D Cure Flex (a Clear é justamente pra
+  -- quem quer colorir com pigmento à parte).
+  INSERT INTO "material_colors" ("material_type_id", "name", "hex_color", "opacity") VALUES
+    (v_resina_flex_id, 'Transparente', '#E0F2FE', 0.5),
+    (v_resina_flex_id, 'Preto', '#171717', 1);
+
+  -- Cristal: uma cor só de propósito — é justamente a linha "só
+  -- transparente" (equivalente à Spark da Quanton).
+  INSERT INTO "material_colors" ("material_type_id", "name", "hex_color", "opacity") VALUES
+    (v_cristal_id, 'Transparente', '#E0F2FE', 0.3);
+
+  -- ABS-like: as 2 cores reais da 3D Cure ABS-like.
+  INSERT INTO "material_colors" ("material_type_id", "name", "hex_color", "opacity") VALUES
+    (v_abslike_id, 'Cinza Claro', '#B0B3B8', 1),
+    (v_abslike_id, 'Transparente', '#E0F2FE', 0.4);
 END $$;
