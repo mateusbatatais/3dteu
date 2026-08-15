@@ -3150,18 +3150,34 @@ dava conta disso (mesmo `Bounds`, mesma fórmula, mas o `ProductViewer3D`
 nunca tinha sido auditado pra esse problema especificamente — só o
 `AnimatedModelViewer` tinha).
 
-**Fix**: `margin` subiu de `1.4` pra `1.8` em `product-viewer-3d.tsx`
-(afeta todo mundo que usa esse componente — produto na loja, thumbnails
-do admin, controle de ângulo, modelo customizado). **Testado
-comparando as duas margens lado a lado**: capturei o mesmo cubo
-placeholder via Playwright com `margin=1.4` (bordas bem coladas no
-quadro) e com `margin=1.8` (folga clara em todas as bordas) — a versão
-1.4 não chegou a cortar de verdade nesse cubo sintético simples (o
-objeto real do usuário provavelmente tem mais geometria/detalhe nas
-quinas que aumenta a silhueta aparente), mas a comparação confirma que
-1.8 dá uma folga real e substancial a mais, direção certa pro problema
-relatado. `npm run lint`, `npx tsc --noEmit`, `npm run test` (19/19) e
-`npm run build` (`.next` limpo) passaram limpos.
+**Fix, primeira tentativa**: `margin` subiu de `1.4` pra `1.8`. Testei
+comparando as duas margens lado a lado com um cubo placeholder sintético
+via Playwright — 1.8 mostrava folga clara em todas as bordas, mas 1.4
+também não chegava a cortar de verdade nesse cubo simples. Usuário
+mandou outro print confirmando que **continuava cortando** mesmo depois
+desse fix, e sugeriu "diminuir o zoom" (aumentar o margin ainda mais).
+
+**Causa raiz mais precisa, calculada à mão**: `DEFAULT_CAMERA_POSITION
+= [2.5, 2, 2.5]` tem X=Z — a câmera fica exatamente na diagonal do
+plano XZ. Visto daí, uma face de topo alinhada aos eixos (comum em
+peças com uma face plana de cima, não só cubos perfeitos) aparece
+**rotacionada 45° na tela** (formato losango) — e a diagonal dessa face
+(lado×√2 ≈ 1,41×) já excede a dimensão isolada que o `Bounds` usa pro
+cálculo (`Math.max(box.x, box.y, box.z)`, nunca a diagonal). Um vértice
+de cubo perfeito visto de canto (a hipótese original) chega a ≈1,63×,
+ainda pior. É por isso que o cubo sintético "de teste" (visto só do
+ângulo padrão OU até de um ângulo diagonal exato `(2,2,2)`) nunca
+reproduziu o corte de verdade — o objeto real do usuário provavelmente
+tem uma face de topo proeminente (uma peça mais "achatada" que um cubo
+perfeito), que é justamente o caso onde a razão 1,41-1,63× domina.
+
+**Fix final**: `margin` subiu pra `2,2` — folga confortável acima dos
+dois piores casos (1,41× e 1,63×) sem deixar o objeto minúsculo na tela.
+Reconferido com Playwright nos dois ângulos de câmera (padrão e diagonal
+exata): cubo aparece bem enquadrado, com espaço de sobra em todas as
+bordas, tamanho ainda razoável (não ficou pequeno demais). `npm run
+lint`, `npx tsc --noEmit`, `npm run test` (19/19) e `npm run build`
+(`.next` limpo) passaram limpos.
 
 ## Preferências do usuário (importante)
 

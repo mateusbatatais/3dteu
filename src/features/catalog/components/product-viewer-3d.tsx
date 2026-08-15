@@ -381,13 +381,15 @@ export function ProductViewer3D({
         <directionalLight position={[3, 5, 2]} intensity={1} />
         <Suspense fallback={null}>
           {/* Bounds só considera a MAIOR dimensão isolada da caixa (não a
-          diagonal) pro cálculo de distância — visto do ângulo de canto fixo
-          da câmera (DEFAULT_CAMERA_POSITION), um objeto compacto/cúbico
-          aparenta ser bem maior que essa dimensão isolada, e cortava nas
-          bordas com margin 1.4 (confirmado com print real de um produto
-          cúbico em produção). 1.8 dá folga suficiente pro pior caso sem
-          deixar o objeto pequeno demais na tela. */}
-          <Bounds fit clip observe margin={1.8}>
+          diagonal) pro cálculo de distância. A câmera padrão fica exatamente
+          na diagonal do plano XZ (DEFAULT_CAMERA_POSITION = [2.5, 2, 2.5],
+          x=z) — visto daí, uma face de topo alinhada aos eixos aparece
+          rotacionada 45° na tela (losango), e a diagonal dessa face
+          (lado×√2 ≈ 1,41×) já excede a dimensão isolada que o Bounds usa;
+          um vértice de cubo visto de canto chega a ≈1,63×. 1.4 e depois 1.8
+          ainda cortavam nas bordas em prints reais — 2.2 dá folga de sobra
+          pros dois piores casos sem deixar o objeto minúsculo na tela. */}
+          <Bounds fit clip observe margin={2.2}>
             <group>
               {parts.map((part) => (
                 <Part key={part.id} part={part} />
