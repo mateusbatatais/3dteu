@@ -2953,6 +2953,64 @@ real quando o usuário quiser popular o catálogo de verdade — nenhuma
 migração nova nesta rodada (só o script de seed e mudanças de
 componente/UI).
 
+### Rodada 42: peso/preço de P/G passam a ser calculados a partir da escala
+
+Usuário perguntou se o preço base dava pra ser calculado a partir do
+tamanho/peso do objeto — resposta é que **já é assim** desde as rodadas
+22/28 (`PriceSuggestionCalculator`, botão "Usar esse preço" no admin,
+nunca aplica sozinho). O pedido de verdade era outro, mais específico:
+"o tamanho M é o que é gerado pelo arquivo. O P e o G precisam ter o
+valor e peso de acordo com o aumento... no caso do P, o preço pode
+deixar o mesmo do M, mas o peso diminui. o G precisa aumentar o preço e
+o peso. Tudo baseado no aumento ou diminuição da escala que já temos
+hoje."
+
+**Bug real confirmado antes de mexer**: `autoGenerateSizeOptions`
+(rodada 19, cria P/M/G automaticamente a partir da medida do arquivo)
+sempre deixava `weightModifierGrams`/`priceModifierCents` no default da
+coluna (`0`) pros 3 tamanhos — ou seja, P e G sempre tiveram o MESMO
+peso/preço do M, apesar do `scaleFactor` (0.5/1/1.5) já existir e ser
+aplicado de verdade na malha 3D. `createSizeOption`/`updateSizeOption`
+(form manual do admin) também exigiam digitar esses dois números à mão,
+sem nenhuma ajuda.
+
+**Fix**: nova função `estimateSizeScalingModifiers` (`pricing.ts`) —
+peso escala com o CUBO do `scaleFactor` (é volume, não comprimento: a
+peça a 50% linear tem só 12,5% do peso original), preço só pode
+AUMENTAR (nunca diminuir): pra escalas menores o preço fica igual ao
+tamanho base (decisão de negócio explícita do usuário — custo fixo de
+operação não cai só porque a peça ficou menor), pra escalas maiores soma
+o custo real de material/energia extra usando a MESMA cor padrão de
+cada peça antes/depois da escala (reaproveita `colorCostCents`/
+`resolveDefaultMaterialColorId`, já existentes pra calcular o delta por
+TROCA de material — dimensão totalmente independente desta). Nova query
+`getProductPartsForSizeEstimate` busca só o necessário (peso + cor
+padrão + cores aceitas de cada parte) pra rodar essa conta.
+
+`autoGenerateSizeOptions`, `createSizeOption` e `updateSizeOption`
+passaram a chamar essa função automaticamente — `SizeOptionInput` perdeu
+os campos `priceModifierReais`/`weightModifierGrams` (não existe mais
+"digitar peso/preço de um tamanho à mão": P/M/G são sempre a MESMA malha
+escalada, então quanto peso/preço mudam é consequência direta da
+escala, não uma decisão separada — mesmo espírito de peso/dimensões da
+peça terem virado 100% automáticos na rodada 26). `SizeForm` ficou só
+com Label + Escala; `ProductSizesManager` ganhou uma nota explicando a
+regra (peso pelo cubo da escala, preço só sobe).
+
+**Testado com contas feitas à mão**: 6 testes novos em `pricing.test.ts`
+(peça de 40g, escala 0.5 → -35g/R$0,00; escala 1.5 → +95g/R$7,60; escala
+1 → 0/0; delta com componente de energia; peça sem peso não contribui;
+sem cor padrão salva cai pra primeira da lista, com a taxa de
+pós-processamento cancelando corretamente no delta) — todos batem com o
+cálculo manual. `npm run lint`, `npx tsc --noEmit`, `npm run test`
+(19/19) e `npm run build` (`.next` limpo) passaram limpos.
+
+**Pendente**: tamanhos já criados antes desta rodada (se o usuário já
+tiver algum produto cadastrado com P/G gerados automaticamente) ficam
+com os modificadores antigos (0/0) até o admin abrir "Editar" em cada um
+e salvar de novo — isso já recalcula pela fórmula nova, não precisa de
+migração nem script.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

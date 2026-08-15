@@ -182,3 +182,49 @@ export function calculateProductPriceCents(
 
   return product.basePriceCents + size.priceModifierCents + Math.round(priceDeltaCents);
 }
+
+/**
+ * Quanto o peso e o preço mudam ao escalar o produto inteiro uniformemente
+ * pra um `scaleFactor` diferente de 1 — P/G nunca são um arquivo à parte,
+ * são a MESMA malha em outra escala (ver autoGenerateSizeOptions em
+ * actions.ts). Usado só ao gerar/editar um tamanho, pra preencher
+ * `size.weightModifierGrams`/`priceModifierCents` automaticamente — nunca
+ * no cálculo ao vivo do preço final (`calculateProductPriceCents` acima só
+ * lê os modificadores já gravados no banco).
+ *
+ * Peso escala com o CUBO do fator (é volume, não comprimento): a 50%
+ * linear, uma peça tem só 12,5% do peso original. Preço só pode AUMENTAR —
+ * pra escalas menores (`scaleFactor < 1`), o preço fica igual ao tamanho
+ * base (decisão de negócio: custo fixo de operação não cai só porque a
+ * peça ficou menor); pra escalas maiores, soma o custo real de
+ * material/energia extra, usando a cor PADRÃO de cada peça antes/depois da
+ * escala — nunca confundir com o delta por TROCA de material
+ * (`partPriceDeltaCents` acima), que é uma dimensão independente.
+ */
+export function estimateSizeScalingModifiers(
+  parts: Array<Pick<ProductPart, "weightGrams" | "defaultMaterialColorId" | "availableColors">>,
+  scaleFactor: number,
+  pricingConfig: EnergyPricingConfig | null,
+): { weightModifierGrams: number; priceModifierCents: number } {
+  let weightDeltaGrams = 0;
+  let priceDeltaCents = 0;
+
+  for (const part of parts) {
+    if (part.weightGrams === null) continue;
+
+    const baseWeight = part.weightGrams;
+    const scaledWeight = baseWeight * scaleFactor ** 3;
+    weightDeltaGrams += scaledWeight - baseWeight;
+
+    const defaultColorId = resolveDefaultMaterialColorId(part);
+    const defaultColor = part.availableColors.find((c) => c.id === defaultColorId);
+    if (!defaultColor) continue;
+
+    priceDeltaCents += colorCostCents(scaledWeight, defaultColor, pricingConfig) - colorCostCents(baseWeight, defaultColor, pricingConfig);
+  }
+
+  return {
+    weightModifierGrams: Math.round(weightDeltaGrams),
+    priceModifierCents: Math.max(0, Math.round(priceDeltaCents)),
+  };
+}

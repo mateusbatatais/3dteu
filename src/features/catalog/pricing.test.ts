@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateProductPriceCents, InvalidSelectionError } from "./pricing";
+import { calculateProductPriceCents, estimateSizeScalingModifiers, InvalidSelectionError } from "./pricing";
 import type { MaterialColor, Product } from "./types";
 
 function makeColor(id: string, name: string, overrides: Partial<MaterialColor> = {}): MaterialColor {
@@ -303,5 +303,59 @@ describe("calculateProductPriceCents", () => {
         ],
       }),
     ).toThrow(InvalidSelectionError);
+  });
+});
+
+describe("estimateSizeScalingModifiers", () => {
+  const parteUnica = [{ weightGrams: 40, defaultMaterialColorId: "mat-azul", availableColors: [azul] }];
+
+  it("P (escala 0.5): peso cai com o cubo da escala, preço fica igual ao tamanho base", () => {
+    const { weightModifierGrams, priceModifierCents } = estimateSizeScalingModifiers(parteUnica, 0.5, null);
+
+    expect(weightModifierGrams).toBe(-35); // 40×0.5³ − 40 = 5 − 40
+    expect(priceModifierCents).toBe(0); // custo do material cai, mas o preço nunca diminui
+  });
+
+  it("G (escala 1.5): peso e preço aumentam com o cubo da escala", () => {
+    const { weightModifierGrams, priceModifierCents } = estimateSizeScalingModifiers(parteUnica, 1.5, null);
+
+    // 40×1.5³ = 135g → +95g. Custo: 135×8000/1000=1080 − 40×8000/1000=320 = 760.
+    expect(weightModifierGrams).toBe(95);
+    expect(priceModifierCents).toBe(760);
+  });
+
+  it("M (escala 1) é sempre a própria âncora — 0/0", () => {
+    expect(estimateSizeScalingModifiers(parteUnica, 1, null)).toEqual({ weightModifierGrams: 0, priceModifierCents: 0 });
+  });
+
+  it("inclui o componente de energia quando pricingConfig é passado", () => {
+    const { priceModifierCents } = estimateSizeScalingModifiers(parteUnica, 1.5, {
+      energyPriceCentsPerKwh: 100,
+      printerPowerWatts: 200,
+    });
+
+    // tempo(135g)=135/20=6.75h, energia=round(6.75×0.2×100)=135 → custo=1080+135=1215
+    // tempo(40g)=40/20=2h, energia=round(2×0.2×100)=40 → custo=320+40=360
+    // delta = 1215 − 360 = 855
+    expect(priceModifierCents).toBe(855);
+  });
+
+  it("peça sem weightGrams não contribui (upload ainda não reconfirmado)", () => {
+    const parts = [
+      { weightGrams: 40, defaultMaterialColorId: "mat-azul", availableColors: [azul] },
+      { weightGrams: null, defaultMaterialColorId: null, availableColors: [azul] },
+    ];
+
+    expect(estimateSizeScalingModifiers(parts, 1.5, null)).toEqual({ weightModifierGrams: 95, priceModifierCents: 760 });
+  });
+
+  it("sem cor padrão salva, cai pra primeira cor da lista de aceitas (e a taxa de pós-processamento cancela no delta)", () => {
+    const parts = [{ weightGrams: 40, defaultMaterialColorId: null, availableColors: [madeira, azul] }];
+
+    // madeira: 135×25000/1000+300=3675; 40×25000/1000+300=1300; delta=2375
+    // (a taxa fixa de 300 aparece nos dois lados e cancela — só sobra o
+    // custo de material referente ao peso extra de verdade)
+    const { priceModifierCents } = estimateSizeScalingModifiers(parts, 1.5, null);
+    expect(priceModifierCents).toBe(2375);
   });
 });

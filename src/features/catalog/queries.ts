@@ -295,6 +295,46 @@ export async function getMaterialColorIdsByMaterial(materialId: string): Promise
   return types.flatMap((t) => t.colors.map((c) => c.id));
 }
 
+/** Peso + cor padrão + cores aceitas de cada parte, só o necessário pra
+ * estimar como peso/preço mudam ao escalar o produto pra um tamanho
+ * diferente (ver estimateSizeScalingModifiers em pricing.ts) — usado ao
+ * gerar/editar um tamanho (actions.ts), nunca pela loja. */
+export async function getProductPartsForSizeEstimate(productId: string): Promise<
+  Array<{ weightGrams: number | null; defaultMaterialColorId: string | null; availableColors: MaterialColor[] }>
+> {
+  const parts = await db.query.productParts.findMany({
+    where: eq(productParts.productId, productId),
+    with: {
+      materialOptions: {
+        with: { color: { with: { type: { with: { material: true } } } } },
+      },
+    },
+  });
+
+  return parts.map((part) => ({
+    weightGrams: part.weightGrams,
+    defaultMaterialColorId: part.defaultMaterialColorId,
+    availableColors: part.materialOptions.map(({ color }) => ({
+      id: color.id,
+      name: color.name,
+      hexColor: color.hexColor,
+      hexColorSecondary: color.hexColorSecondary,
+      opacity: Number(color.opacity),
+      materialName: color.type.material.name,
+      printProcess: color.type.material.printProcess,
+      postProcessingFeeCents: color.type.material.postProcessingFeeCents,
+      dualColorFeeCents: color.type.material.dualColorFeeCents,
+      type: {
+        id: color.type.id,
+        name: color.type.name,
+        pricePerKgCents: color.type.pricePerKgCents,
+        printSpeedValue: Number(color.type.printSpeedValue),
+        description: color.type.description,
+      },
+    })),
+  }));
+}
+
 /** Produto com partes (+ cores atribuídas e regiões pintadas), tamanhos e imagens, para a tela de edição do admin. */
 export async function getProductWithConfigForAdmin(id: string) {
   return db.query.products.findFirst({

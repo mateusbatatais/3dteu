@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 
 import type { ProductActionResult, SizeOptionInput } from "../actions";
 
-const EMPTY_VALUES: SizeOptionInput = { label: "", scaleFactor: 1, priceModifierReais: 0, weightModifierGrams: 0 };
+const EMPTY_VALUES: SizeOptionInput = { label: "", scaleFactor: 1 };
 
 export function SizeForm({
   mode,
@@ -67,27 +67,6 @@ export function SizeForm({
           step="0.01"
           value={values.scaleFactor}
           onChange={(e) => update("scaleFactor", Number(e.target.value))}
-          className="w-24"
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`size-price-${mode}`}>Modificador (R$)</Label>
-        <Input
-          id={`size-price-${mode}`}
-          type="number"
-          step="0.01"
-          value={values.priceModifierReais}
-          onChange={(e) => update("priceModifierReais", Number(e.target.value))}
-          className="w-28"
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`size-weight-${mode}`}>Peso (g)</Label>
-        <Input
-          id={`size-weight-${mode}`}
-          type="number"
-          value={values.weightModifierGrams}
-          onChange={(e) => update("weightModifierGrams", Number(e.target.value))}
           className="w-24"
         />
       </div>

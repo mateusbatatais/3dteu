@@ -16,6 +16,11 @@ export function ProductSizesManager({ productId, sizes }: { productId: string; s
   return (
     <div>
       <h2 className="text-lg font-medium">Tamanhos</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Peso e preço de cada tamanho são calculados automaticamente a partir da escala — não dá pra digitar à mão.
+        Peso muda com o cubo da escala (peça em 50% pesa só 12,5% do original); preço só aumenta em tamanhos maiores
+        (tamanhos menores saem pelo mesmo preço do tamanho base).
+      </p>
 
       {sizes.length > 0 ? (
         <Table className="mt-3 max-w-2xl">

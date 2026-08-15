@@ -450,12 +450,7 @@ export async function confirmCustomModelRequest(
   materialsFormData.append("defaultMaterialColorId", input.materialColorId);
   await setPartMaterials(productId, partId, materialsFormData);
 
-  await createSizeOption(productId, {
-    label: "Único",
-    scaleFactor: 1,
-    priceModifierReais: 0,
-    weightModifierGrams: 0,
-  });
+  await createSizeOption(productId, { label: "Único", scaleFactor: 1 });
 
   const [order] = await db
     .insert(orders)

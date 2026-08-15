@@ -3,6 +3,7 @@
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
+import { getStoreSettings } from "@/features/shipping/queries";
 import { createStorageClient, MEDIA_BUCKET, MODELS_BUCKET } from "@/lib/supabase/storage";
 import { ALLOWED_MEDIA_EXTENSIONS, ALLOWED_MESH_EXTENSIONS, type MediaExtension, type MeshExtension } from "@/lib/supabase/storage-constants";
 import { db } from "@/server/db/client";
@@ -16,6 +17,9 @@ import {
   sizeOptions,
 } from "@/server/db/schema";
 
+import { estimateSizeScalingModifiers } from "./pricing";
+import type { EnergyPricingConfig } from "./print-estimate";
+import { getProductPartsForSizeEstimate } from "./queries";
 import { productFormSchema, type ProductFormValues } from "./schemas";
 
 export interface ProductActionResult {
@@ -155,14 +159,33 @@ export async function deleteProduct(id: string): Promise<ProductActionResult> {
 export interface SizeOptionInput {
   label: string;
   scaleFactor: number;
-  priceModifierReais: number;
-  weightModifierGrams: number;
 }
 
 function validateSizeInput(input: SizeOptionInput): string | null {
   if (!input.label.trim()) return "Preencha o label.";
   if (!Number.isFinite(input.scaleFactor) || input.scaleFactor <= 0) return "A escala precisa ser maior que zero.";
   return null;
+}
+
+async function resolvePricingConfig(): Promise<EnergyPricingConfig | null> {
+  const storeSettings = await getStoreSettings().catch(() => null);
+  return storeSettings?.energyPriceCentsPerKwh != null && storeSettings?.printerPowerWatts != null
+    ? { energyPriceCentsPerKwh: storeSettings.energyPriceCentsPerKwh, printerPowerWatts: storeSettings.printerPowerWatts }
+    : null;
+}
+
+/**
+ * Peso e preço de um tamanho nunca são digitados à mão — P/M/G (e qualquer
+ * tamanho extra que o admin adicionar) são sempre a MESMA malha escalada, e
+ * quanto peso/preço mudam é consequência direta do `scaleFactor`, não uma
+ * decisão separada (mesmo espírito de peso/dimensões da peça terem virado
+ * 100% automáticos na rodada 26). Ver `estimateSizeScalingModifiers` em
+ * pricing.ts pra fórmula.
+ */
+async function computeSizeModifiers(productId: string, scaleFactor: number) {
+  const parts = await getProductPartsForSizeEstimate(productId);
+  const pricingConfig = await resolvePricingConfig();
+  return estimateSizeScalingModifiers(parts, scaleFactor, pricingConfig);
 }
 
 export async function createSizeOption(productId: string, input: SizeOptionInput): Promise<ProductActionResult> {
@@ -178,12 +201,14 @@ export async function createSizeOption(productId: string, input: SizeOptionInput
     .from(sizeOptions)
     .where(eq(sizeOptions.productId, productId));
 
+  const { weightModifierGrams, priceModifierCents } = await computeSizeModifiers(productId, input.scaleFactor);
+
   await db.insert(sizeOptions).values({
     productId,
     label: input.label.trim(),
     scaleFactor: input.scaleFactor.toString(),
-    priceModifierCents: Math.round(input.priceModifierReais * 100),
-    weightModifierGrams: Math.round(input.weightModifierGrams),
+    priceModifierCents,
+    weightModifierGrams,
     sortOrder: maxSortOrder + 1,
   });
 
@@ -199,13 +224,15 @@ export async function updateSizeOption(
   const validationError = validateSizeInput(input);
   if (validationError) return { error: validationError };
 
+  const { weightModifierGrams, priceModifierCents } = await computeSizeModifiers(productId, input.scaleFactor);
+
   await db
     .update(sizeOptions)
     .set({
       label: input.label.trim(),
       scaleFactor: input.scaleFactor.toString(),
-      priceModifierCents: Math.round(input.priceModifierReais * 100),
-      weightModifierGrams: Math.round(input.weightModifierGrams),
+      priceModifierCents,
+      weightModifierGrams,
     })
     .where(eq(sizeOptions.id, sizeId));
 
@@ -229,7 +256,10 @@ function labelForCm(mm: number): string {
  * arquivo 3D recém-enviado (medida no navegador, ver mesh-measure.ts) e
  * vira o tamanho "M" (100%); P e G são 50%/150% dela. O rótulo é
  * arredondado pro 0,5cm mais próximo só pra ficar um número bonito — o
- * scaleFactor de verdade aplicado na malha continua exato.
+ * scaleFactor de verdade aplicado na malha continua exato. Peso/preço de
+ * cada um vêm de `estimateSizeScalingModifiers` (M sempre dá 0/0, é a
+ * própria âncora) — nunca ficam em 0/0 pra P/G só porque ninguém preencheu
+ * nada, como acontecia antes desta fórmula existir.
  */
 export async function autoGenerateSizeOptions(
   productId: string,
@@ -244,11 +274,19 @@ export async function autoGenerateSizeOptions(
     .limit(1);
   if (existing.length > 0) return { created: false };
 
-  const sizes = [
-    { label: labelForCm(mainDimensionMm * 0.5), scaleFactor: "0.5", sortOrder: 0 },
-    { label: labelForCm(mainDimensionMm), scaleFactor: "1", sortOrder: 1 },
-    { label: labelForCm(mainDimensionMm * 1.5), scaleFactor: "1.5", sortOrder: 2 },
-  ];
+  const parts = await getProductPartsForSizeEstimate(productId);
+  const pricingConfig = await resolvePricingConfig();
+
+  const sizes = [0.5, 1, 1.5].map((scaleFactor, index) => {
+    const { weightModifierGrams, priceModifierCents } = estimateSizeScalingModifiers(parts, scaleFactor, pricingConfig);
+    return {
+      label: labelForCm(mainDimensionMm * scaleFactor),
+      scaleFactor: scaleFactor.toString(),
+      sortOrder: index,
+      weightModifierGrams,
+      priceModifierCents,
+    };
+  });
 
   await db.insert(sizeOptions).values(sizes.map((size) => ({ productId, ...size })));
 

@@ -27,12 +27,7 @@ export function SizeRow({ productId, size }: { productId: string; size: SizeRowD
         <TableCell colSpan={5}>
           <SizeForm
             mode="edit"
-            initialValues={{
-              label: size.label,
-              scaleFactor: Number(size.scaleFactor),
-              priceModifierReais: size.priceModifierCents / 100,
-              weightModifierGrams: size.weightModifierGrams,
-            }}
+            initialValues={{ label: size.label, scaleFactor: Number(size.scaleFactor) }}
             onSubmit={(input) => updateSizeOption(productId, size.id, input)}
             onCancel={() => setIsEditing(false)}
           />
