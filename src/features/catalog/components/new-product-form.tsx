@@ -685,7 +685,7 @@ function PartDraftCard({
           <select
             value={part.defaultColorId ?? ""}
             onChange={(e) => onSetDefaultColor(e.target.value)}
-            className="mt-2 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="mt-2 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:[color-scheme:dark]"
           >
             {acceptedColors.map((color) => (
               <option key={color.id} value={color.id}>

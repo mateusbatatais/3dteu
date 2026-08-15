@@ -3179,6 +3179,26 @@ bordas, tamanho ainda razoável (não ficou pequeno demais). `npm run
 lint`, `npx tsc --noEmit`, `npm run test` (19/19) e `npm run build`
 (`.next` limpo) passaram limpos.
 
+**Bug lateral pego na mesma leva**: usuário reportou o `<select>` nativo
+"Cor padrão" (novo desta rodada, em `PartMaterialTypePicker`/
+`NewProductForm`) abrindo com fundo BRANCO no modo escuro — a caixa
+fechada respeitava o tema (classes Tailwind normais), mas o popup nativo
+do navegador (fora da árvore DOM, renderizado pelo Chromium) não. Causa:
+sem a propriedade CSS `color-scheme: dark`, o Chromium sempre desenha o
+popup nativo de `<select>`/`<option>` com o tema claro do SO,
+independente de `background-color` customizado no elemento. Esses eram
+os primeiros `<select>` nativos do projeto (o resto do app usa o
+componente `Select` customizado do design system, que não tem esse
+problema por não depender de popup nativo do navegador). Fix:
+`dark:[color-scheme:dark]` nos dois selects. **Testado**: sem emular
+`prefers-color-scheme: dark` no Playwright, o `next-themes` (`attribute
+="class"`, `defaultTheme="system"`) não aplicava a classe `.dark` nem
+com `classList.add` manual (o próprio provider reconcilia sozinho) —
+emulando o color scheme do browser antes de navegar, confirmei que
+`getComputedStyle(select).colorScheme` vira `"dark"` de verdade (prova
+mais forte que só "parece certo visualmente", já que o popup em si não
+é fácil de capturar via screenshot).
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com
