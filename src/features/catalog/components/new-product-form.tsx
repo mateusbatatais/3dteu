@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState, useTransition } from "react";
+import { useId, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ import {
   createMeshUploadUrl,
   createProductDraft,
   createProductPart,
-  setPartMaterials,
+  setPartMaterialTypes,
 } from "../actions";
 import { measureMesh, type MeshMeasurements } from "../mesh-measure";
 import { detectPaintedStates } from "../mmu-3mf";
@@ -43,6 +43,8 @@ interface ColorOption {
   name: string;
   hexColor: string | null;
   hexColorSecondary: string | null;
+  /** "Tem em estoque?" — só cores available=true entram como opção de padrão. */
+  available: boolean;
   materialName: string;
   typeId: string;
   typeName: string;
@@ -50,6 +52,28 @@ interface ColorOption {
   postProcessingFeeCents: number;
   pricePerKgCents: number;
   printSpeedValue: string;
+}
+
+interface MaterialTypeOption {
+  id: string;
+  name: string;
+  materialName: string;
+}
+
+/** Deriva a lista de Tipos aceitáveis a partir das cores já carregadas (dedupe
+ * por typeId) — evita precisar de uma query/prop separada só pra isso; um
+ * Tipo sem nenhuma cor cadastrada não aparece (não teria cor pra virar
+ * padrão de qualquer forma). */
+function deriveMaterialTypeOptions(allColors: ColorOption[]): MaterialTypeOption[] {
+  const map = new Map<string, MaterialTypeOption>();
+  for (const color of allColors) {
+    if (!map.has(color.typeId)) map.set(color.typeId, { id: color.typeId, name: color.typeName, materialName: color.materialName });
+  }
+  return [...map.values()];
+}
+
+function firstAvailableColorId(typeIds: Set<string>, allColors: ColorOption[]): string | null {
+  return allColors.find((c) => typeIds.has(c.typeId) && c.available)?.id ?? null;
 }
 
 interface PricingSettings {
@@ -67,11 +91,15 @@ interface PartDraft {
   measurements: MeshMeasurements | null;
   detectedStates: number[] | null;
   isReadingFile: boolean;
-  selectedColorIds: Set<string>;
+  /** Tipos de material que essa peça aceita — as cores oferecidas viram
+   * todas as disponíveis desses Tipos, não uma seleção por cor. */
+  selectedTypeIds: Set<string>;
+  /** Cor pré-selecionada — sempre uma cor específica dentro dos Tipos aceitos. */
   defaultColorId: string | null;
 }
 
-function makePartDraft(key: string, name: string, allColorIds: string[]): PartDraft {
+function makePartDraft(key: string, name: string, allTypeIds: string[], allColors: ColorOption[]): PartDraft {
+  const selectedTypeIds = new Set(allTypeIds);
   return {
     key,
     name,
@@ -80,8 +108,8 @@ function makePartDraft(key: string, name: string, allColorIds: string[]): PartDr
     measurements: null,
     detectedStates: null,
     isReadingFile: false,
-    selectedColorIds: new Set(allColorIds),
-    defaultColorId: allColorIds[0] ?? null,
+    selectedTypeIds,
+    defaultColorId: firstAvailableColorId(selectedTypeIds, allColors),
   };
 }
 
@@ -98,7 +126,8 @@ export function NewProductForm({
   pricingSettings: PricingSettings;
 }) {
   const router = useRouter();
-  const allColorIds = allColors.map((c) => c.id);
+  const materialTypeOptions = useMemo(() => deriveMaterialTypeOptions(allColors), [allColors]);
+  const allTypeIds = useMemo(() => materialTypeOptions.map((t) => t.id), [materialTypeOptions]);
 
   // Contador simples em vez de crypto.randomUUID(): um id aleatório gerado
   // de novo na hidratação do cliente não bate com o que o servidor gerou —
@@ -121,7 +150,7 @@ export function NewProductForm({
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
-  const [parts, setParts] = useState<PartDraft[]>(() => [makePartDraft("part-0", "corpo", allColorIds)]);
+  const [parts, setParts] = useState<PartDraft[]>(() => [makePartDraft("part-0", "corpo", allTypeIds, allColors)]);
 
   const [error, setError] = useState<string | null>(null);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
@@ -174,30 +203,26 @@ export function NewProductForm({
     if (!slugTouched) setSlug(slugify(value));
   }
 
-  // Fase 1b: escolher uma categoria com materiais recomendados troca a
-  // seleção padrão de cor de TODAS as peças pra só as cores dos tipos
-  // recomendados (em vez de "todas marcadas", padrão de quando a categoria
-  // não tem recomendação configurada) — o admin ainda pode marcar outras
-  // cores manualmente depois. Sobrescreve seleções já feitas de propósito:
-  // a categoria normalmente é a primeira coisa escolhida, antes de ajustar
-  // cores parte por parte.
+  // Fase 1b: escolher uma categoria com materiais recomendados troca os
+  // Tipos aceitos de TODAS as peças pra só os tipos recomendados (em vez
+  // de "todos marcados", padrão de quando a categoria não tem recomendação
+  // configurada) — o admin ainda pode marcar outros tipos manualmente
+  // depois. Sobrescreve seleções já feitas de propósito: a categoria
+  // normalmente é a primeira coisa escolhida, antes de ajustar tipos parte
+  // por parte.
   function handleCategoryChange(value: string) {
     setCategoryId(value);
 
-    const recommendedTypeIds = recommendedTypeIdsByCategory[value] ?? [];
+    const recommendedTypeIds = recommendedTypeIdsByCategory[value]?.filter((id) => allTypeIds.includes(id)) ?? [];
     if (recommendedTypeIds.length === 0) return;
 
-    const recommendedColorIds = allColors.filter((c) => recommendedTypeIds.includes(c.typeId)).map((c) => c.id);
-    if (recommendedColorIds.length === 0) return;
-
     setParts((prev) =>
-      prev.map((part) => ({
-        ...part,
-        selectedColorIds: new Set(recommendedColorIds),
-        defaultColorId: recommendedColorIds[0],
-      })),
+      prev.map((part) => {
+        const selectedTypeIds = new Set(recommendedTypeIds);
+        return { ...part, selectedTypeIds, defaultColorId: firstAvailableColorId(selectedTypeIds, allColors) };
+      }),
     );
-    toast.success("Cores recomendadas pra esta categoria já vêm marcadas — ajuste se quiser outras.");
+    toast.success("Tipos recomendados pra esta categoria já vêm marcados — ajuste se quiser outros.");
   }
 
   function updatePart(key: string, patch: Partial<PartDraft>) {
@@ -205,22 +230,27 @@ export function NewProductForm({
   }
 
   function addPart() {
-    setParts((prev) => [...prev, makePartDraft(nextPartKey(), `peça ${prev.length + 1}`, allColorIds)]);
+    setParts((prev) => [...prev, makePartDraft(nextPartKey(), `peça ${prev.length + 1}`, allTypeIds, allColors)]);
   }
 
   function removePart(key: string) {
     setParts((prev) => (prev.length > 1 ? prev.filter((p) => p.key !== key) : prev));
   }
 
-  function toggleColor(partKey: string, colorId: string) {
+  function toggleType(partKey: string, typeId: string) {
     setParts((prev) =>
       prev.map((p) => {
         if (p.key !== partKey) return p;
-        const next = new Set(p.selectedColorIds);
-        if (next.has(colorId)) next.delete(colorId);
-        else next.add(colorId);
-        const defaultColorId = next.has(p.defaultColorId ?? "") ? p.defaultColorId : (Array.from(next)[0] ?? null);
-        return { ...p, selectedColorIds: next, defaultColorId };
+        const next = new Set(p.selectedTypeIds);
+        if (next.has(typeId)) next.delete(typeId);
+        else next.add(typeId);
+
+        // Se a cor padrão atual ainda for válida (tipo continua marcado e a
+        // cor continua disponível), preserva — senão recalcula pra primeira
+        // cor disponível entre os tipos marcados agora.
+        const stillValid = p.defaultColorId && allColors.some((c) => c.id === p.defaultColorId && next.has(c.typeId) && c.available);
+        const defaultColorId = stillValid ? p.defaultColorId : firstAvailableColorId(next, allColors);
+        return { ...p, selectedTypeIds: next, defaultColorId };
       }),
     );
   }
@@ -266,9 +296,9 @@ export function NewProductForm({
       setError("Adicione pelo menos uma peça.");
       return;
     }
-    const partWithoutColor = parts.find((p) => p.selectedColorIds.size === 0);
+    const partWithoutColor = parts.find((p) => !p.defaultColorId);
     if (partWithoutColor) {
-      setError(`A peça "${partWithoutColor.name}" precisa de pelo menos uma cor marcada.`);
+      setError(`A peça "${partWithoutColor.name}" precisa de pelo menos um tipo de material com cor disponível.`);
       return;
     }
 
@@ -346,9 +376,9 @@ export function NewProductForm({
         }
 
         const formData = new FormData();
-        part.selectedColorIds.forEach((id) => formData.append("materialColorId", id));
+        part.selectedTypeIds.forEach((id) => formData.append("materialTypeId", id));
         if (part.defaultColorId) formData.set("defaultMaterialColorId", part.defaultColorId);
-        await setPartMaterials(productId, partId, formData);
+        await setPartMaterialTypes(productId, partId, formData);
       }
 
       if (aggregatePhysicalProps) {
@@ -427,8 +457,8 @@ export function NewProductForm({
         </div>
         <p className="-mt-2 text-sm text-muted-foreground">
           Uma peça é um arquivo 3D impresso separadamente. Produtos de cor única têm uma peça só; produtos multi-cor
-          têm uma peça por parte impressa em separado. Pelo menos uma peça, com pelo menos uma cor marcada, é
-          obrigatória.
+          têm uma peça por parte impressa em separado. Pelo menos uma peça, aceitando pelo menos um tipo de material
+          com cor em estoque, é obrigatória — o cliente escolhe entre todas as cores disponíveis desses tipos.
         </p>
 
         {parts.map((part, index) => (
@@ -436,10 +466,11 @@ export function NewProductForm({
             key={part.key}
             part={part}
             allColors={allColors}
+            materialTypeOptions={materialTypeOptions}
             canRemove={parts.length > 1}
             onNameChange={(value) => updatePart(part.key, { name: value })}
             onFileChange={(file) => handlePartFileChange(part.key, file)}
-            onToggleColor={(colorId) => toggleColor(part.key, colorId)}
+            onToggleType={(typeId) => toggleType(part.key, typeId)}
             onSetDefaultColor={(colorId) => updatePart(part.key, { defaultColorId: colorId })}
             onRemove={() => removePart(part.key)}
             index={index}
@@ -520,21 +551,23 @@ export function NewProductForm({
 function PartDraftCard({
   part,
   allColors,
+  materialTypeOptions,
   canRemove,
   index,
   onNameChange,
   onFileChange,
-  onToggleColor,
+  onToggleType,
   onSetDefaultColor,
   onRemove,
 }: {
   part: PartDraft;
   allColors: ColorOption[];
+  materialTypeOptions: MaterialTypeOption[];
   canRemove: boolean;
   index: number;
   onNameChange: (value: string) => void;
   onFileChange: (file: File | null) => void;
-  onToggleColor: (colorId: string) => void;
+  onToggleType: (typeId: string) => void;
   onSetDefaultColor: (colorId: string) => void;
   onRemove: () => void;
 }) {
@@ -544,6 +577,7 @@ function PartDraftCard({
   const weightEstimate = part.measurements
     ? estimatePrintWeight(part.measurements.volumeMm3, part.measurements.surfaceAreaMm2)
     : null;
+  const acceptedColors = allColors.filter((c) => part.selectedTypeIds.has(c.typeId) && c.available);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-3">
@@ -619,46 +653,46 @@ function PartDraftCard({
       ) : null}
 
       <div>
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Cores disponíveis</p>
-        {allColors.length === 0 ? (
+        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Tipos de material aceitos</p>
+        {materialTypeOptions.length === 0 ? (
           <p className="mt-1 text-sm text-muted-foreground">
             Nenhum material cadastrado ainda — crie um em /admin/materiais.
           </p>
         ) : (
           <div className="mt-2 flex flex-col gap-1.5">
-            {allColors.map((color) => (
-              <div key={color.id} className="flex items-center gap-3 text-sm">
-                <label className="flex flex-1 items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={part.selectedColorIds.has(color.id)}
-                    onChange={() => onToggleColor(color.id)}
-                    className="size-4"
-                  />
-                  <span
-                    className="inline-block size-3.5 shrink-0 rounded-full border"
-                    style={{
-                      background: color.hexColorSecondary
-                        ? `linear-gradient(135deg, ${color.hexColor} 50%, ${color.hexColorSecondary} 50%)`
-                        : (color.hexColor ?? "#a1a1aa"),
-                    }}
-                  />
-                  {color.materialName} · {color.typeName} · {color.name}
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <input
-                    type="radio"
-                    name={`default-color-${part.key}`}
-                    checked={part.defaultColorId === color.id}
-                    onChange={() => onSetDefaultColor(color.id)}
-                    disabled={!part.selectedColorIds.has(color.id)}
-                    className="size-3.5"
-                  />
-                  Padrão
-                </label>
-              </div>
+            {materialTypeOptions.map((type) => (
+              <label key={type.id} className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={part.selectedTypeIds.has(type.id)}
+                  onChange={() => onToggleType(type.id)}
+                  className="size-4"
+                />
+                {type.materialName} · {type.name}
+              </label>
             ))}
           </div>
+        )}
+      </div>
+
+      <div>
+        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Cor padrão</p>
+        {acceptedColors.length === 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Marque pelo menos um tipo com cor disponível (em estoque) pra escolher um padrão.
+          </p>
+        ) : (
+          <select
+            value={part.defaultColorId ?? ""}
+            onChange={(e) => onSetDefaultColor(e.target.value)}
+            className="mt-2 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {acceptedColors.map((color) => (
+              <option key={color.id} value={color.id}>
+                {color.materialName} · {color.typeName} · {color.name}
+              </option>
+            ))}
+          </select>
         )}
       </div>
     </div>

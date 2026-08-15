@@ -6,7 +6,7 @@ import {
   materialColors,
   materials,
   materialTypes,
-  productPartMaterialOptions,
+  productPartMaterialTypes,
   productParts,
   products,
   sizeOptions,
@@ -28,14 +28,11 @@ async function main() {
     .values({ materialId: plastico.id, name: "PLA", pricePerKgCents: 8000, printSpeedValue: "20" })
     .returning();
 
-  const [azul, dualAzulLaranja, madeira] = await db
-    .insert(materialColors)
-    .values([
-      { materialTypeId: pla.id, name: "Azul", hexColor: "#2563eb" },
-      { materialTypeId: pla.id, name: "Azul/Laranja", hexColor: "#2563eb", hexColorSecondary: "#f97316" },
-      { materialTypeId: pla.id, name: "Madeira", hexColor: "#8b5a2b" },
-    ])
-    .returning();
+  await db.insert(materialColors).values([
+    { materialTypeId: pla.id, name: "Azul", hexColor: "#2563eb" },
+    { materialTypeId: pla.id, name: "Azul/Laranja", hexColor: "#2563eb", hexColorSecondary: "#f97316" },
+    { materialTypeId: pla.id, name: "Madeira", hexColor: "#8b5a2b" },
+  ]);
 
   const [product] = await db
     .insert(products)
@@ -59,12 +56,11 @@ async function main() {
     ])
     .returning();
 
-  await db.insert(productPartMaterialOptions).values([
-    { productPartId: corpo.id, materialColorId: azul.id },
-    { productPartId: corpo.id, materialColorId: dualAzulLaranja.id },
-    { productPartId: corpo.id, materialColorId: madeira.id },
-    { productPartId: tampa.id, materialColorId: azul.id },
-    { productPartId: tampa.id, materialColorId: dualAzulLaranja.id },
+  // A peça aceita o Tipo inteiro (PLA) — as 3 cores inseridas acima já são
+  // as únicas cores desse Tipo neste seed, então o efeito é o mesmo de antes.
+  await db.insert(productPartMaterialTypes).values([
+    { productPartId: corpo.id, materialTypeId: pla.id },
+    { productPartId: tampa.id, materialTypeId: pla.id },
   ]);
 
   await db.insert(sizeOptions).values([

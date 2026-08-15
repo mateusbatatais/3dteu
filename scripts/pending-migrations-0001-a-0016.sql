@@ -296,3 +296,34 @@ ALTER TABLE "custom_model_requests" ADD COLUMN IF NOT EXISTS "origin" "public"."
 -- 0015: ângulo inicial customizado do visualizador 3D
 -- ---------------------------------------------------------------------
 ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "viewer_camera_position" jsonb;
+
+-- ---------------------------------------------------------------------
+-- 0016: cor ganha "disponível (em estoque)" + peça aceita Tipo de material
+-- (não mais cor por cor) — ver product_part_material_types
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "product_part_material_types" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"product_part_id" uuid NOT NULL,
+	"material_type_id" uuid NOT NULL
+);
+
+ALTER TABLE "material_colors" ADD COLUMN IF NOT EXISTS "available" boolean DEFAULT true NOT NULL;
+
+DO $$ BEGIN
+  ALTER TABLE "product_part_material_types" ADD CONSTRAINT "product_part_material_types_product_part_id_product_parts_id_fk" FOREIGN KEY ("product_part_id") REFERENCES "public"."product_parts"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "product_part_material_types" ADD CONSTRAINT "product_part_material_types_material_type_id_material_types_id_fk" FOREIGN KEY ("material_type_id") REFERENCES "public"."material_types"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "product_part_material_type_unique" ON "product_part_material_types" USING btree ("product_part_id","material_type_id");
+
+-- Deriva os Tipos aceitos por cada peça a partir das cores que já estavam
+-- curadas nela (product_part_material_options, mecanismo antigo) — seguro
+-- rodar de novo (ON CONFLICT DO NOTHING).
+INSERT INTO "product_part_material_types" ("product_part_id", "material_type_id")
+SELECT DISTINCT ppmo.product_part_id, mc.material_type_id
+FROM "product_part_material_options" ppmo
+JOIN "material_colors" mc ON mc.id = ppmo.filament_option_id
+ON CONFLICT ("product_part_id", "material_type_id") DO NOTHING;

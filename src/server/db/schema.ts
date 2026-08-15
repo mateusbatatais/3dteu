@@ -267,11 +267,23 @@ export const materialColors = pgTable("material_colors", {
   // disponível em qualquer cor (numeric pra permitir qualquer grau, não só
   // "transparente sim/não").
   opacity: numeric("opacity", { precision: 3, scale: 2 }).default("1").notNull(),
+  // "Tem em estoque?" — controlado manualmente pelo admin no cadastro de
+  // materiais, nasce true. Só cores available=true aparecem pro cliente
+  // escolher (ver getProductBySlug em queries.ts); sem estoque, o admin
+  // desmarca em vez de excluir a cor (excluir é só pra corrigir cadastro
+  // errado, ver checkMaterialColorDeletionImpact).
+  available: boolean("available").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Quais cores estão disponíveis para cada parte de cada produto (nem toda
-// peça suporta toda cor — ex.: peça fina pode quebrar num material específico).
+// Tabela antiga (curava cor por cor, por parte) — substituída por
+// productPartMaterialTypes abaixo: a peça passou a aceitar Tipos inteiros de
+// material, não cores individuais (as cores oferecidas viram TODAS as
+// disponíveis desses Tipos, geral do catálogo). Não referenciada por nenhum
+// código mais; mantida declarada de propósito (mesmo motivo de
+// filamentOptions acima) só pra `drizzle-kit generate` não confundir "essa
+// tabela sumiu" com "virou productPartMaterialTypes". Seguro dropar numa
+// limpeza futura.
 export const productPartMaterialOptions = pgTable(
   "product_part_material_options",
   {
@@ -290,6 +302,31 @@ export const productPartMaterialOptions = pgTable(
     uniqueIndex("product_part_material_unique").on(
       table.productPartId,
       table.materialColorId,
+    ),
+  ],
+);
+
+// Quais Tipos de material cada parte de produto aceita (ex.: uma peça pode
+// aceitar "Plástico · PLA" e "Resina · Cristal" ao mesmo tempo) — as cores
+// oferecidas pro cliente são todas as disponíveis (material_colors.available)
+// desses Tipos, não uma seleção por produto. A única curadoria que sobra por
+// peça/região é a cor PADRÃO (productParts.defaultMaterialColorId /
+// productPartRegions.defaultMaterialColorId, inalterados).
+export const productPartMaterialTypes = pgTable(
+  "product_part_material_types",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    productPartId: uuid("product_part_id")
+      .notNull()
+      .references(() => productParts.id, { onDelete: "cascade" }),
+    materialTypeId: uuid("material_type_id")
+      .notNull()
+      .references(() => materialTypes.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("product_part_material_type_unique").on(
+      table.productPartId,
+      table.materialTypeId,
     ),
   ],
 );
@@ -577,6 +614,7 @@ export const productReviewsRelations = relations(productReviews, ({ one }) => ({
 export const productPartsRelations = relations(productParts, ({ one, many }) => ({
   product: one(products, { fields: [productParts.productId], references: [products.id] }),
   materialOptions: many(productPartMaterialOptions),
+  materialTypeOptions: many(productPartMaterialTypes),
   regions: many(productPartRegions),
 }));
 
@@ -591,6 +629,7 @@ export const materialsRelations = relations(materials, ({ many }) => ({
 export const materialTypesRelations = relations(materialTypes, ({ one, many }) => ({
   material: one(materials, { fields: [materialTypes.materialId], references: [materials.id] }),
   colors: many(materialColors),
+  partOptions: many(productPartMaterialTypes),
 }));
 
 export const materialColorsRelations = relations(materialColors, ({ one, many }) => ({
@@ -608,6 +647,20 @@ export const productPartMaterialOptionsRelations = relations(
     color: one(materialColors, {
       fields: [productPartMaterialOptions.materialColorId],
       references: [materialColors.id],
+    }),
+  }),
+);
+
+export const productPartMaterialTypesRelations = relations(
+  productPartMaterialTypes,
+  ({ one }) => ({
+    part: one(productParts, {
+      fields: [productPartMaterialTypes.productPartId],
+      references: [productParts.id],
+    }),
+    type: one(materialTypes, {
+      fields: [productPartMaterialTypes.materialTypeId],
+      references: [materialTypes.id],
     }),
   }),
 );

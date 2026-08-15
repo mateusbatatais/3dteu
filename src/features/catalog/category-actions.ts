@@ -79,7 +79,7 @@ export async function deleteCategory(id: string) {
 // Fase 1b do ROADMAP.md — quais Tipos de material o admin recomenda pra
 // produtos dessa categoria (só afeta o que vem marcado por padrão ao
 // cadastrar um produto, nunca restringe as opções). Substitui o conjunto
-// inteiro, mesmo padrão de setPartMaterials em catalog/actions.ts.
+// inteiro, mesmo padrão de setPartMaterialTypes em catalog/actions.ts.
 export async function updateCategoryRecommendedMaterialTypes(
   categoryId: string,
   materialTypeIds: string[],

@@ -380,7 +380,14 @@ export function ProductViewer3D({
         <ambientLight intensity={0.7} />
         <directionalLight position={[3, 5, 2]} intensity={1} />
         <Suspense fallback={null}>
-          <Bounds fit clip observe margin={1.4}>
+          {/* Bounds só considera a MAIOR dimensão isolada da caixa (não a
+          diagonal) pro cálculo de distância — visto do ângulo de canto fixo
+          da câmera (DEFAULT_CAMERA_POSITION), um objeto compacto/cúbico
+          aparenta ser bem maior que essa dimensão isolada, e cortava nas
+          bordas com margin 1.4 (confirmado com print real de um produto
+          cúbico em produção). 1.8 dá folga suficiente pro pior caso sem
+          deixar o objeto pequeno demais na tela. */}
+          <Bounds fit clip observe margin={1.8}>
             <group>
               {parts.map((part) => (
                 <Part key={part.id} part={part} />

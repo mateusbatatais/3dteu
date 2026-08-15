@@ -3011,6 +3011,158 @@ com os modificadores antigos (0/0) até o admin abrir "Editar" em cada um
 e salvar de novo — isso já recalcula pela fórmula nova, não precisa de
 migração nem script.
 
+### Rodada 43: cor ganha "disponível (em estoque)" + peça aceita Tipo de material (não mais Cor)
+
+Usuário pediu uma mudança estrutural: (1) cor precisa de uma flag manual
+de "tem em estoque?" (todas nascem disponíveis); (2) no cadastro/edição
+de produto, o admin não cura mais cor por cor — marca quais TIPOS de
+material (ex.: "Plástico · PLA") uma peça aceita, e as cores oferecidas
+pro cliente viram TODAS as disponíveis desses Tipos (geral do catálogo,
+não uma seleção por produto); a única curadoria que sobra por peça/região
+é a cor PADRÃO. Perguntei (`AskUserQuestion`) 2 pontos antes de mexer no
+schema: o que fazer quando a cor padrão salva fica sem estoque (escolheu
+"troca sozinho pra outra disponível do mesmo tipo") e se cor sem estoque
+deveria aparecer desabilitada na loja ou simplesmente sumir (escolheu
+"some completamente"). Dado o tamanho (schema + várias telas do admin +
+toda a árvore de queries que monta as cores oferecidas), usei
+`EnterPlanMode` antes de tocar em código.
+
+**Achado que reduziu bastante o raio de mudança**: `ProductPart
+.availableColors: MaterialColor[]` (`types.ts`) já era a interface que
+desacopla "como as cores foram escolhidas" de "como preço/render/
+checkout usam elas" — `pricing.ts`, `ColorSwatches`/
+`MaterialTypeDescription` (`product-configurator.tsx`), o checkout e o
+modelo customizado só consomem esse array já pronto. Trocando só a FONTE
+de onde `getProductBySlug` monta esse array (de "cores curadas por
+parte" pra "cores disponíveis dos Tipos aceitos pela parte"), o fallback
+de cor padrão que já existia (`resolveDefaultMaterialColorId`) passa a
+implementar as duas regras confirmadas **de graça** — zero mudança de
+lógica de preço/render/checkout. Uma cor que vira indisponível
+simplesmente não entra mais em `availableColors`; se ela era o padrão
+salvo de uma peça/região, o mesmo fallback que já existia (e já era
+testado em `pricing.test.ts`) escolhe outra sozinho.
+
+**Schema** (migração `0016_slim_black_cat.sql`, gerada limpa — tabela
+nova de verdade, sem risco de rename ambíguo como a 0009 da Fase 1):
+`material_colors.available` (boolean, default true). Nova tabela
+`product_part_material_types` (part↔Tipo, substitui a curadoria de
+`product_part_material_options`, que fica declarada mas órfã no schema —
+mesmo tratamento já dado a `filament_options` desde a rodada 28, evita o
+drizzle-kit confundir "sumiu" com "virou outra coisa"). Migração editada
+à mão pra fazer o backfill: deriva os Tipos aceitos de cada peça a partir
+das cores que ela já tinha curadas (`INSERT ... SELECT DISTINCT ... JOIN
+material_colors ... ON CONFLICT DO NOTHING`) — não tenta reconstruir a
+seleção exata de antes (agora é por Tipo, não por cor), só preserva a
+intenção o quanto der.
+
+**Queries** (`queries.ts`): `getAllMaterialColorsForAdmin` ganhou
+`available`. Função nova `mapAvailableColorsFromTypeOptions` (+ o `with`
+compartilhado `materialTypeOptionsWithAvailableColors`, que filtra
+`material_colors.available = true` na própria query) substitui, em
+`getProductBySlug`/`getProductPartsForSizeEstimate`/
+`getPublishedProductsForCatalog`, o antigo `part.materialOptions.map(
+({color}) => ...)` — mesma forma de saída (`MaterialColor[]`), só a
+fonte muda. `getMaterialColorDeletionImpact` (usado antes de excluir uma
+cor/Tipo/Material, pra perguntar por um substituto) recalcula
+"cores que a peça ainda aceitaria" a partir dos Tipos aceitos em vez da
+lista curada — mesma forma de retorno, ninguém mais precisou mudar.
+`getProductWithConfigForAdmin` troca `materialOptions: true` por
+`materialTypeOptions: true`. **Bug de inferência do Drizzle pego no
+`tsc`**: extrair um objeto `{ with: {...} }` pra uma variável e reusá-lo
+em dois `with` aninhados (`getMaterialColorDeletionImpact`) faz o
+Drizzle perder a inferência de tipo literal da coluna (`colors` virava
+`{}[]`) — corrigido inlineando o objeto nas duas chamadas em vez de
+compartilhar a variável (o `with` compartilhado que FUNCIONOU em
+`getProductBySlug` está num nível de aninhamento raso o suficiente pra
+não ter esse problema).
+
+**Actions**: `setPartMaterials` deletado (não deprecado, mesmo critério
+da rodada 26) — `setPartMaterialTypes` novo grava os Tipos aceitos +
+a cor padrão, conferindo no servidor que a cor escolhida está disponível
+E pertence a um dos Tipos aceitos antes de gravar (nunca confia
+cegamente no client), com fallback pra primeira cor disponível se não.
+`custom-models/actions.ts` (Fase 4/4b) precisou de um ajuste: a
+confirmação de um modelo customizado agora faz a peça aceitar o TIPO
+inteiro da cor escolhida pelo cliente (não só aquela cor isolada) —
+mesma regra universal de qualquer produto agora, consistente com o
+resto do catálogo.
+
+**Admin**: `MaterialColorForm` ganhou o checkbox "Disponível (em
+estoque)" (nasce marcado); `MaterialColorRow` mostra "(sem estoque)"
+junto do swatch quando `available: false`. `part-color-picker.tsx`
+deletado, substituído por `part-material-type-picker.tsx`
+(`PartMaterialTypePicker`) — um checkbox por Material·Tipo (não mais por
+cor) + um `<select>` "Cor padrão" cujas opções são recalculadas ao vivo
+(só cores disponíveis dos Tipos marcados no momento). `NewProductForm`
+(cadastro novo): `PartDraft.selectedColorIds` virou `selectedTypeIds`;
+a lista de Tipos é **derivada** das próprias cores já carregadas
+(dedupe por `typeId`, sem precisar de uma query/prop nova); a
+recomendação por categoria (Fase 1b) ficou mais simples — já vem no
+formato `materialTypeId[]`, não precisa mais mapear tipo→cores só pra
+filtrar de novo.
+
+**Testado com Playwright** contra uma página mockada (`dev-preview-temp`,
+removida depois) cobrindo os 3 componentes com um catálogo de 2 Tipos (1
+cor disponível + 1 indisponível em PLA, 1 cor disponível em Cristal):
+confirmei que a cor indisponível mostra "(sem estoque)" no admin de
+materiais e que uma cor nova nasce com "Disponível" marcado; que o
+`PartMaterialTypePicker` começa com o select de padrão mostrando só
+"Azul" (só PLA aceito), marcar "Cristal" adiciona "Transparente" às
+opções, e desmarcar "PLA" remove "Azul" das opções (sobra só
+"Transparente") — esse último caso só bateu depois de eu perceber que
+meu PRÓPRIO script de teste usava um seletor ambíguo (`label:has-text
+("PLA")` batia tanto no checkbox do `ProductPartsManager` quanto no
+`"Plástico · PLA"` do `NewProductForm`) — trocando pro atributo
+`name="materialTypeId"` (só existe no primeiro) confirmou que o
+componente sempre esteve correto, o bug era só do teste; e que o
+`NewProductForm` mostra "Plástico · PLA"/"Resina · Cristal" já marcados
+por padrão, e escolher a categoria "Decoração" (recomenda só Cristal)
+desmarca PLA automaticamente — zero erros de console novos (o único
+aviso, do Base UI sobre o Select de categoria virando controlado, já é
+pré-existente desde a rodada 29). `npm run lint`, `npx tsc --noEmit`,
+`npm run test` (19/19, suíte de pricing não mudou — decoupled da forma
+da query, exatamente o ponto da interface `availableColors`) e `npm run
+build` (`.next` limpo) passaram limpos.
+
+**Pendente**: rodar a migração `0016` contra o Supabase real — SQL
+combinado atualizado em `scripts/pending-migrations-0001-a-0016.sql`
+(renomeado de `...-0015.sql`). O comportamento "cor sem estoque some da
+loja / padrão indisponível cai pra outra cor" não pôde ser confirmado
+contra banco real nesta sessão (sem `DATABASE_URL`) — a garantia vem de
+(a) o fallback de `defaultMaterialColorId` já ser testado em
+`pricing.test.ts` e (b) `getProductBySlug` simplesmente não incluir mais
+a cor indisponível em `availableColors`, então o mesmo caminho de código
+já testado entra em ação sozinho, sem lógica nova a confirmar.
+
+### Rodada 44: cubo cortando no `ProductViewer3D` (margin do Bounds)
+
+Usuário mandou um print de um produto cúbico com as bordas visivelmente
+cortadas no visualizador 3D (não o `AnimatedModelViewer` da home, esse já
+foi corrigido na rodada 35 — este é o `ProductViewer3D`, usado no
+admin/loja, que nunca tinha passado por esse ajuste). Mesma causa raiz já
+documentada na rodada 35: o `Bounds` do drei (`node_modules/@react-three/
+drei/core/Bounds.js`) calcula a distância da câmera só a partir da MAIOR
+dimensão isolada da caixa (`Math.max(box.x, box.y, box.z)`), nunca da
+diagonal — visto do ângulo de canto fixo (`DEFAULT_CAMERA_POSITION =
+[2.5, 2, 2.5]`), um objeto compacto/cúbico aparenta ser bem maior que
+essa dimensão isolada, e o `margin={1.4}` que esse componente usava não
+dava conta disso (mesmo `Bounds`, mesma fórmula, mas o `ProductViewer3D`
+nunca tinha sido auditado pra esse problema especificamente — só o
+`AnimatedModelViewer` tinha).
+
+**Fix**: `margin` subiu de `1.4` pra `1.8` em `product-viewer-3d.tsx`
+(afeta todo mundo que usa esse componente — produto na loja, thumbnails
+do admin, controle de ângulo, modelo customizado). **Testado
+comparando as duas margens lado a lado**: capturei o mesmo cubo
+placeholder via Playwright com `margin=1.4` (bordas bem coladas no
+quadro) e com `margin=1.8` (folga clara em todas as bordas) — a versão
+1.4 não chegou a cortar de verdade nesse cubo sintético simples (o
+objeto real do usuário provavelmente tem mais geometria/detalhe nas
+quinas que aumenta a silhueta aparente), mas a comparação confirma que
+1.8 dá uma folga real e substancial a mais, direção certa pro problema
+relatado. `npm run lint`, `npx tsc --noEmit`, `npm run test` (19/19) e
+`npm run build` (`.next` limpo) passaram limpos.
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

@@ -2,11 +2,11 @@ import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addProductPart, deleteProductPart, setPartMaterials } from "@/features/catalog/actions";
+import { addProductPart, deleteProductPart, setPartMaterialTypes } from "@/features/catalog/actions";
 import type { MaterialPrintProcess } from "@/features/catalog/types";
 
 import { MeshUploadForm } from "./mesh-upload-form";
-import { PartColorPicker } from "./part-color-picker";
+import { PartMaterialTypePicker } from "./part-material-type-picker";
 import { PartRegionsPanel } from "./part-regions-panel";
 import { PartThumbnailCapture } from "./part-thumbnail-capture";
 import { PartWeightEditor } from "./part-weight-editor";
@@ -26,7 +26,7 @@ interface PartRow {
   id: string;
   name: string;
   meshFileUrl: string | null;
-  materialOptions: Array<{ materialColorId: string }>;
+  materialTypeOptions: Array<{ materialTypeId: string }>;
   regions: RegionRow[];
   defaultMaterialColorId: string | null;
   weightGrams: number | null;
@@ -39,8 +39,10 @@ interface MaterialColorOption {
   hexColorSecondary: string | null;
   opacity?: number;
   materialName: string;
+  typeId: string;
   typeName: string;
   printProcess?: MaterialPrintProcess;
+  available: boolean;
 }
 
 interface MaterialTypeOption {
@@ -134,7 +136,8 @@ export function ProductPartsManager({
 
       <div className="mt-3 flex flex-col gap-4">
         {parts.map((part) => {
-          const selectedIds = new Set(part.materialOptions.map((m) => m.materialColorId));
+          const selectedTypeIds = new Set(part.materialTypeOptions.map((m) => m.materialTypeId));
+          const acceptedColors = allColors.filter((c) => selectedTypeIds.has(c.typeId) && c.available);
           const defaultColor = allColors.find((c) => c.id === part.defaultMaterialColorId);
           return (
             <div key={part.id} className="max-w-2xl rounded-xl bg-card p-4 ring-1 ring-foreground/10">
@@ -159,7 +162,7 @@ export function ProductPartsManager({
                     meshUrl={part.meshFileUrl}
                     hasMesh={Boolean(part.meshFileUrl)}
                     regions={part.regions}
-                    colorOptions={allColors.filter((c) => selectedIds.has(c.id))}
+                    colorOptions={acceptedColors}
                   />
                 </div>
               ) : (
@@ -186,21 +189,22 @@ export function ProductPartsManager({
               )}
 
               <div className="mt-4 border-t pt-3">
-                <h3 className={SECTION_LABEL_CLASS}>Cores aceitas</h3>
-                {allColors.length === 0 ? (
+                <h3 className={SECTION_LABEL_CLASS}>Tipos de material aceitos</h3>
+                {materialTypes.length === 0 ? (
                   <p className="mt-2 text-sm text-muted-foreground">
                     Cadastre materiais em /admin/materiais antes de atribuí-los a uma parte.
                   </p>
                 ) : (
-                  <form action={setPartMaterials.bind(null, productId, part.id)} className="mt-2">
+                  <form action={setPartMaterialTypes.bind(null, productId, part.id)} className="mt-2">
                     <p className="text-xs text-muted-foreground">
-                      Marque quais cores o cliente pode escolher e qual vem selecionada por padrão ao abrir a página
-                      do produto.
+                      Marque quais Tipos essa peça aceita — o cliente escolhe entre todas as cores disponíveis
+                      (em estoque) desses Tipos. Escolha também a cor pré-selecionada quando o cliente abre a página.
                     </p>
                     <div className="mt-2">
-                      <PartColorPicker
-                        colors={allColors}
-                        selectedIds={selectedIds}
+                      <PartMaterialTypePicker
+                        materialTypes={materialTypes}
+                        allColors={allColors}
+                        selectedTypeIds={selectedTypeIds}
                         defaultMaterialColorId={part.defaultMaterialColorId}
                       />
                     </div>

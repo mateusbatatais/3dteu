@@ -5,9 +5,10 @@ import { randomUUID } from "node:crypto";
 import { and, count, eq, gte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
-import { createProductDraft, createProductPart, createSizeOption, setPartMaterials } from "@/features/catalog/actions";
+import { createProductDraft, createProductPart, createSizeOption, setPartMaterialTypes } from "@/features/catalog/actions";
 import { measureMeshFromBuffer } from "@/features/catalog/mesh-measure";
 import { estimatePrintWeight } from "@/features/catalog/print-estimate";
+import { getAllMaterialColorsForConfigurator } from "@/features/catalog/queries";
 import { sendAdminNewOrderNotification, sendOrderConfirmationEmail } from "@/features/orders/email";
 import { wooviProvider } from "@/features/payments/woovi";
 import type { DeliveryMethod, ShippingAddress } from "@/features/shipping/types";
@@ -445,10 +446,17 @@ export async function confirmCustomModelRequest(
     .set({ meshFileUrl: request.meshFileUrl, stlFileUrl: request.meshFileUrl })
     .where(eq(productParts.id, partId));
 
+  // A peça aceita o TIPO inteiro da cor escolhida (mesma regra universal de
+  // qualquer produto do catálogo agora) — não só aquela cor isolada; a cor
+  // escolhida pelo cliente vira o padrão.
+  const colors = await getAllMaterialColorsForConfigurator();
+  const chosenColor = colors.find((c) => c.id === input.materialColorId);
+  if (!chosenColor) return { error: "A cor escolhida não é mais válida." };
+
   const materialsFormData = new FormData();
-  materialsFormData.append("materialColorId", input.materialColorId);
-  materialsFormData.append("defaultMaterialColorId", input.materialColorId);
-  await setPartMaterials(productId, partId, materialsFormData);
+  materialsFormData.append("materialTypeId", chosenColor.type.id);
+  materialsFormData.set("defaultMaterialColorId", input.materialColorId);
+  await setPartMaterialTypes(productId, partId, materialsFormData);
 
   await createSizeOption(productId, { label: "Único", scaleFactor: 1 });
 

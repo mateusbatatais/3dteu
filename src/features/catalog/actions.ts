@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { getStoreSettings } from "@/features/shipping/queries";
@@ -9,8 +9,9 @@ import { ALLOWED_MEDIA_EXTENSIONS, ALLOWED_MESH_EXTENSIONS, type MediaExtension,
 import { db } from "@/server/db/client";
 import {
   categories,
+  materialColors,
   productImages,
-  productPartMaterialOptions,
+  productPartMaterialTypes,
   productPartRegions,
   productParts,
   products,
@@ -607,24 +608,40 @@ export async function updateRegionSettings(
   return {};
 }
 
-export async function setPartMaterials(productId: string, partId: string, formData: FormData) {
-  const materialColorIds = formData.getAll("materialColorId").map(String);
-
-  // O "padrão" só faz sentido se ainda estiver entre as cores marcadas (o
-  // admin pode ter desmarcado a que era padrão) — nesse caso cai pra
-  // primeira marcada, em vez de gravar um padrão que o cliente nem veria.
+/**
+ * Grava quais Tipos de material uma peça aceita (product_part_material_types)
+ * e sua cor padrão. A peça não cura mais cor por cor — as cores oferecidas
+ * pro cliente são todas as `available = true` dos Tipos aceitos (ver
+ * getProductBySlug em queries.ts), então o único valor de cor que essa
+ * action grava de fato é o padrão.
+ */
+export async function setPartMaterialTypes(productId: string, partId: string, formData: FormData) {
+  const materialTypeIds = formData.getAll("materialTypeId").map(String);
   const chosenDefault = formData.get("defaultMaterialColorId");
+
+  // Nunca confia cegamente no cliente pro padrão — confere no servidor que
+  // a cor escolhida está disponível E pertence a um dos Tipos aceitos;
+  // senão cai pra primeira cor disponível entre eles (mesmo princípio do
+  // fallback antigo, quando o padrão salvo deixava de ser uma opção válida).
+  const availableColors =
+    materialTypeIds.length > 0
+      ? await db
+          .select({ id: materialColors.id, materialTypeId: materialColors.materialTypeId })
+          .from(materialColors)
+          .where(and(inArray(materialColors.materialTypeId, materialTypeIds), eq(materialColors.available, true)))
+      : [];
+
   const defaultMaterialColorId =
-    typeof chosenDefault === "string" && materialColorIds.includes(chosenDefault)
+    typeof chosenDefault === "string" && availableColors.some((c) => c.id === chosenDefault)
       ? chosenDefault
-      : materialColorIds[0] ?? null;
+      : (availableColors[0]?.id ?? null);
 
   await db.transaction(async (tx) => {
-    await tx.delete(productPartMaterialOptions).where(eq(productPartMaterialOptions.productPartId, partId));
-    if (materialColorIds.length > 0) {
+    await tx.delete(productPartMaterialTypes).where(eq(productPartMaterialTypes.productPartId, partId));
+    if (materialTypeIds.length > 0) {
       await tx
-        .insert(productPartMaterialOptions)
-        .values(materialColorIds.map((materialColorId) => ({ productPartId: partId, materialColorId })));
+        .insert(productPartMaterialTypes)
+        .values(materialTypeIds.map((materialTypeId) => ({ productPartId: partId, materialTypeId })));
     }
     await tx.update(productParts).set({ defaultMaterialColorId }).where(eq(productParts.id, partId));
   });

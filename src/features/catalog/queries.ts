@@ -14,7 +14,7 @@ import {
   sizeOptions,
 } from "@/server/db/schema";
 
-import type { MaterialColor, Product } from "./types";
+import type { MaterialColor, MaterialPrintProcess, Product } from "./types";
 
 export async function getPublishedProducts() {
   return db.query.products.findMany({
@@ -55,7 +55,7 @@ export async function getPublishedProductsForCatalog(filters?: { q?: string; cat
       parts: {
         orderBy: [asc(productParts.sortOrder)],
         limit: 1,
-        with: { materialOptions: { with: { color: true } } },
+        with: { materialTypeOptions: materialTypeOptionsWithAvailableColors },
       },
       images: { orderBy: [asc(productImages.position)], limit: 1 },
     },
@@ -63,8 +63,8 @@ export async function getPublishedProductsForCatalog(filters?: { q?: string; cat
 
   return rows.map((row) => {
     const part = row.parts[0];
-    const defaultOption = part?.materialOptions.find((m) => m.materialColorId === part.defaultMaterialColorId);
-    const color = (defaultOption ?? part?.materialOptions[0])?.color;
+    const availableColors = part ? mapAvailableColorsFromTypeOptions(part.materialTypeOptions) : [];
+    const color = availableColors.find((c) => c.id === part?.defaultMaterialColorId) ?? availableColors[0];
 
     return {
       id: row.id,
@@ -155,6 +155,7 @@ export async function getAllMaterialColorsForAdmin() {
         hexColor: color.hexColor,
         hexColorSecondary: color.hexColorSecondary,
         opacity: Number(color.opacity),
+        available: color.available,
         materialName: material.name,
         typeId: type.id,
         typeName: type.name,
@@ -232,7 +233,11 @@ export async function getMaterialColorDeletionImpact(colorIds: string[]): Promis
     where: inArray(productParts.defaultMaterialColorId, colorIds),
     with: {
       product: { columns: { id: true, name: true } },
-      materialOptions: { with: { color: { columns: { id: true, name: true, hexColor: true } } } },
+      materialTypeOptions: {
+        with: {
+          type: { with: { colors: { where: eq(materialColors.available, true), columns: { id: true, name: true, hexColor: true } } } },
+        },
+      },
     },
   });
 
@@ -242,14 +247,21 @@ export async function getMaterialColorDeletionImpact(colorIds: string[]): Promis
       part: {
         with: {
           product: { columns: { id: true, name: true } },
-          materialOptions: { with: { color: { columns: { id: true, name: true, hexColor: true } } } },
+          materialTypeOptions: {
+            with: {
+              type: { with: { colors: { where: eq(materialColors.available, true), columns: { id: true, name: true, hexColor: true } } } },
+            },
+          },
         },
       },
     },
   });
 
-  const remaining = (options: Array<{ color: { id: string; name: string; hexColor: string | null } }>) =>
-    options.map((o) => o.color).filter((c) => !colorIds.includes(c.id));
+  // Cores que a peça ainda aceitaria depois da exclusão: a união das
+  // disponíveis dos Tipos que ela aceita, menos as que estão sendo
+  // excluídas agora.
+  const remaining = (typeOptions: Array<{ type: { colors: Array<{ id: string; name: string; hexColor: string | null }> } }>) =>
+    typeOptions.flatMap((o) => o.type.colors).filter((c) => !colorIds.includes(c.id));
 
   return [
     ...affectedParts.map(
@@ -259,7 +271,7 @@ export async function getMaterialColorDeletionImpact(colorIds: string[]): Promis
         label: part.name,
         productId: part.product.id,
         productName: part.product.name,
-        remainingColors: remaining(part.materialOptions),
+        remainingColors: remaining(part.materialTypeOptions),
       }),
     ),
     ...affectedRegions.map(
@@ -269,7 +281,7 @@ export async function getMaterialColorDeletionImpact(colorIds: string[]): Promis
         label: `${region.part.name} · ${region.label}`,
         productId: region.part.product.id,
         productName: region.part.product.name,
-        remainingColors: remaining(region.part.materialOptions),
+        remainingColors: remaining(region.part.materialTypeOptions),
       }),
     ),
   ];
@@ -295,6 +307,57 @@ export async function getMaterialColorIdsByMaterial(materialId: string): Promise
   return types.flatMap((t) => t.colors.map((c) => c.id));
 }
 
+/** Mesmo `with` do Drizzle usado em qualquer query que precise montar as
+ * cores DISPONÍVEIS que uma parte oferece — a peça aceita Tipos inteiros
+ * (product_part_material_types), não cores individuais; as cores oferecidas
+ * são todas as `material_colors.available = true` desses Tipos. */
+const materialTypeOptionsWithAvailableColors = {
+  with: {
+    type: {
+      with: { material: true, colors: { where: eq(materialColors.available, true) } },
+    },
+  },
+} as const;
+
+type MaterialTypeOptionRow = {
+  type: {
+    id: string;
+    name: string;
+    pricePerKgCents: number;
+    printSpeedValue: string;
+    description: string | null;
+    material: { name: string; printProcess: MaterialPrintProcess; postProcessingFeeCents: number; dualColorFeeCents: number };
+    colors: Array<{ id: string; name: string; hexColor: string | null; hexColorSecondary: string | null; opacity: string }>;
+  };
+};
+
+/** Achata os Tipos aceitos por uma parte nas cores disponíveis de cada um —
+ * mesma forma de saída (`MaterialColor[]`) de sempre, só a fonte muda (era
+ * uma lista curada de cores, agora é a união das disponíveis dos Tipos
+ * aceitos). Usada por toda query que monta `ProductPart.availableColors`. */
+function mapAvailableColorsFromTypeOptions(materialTypeOptions: MaterialTypeOptionRow[]): MaterialColor[] {
+  return materialTypeOptions.flatMap(({ type }) =>
+    type.colors.map((color) => ({
+      id: color.id,
+      name: color.name,
+      hexColor: color.hexColor,
+      hexColorSecondary: color.hexColorSecondary,
+      opacity: Number(color.opacity),
+      materialName: type.material.name,
+      printProcess: type.material.printProcess,
+      postProcessingFeeCents: type.material.postProcessingFeeCents,
+      dualColorFeeCents: type.material.dualColorFeeCents,
+      type: {
+        id: type.id,
+        name: type.name,
+        pricePerKgCents: type.pricePerKgCents,
+        printSpeedValue: Number(type.printSpeedValue),
+        description: type.description,
+      },
+    })),
+  );
+}
+
 /** Peso + cor padrão + cores aceitas de cada parte, só o necessário pra
  * estimar como peso/preço mudam ao escalar o produto pra um tamanho
  * diferente (ver estimateSizeScalingModifiers em pricing.ts) — usado ao
@@ -304,34 +367,13 @@ export async function getProductPartsForSizeEstimate(productId: string): Promise
 > {
   const parts = await db.query.productParts.findMany({
     where: eq(productParts.productId, productId),
-    with: {
-      materialOptions: {
-        with: { color: { with: { type: { with: { material: true } } } } },
-      },
-    },
+    with: { materialTypeOptions: materialTypeOptionsWithAvailableColors },
   });
 
   return parts.map((part) => ({
     weightGrams: part.weightGrams,
     defaultMaterialColorId: part.defaultMaterialColorId,
-    availableColors: part.materialOptions.map(({ color }) => ({
-      id: color.id,
-      name: color.name,
-      hexColor: color.hexColor,
-      hexColorSecondary: color.hexColorSecondary,
-      opacity: Number(color.opacity),
-      materialName: color.type.material.name,
-      printProcess: color.type.material.printProcess,
-      postProcessingFeeCents: color.type.material.postProcessingFeeCents,
-      dualColorFeeCents: color.type.material.dualColorFeeCents,
-      type: {
-        id: color.type.id,
-        name: color.type.name,
-        pricePerKgCents: color.type.pricePerKgCents,
-        printSpeedValue: Number(color.type.printSpeedValue),
-        description: color.type.description,
-      },
-    })),
+    availableColors: mapAvailableColorsFromTypeOptions(part.materialTypeOptions),
   }));
 }
 
@@ -343,7 +385,7 @@ export async function getProductWithConfigForAdmin(id: string) {
       parts: {
         orderBy: [asc(productParts.sortOrder)],
         with: {
-          materialOptions: true,
+          materialTypeOptions: true,
           regions: { orderBy: [asc(productPartRegions.sortOrder)] },
         },
       },
@@ -360,9 +402,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
       parts: {
         orderBy: [asc(productParts.sortOrder)],
         with: {
-          materialOptions: {
-            with: { color: { with: { type: { with: { material: true } } } } },
-          },
+          materialTypeOptions: materialTypeOptionsWithAvailableColors,
           regions: { orderBy: [asc(productPartRegions.sortOrder)] },
         },
       },
@@ -391,24 +431,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
       id: part.id,
       name: part.name,
       meshFileUrl: part.meshFileUrl,
-      availableColors: part.materialOptions.map(({ color }) => ({
-        id: color.id,
-        name: color.name,
-        hexColor: color.hexColor,
-        hexColorSecondary: color.hexColorSecondary,
-        opacity: Number(color.opacity),
-        materialName: color.type.material.name,
-        printProcess: color.type.material.printProcess,
-        postProcessingFeeCents: color.type.material.postProcessingFeeCents,
-        dualColorFeeCents: color.type.material.dualColorFeeCents,
-        type: {
-          id: color.type.id,
-          name: color.type.name,
-          pricePerKgCents: color.type.pricePerKgCents,
-          printSpeedValue: Number(color.type.printSpeedValue),
-          description: color.type.description,
-        },
-      })),
+      availableColors: mapAvailableColorsFromTypeOptions(part.materialTypeOptions),
       regions: part.regions.map((region) => ({
         id: region.id,
         label: region.label,

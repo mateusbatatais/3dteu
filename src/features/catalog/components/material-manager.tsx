@@ -47,6 +47,8 @@ interface ColorRow {
   hexColorSecondary: string | null;
   /** Numeric do Postgres chega como string via Drizzle. */
   opacity: string;
+  /** "Tem em estoque?" — só cores available=true aparecem pro cliente escolher. */
+  available: boolean;
 }
 
 interface TypeRow {
@@ -216,6 +218,7 @@ function MaterialColorRow({
           // — é o que diz pro form se essa cor já é dual-color ou não.
           hexColorSecondary: color.hexColorSecondary,
           opacity: Number(color.opacity),
+          available: color.available,
         }}
         onSubmit={(input) => updateMaterialColor(color.id, materialTypeId, input)}
         onDone={() => setIsEditing(false)}
@@ -241,6 +244,7 @@ function MaterialColorRow({
         {opacity < 1 ? (
           <span className="ml-1 text-xs text-muted-foreground">(transparência {Math.round((1 - opacity) * 100)}%)</span>
         ) : null}
+        {!color.available ? <span className="ml-1 text-xs text-destructive">(sem estoque)</span> : null}
       </span>
       <Button type="button" size="sm" variant="outline" onClick={() => setIsEditing(true)}>
         Editar
@@ -565,6 +569,15 @@ function MaterialColorForm({
           className="w-32"
         />
       </div>
+      <label className="flex items-center gap-1.5 pb-2 text-sm">
+        <input
+          type="checkbox"
+          checked={values.available}
+          onChange={(e) => update("available", e.target.checked)}
+          className="size-4"
+        />
+        Disponível (em estoque)
+      </label>
       <div className="flex gap-2">
         <Button type="button" size="sm" disabled={isPending || !values.name.trim()} onClick={handleSubmit}>
           {isPending ? "Salvando..." : "Salvar"}
@@ -578,7 +591,7 @@ function MaterialColorForm({
 }
 
 function NewMaterialColorForm({ materialTypeId, allowsDualColor }: { materialTypeId: string; allowsDualColor: boolean }) {
-  const EMPTY: MaterialColorInput = { name: "", hexColor: "#2563eb", hexColorSecondary: null, opacity: 1 };
+  const EMPTY: MaterialColorInput = { name: "", hexColor: "#2563eb", hexColorSecondary: null, opacity: 1, available: true };
   const [values, setValues] = useState<MaterialColorInput>(EMPTY);
   const [isOpen, setIsOpen] = useState(false);
 

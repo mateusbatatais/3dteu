@@ -206,6 +206,8 @@ export interface MaterialColorInput {
   hexColorSecondary: string | null;
   /** 1 = opaco. Menor que 1 deixa a peça translúcida no preview 3D. */
   opacity: number;
+  /** "Tem em estoque?" — só cores available=true aparecem pro cliente escolher. */
+  available: boolean;
 }
 
 async function resolveAllowsDualColor(materialTypeId: string): Promise<boolean> {
@@ -227,6 +229,7 @@ function colorRow(input: MaterialColorInput, allowsDualColor: boolean) {
     // material "sólido" criado pela UI antiga virava dual-color sem querer).
     hexColorSecondary: allowsDualColor ? input.hexColorSecondary || null : null,
     opacity: Math.min(1, Math.max(0, input.opacity)).toString(),
+    available: input.available,
   };
 }
 
