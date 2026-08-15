@@ -6,6 +6,7 @@ import { addProductPart, deleteProductPart, setPartMaterials } from "@/features/
 import type { MaterialPrintProcess } from "@/features/catalog/types";
 
 import { MeshUploadForm } from "./mesh-upload-form";
+import { PartColorPicker } from "./part-color-picker";
 import { PartRegionsPanel } from "./part-regions-panel";
 import { PartThumbnailCapture } from "./part-thumbnail-capture";
 import { PartWeightEditor } from "./part-weight-editor";
@@ -196,48 +197,12 @@ export function ProductPartsManager({
                       Marque quais cores o cliente pode escolher e qual vem selecionada por padrão ao abrir a página
                       do produto.
                     </p>
-                    <div className="mt-2 flex flex-col gap-2">
-                      {allColors.map((color, index) => {
-                        // Peça nova (nenhuma cor salva ainda) já nasce com todas as
-                        // cores disponíveis marcadas — evita publicar sem nenhuma cor pra
-                        // escolher só porque o admin esqueceu de marcar. Uma vez que já
-                        // existe uma seleção salva, ela é a fonte da verdade de novo.
-                        const isChecked = selectedIds.size === 0 ? true : selectedIds.has(color.id);
-                        const isDefault =
-                          part.defaultMaterialColorId === null ? index === 0 : part.defaultMaterialColorId === color.id;
-                        return (
-                          <div key={color.id} className="flex items-center gap-3 text-sm">
-                            <label className="flex flex-1 items-center gap-1.5">
-                              <input
-                                type="checkbox"
-                                name="materialColorId"
-                                value={color.id}
-                                defaultChecked={isChecked}
-                                className="size-4"
-                              />
-                              <span
-                                className="inline-block size-3.5 shrink-0 rounded-full border"
-                                style={{
-                                  background: color.hexColorSecondary
-                                    ? `linear-gradient(135deg, ${color.hexColor} 50%, ${color.hexColorSecondary} 50%)`
-                                    : (color.hexColor ?? "#a1a1aa"),
-                                }}
-                              />
-                              {color.materialName} · {color.typeName} · {color.name}
-                            </label>
-                            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <input
-                                type="radio"
-                                name="defaultMaterialColorId"
-                                value={color.id}
-                                defaultChecked={isDefault}
-                                className="size-3.5"
-                              />
-                              Padrão
-                            </label>
-                          </div>
-                        );
-                      })}
+                    <div className="mt-2">
+                      <PartColorPicker
+                        colors={allColors}
+                        selectedIds={selectedIds}
+                        defaultMaterialColorId={part.defaultMaterialColorId}
+                      />
                     </div>
                     <Button type="submit" size="sm" variant="outline" className="mt-3">
                       Salvar materiais desta parte

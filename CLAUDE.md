@@ -2876,6 +2876,83 @@ JS). `npm run lint`, `npx tsc --noEmit`, `npm run test` (13/13) e `npm
 run build` (`.next` limpo, `/_not-found` aparece na lista de rotas)
 passaram limpos.
 
+### Rodada 41: catálogo de materiais real (Cliever/3D Cure/Quanton) + lista de cores ficou grande demais
+
+Encadeamento de 3 pedidos na mesma leva.
+
+**Script de seed do catálogo completo** (`scripts/seed-full-material-catalog.sql`,
+criado a pedido do usuário — "crie um sql pra gerar todos os materiais
+que preciso, e todas as cores"): usei `WebFetch` pra consultar sites reais
+de fornecedores em vez de inventar uma paleta genérica.
+- **Plástico** (PLA/PLA Silk/ABS/PETG): consultei
+  `https://cliever3d.commercesuite.com.br/filamento` produto a produto —
+  usuário perguntou "por que não tem todas as cores no ABS e PETG?" e a
+  resposta é que **não é bug**: PETG realmente só tem 2 cores no catálogo
+  real do fornecedor (Preto/Branco), ABS tem 6. PLA ganhou a paleta
+  completa da linha Premium (26 cores) + um Tipo novo "PLA Silk"
+  (Gold/Bronze/Silver, categoria própria no site deles).
+- **Resina** (6 Tipos novos): mesclei dois fornecedores —
+  `https://3dcure.com.br/categoria/resina-3d/` (Basic/Pixel/Gamer/Flex/
+  ABS-like, com preço E cores reais de cada produto individual) e
+  `https://quanton3d.com.br/resinas/` (Spin/PyroBlast/Spark, usado só pra
+  ampliar a paleta da linha "Padrão" e como referência da linha
+  "Cristal"). Preços por kg são os reais dos sites (só "Cristal" ficou
+  estimado, sem confirmação exata). Linhas de nicho (odontologia,
+  joalheria/fundição) ficaram de fora de propósito — não fazem sentido
+  pra uma loja de impressão sob encomenda geral.
+- Resultado final: 3 Materiais, 11 Tipos, 60 Cores. Script apaga o
+  catálogo de materiais atual antes de semear (confirmado com o usuário,
+  que ainda não tinha muita coisa cadastrada) — não mexe em
+  produtos/categorias/pedidos, e não dá erro de FK mesmo se algum produto
+  já usar uma cor (constraints são cascade/set null, não restrict).
+
+**Lista de cores "Cores aceitas" ficou enorme e lenta** — consequência
+direta do catálogo ter saltado de ~10 pra 60 cores: o usuário reportou a
+lista "enorme" e "travando um pouco" ao selecionar cores de uma peça.
+Duas causas reais, dois fixes:
+1. **UX**: `ProductPartsManager` renderizava as 60 cores como uma lista
+   plana, sem agrupamento nem busca. Novo componente
+   `PartColorPicker` (client) agrupa por Material · Tipo (mesma convenção
+   já usada em `ColorSwatches` da loja), com uma caixa de busca e cada
+   grupo recolhido por padrão (exceto o(s) grupo(s) que já têm alguma cor
+   selecionada — assim o admin vê de cara só o que importa). **Cuidado
+   deliberado**: visibilidade (grupo recolhido, linha fora da busca) é
+   controlada SÓ por className (`hidden`) — nenhum checkbox/radio é
+   desmontado nunca, então marcar uma cor, buscar por outra coisa
+   (escondendo essa cor) e depois limpar a busca nunca perde a seleção já
+   feita. Confirmei isso especificamente via Playwright (marcar uma cor,
+   buscar um termo que não bate com ela, confirmar que continua marcada,
+   limpar a busca, confirmar de novo) — um `unmount` condicional ali
+   seria um jeito fácil de silenciosamente desmarcar cor sem o admin
+   perceber.
+2. **Performance**: a página de edição de produto pode ter VÁRIOS
+   preview 3D abertos ao mesmo tempo (um `PartThumbnailCapture` por peça
+   + o novo `ProductViewerAngleControl` da rodada 39) — cada
+   `<Canvas>` do `ProductViewer3D` rodava em loop de render contínuo
+   (`frameloop` padrão do r3f é "always") mesmo parado, o que é
+   provavelmente a causa real do "travando" (não as 60 cores em si, 120
+   inputs não é pesado pro React). Mudei pra `frameloop="demand"` — só
+   redesenha quando algo muda de verdade (arrastar a câmera, trocar de
+   cor), aproveitando que `OrbitControls` já tem `makeDefault` (invalida
+   sozinho no modo demand). Afeta todo mundo que usa `ProductViewer3D`
+   (loja, admin, modelo customizado) — sem downside conhecido pra
+   nenhum desses usos.
+
+**Testado**: Playwright contra `ProductPartsManager` mockado com 110
+cores (11 grupos × 10, maior que o catálogo real de 60, pra estressar
+ainda mais): confirmei que só 10 de 110 checkboxes ficam visíveis
+inicialmente (só o grupo com a cor já selecionada abre sozinho), que
+buscar "Amarelo" mostra só as linhas que batem (uma por grupo) escondendo
+o resto, e o teste crítico de marcar→buscar-outra-coisa→limpar-busca
+mantendo o checkbox marcado o tempo todo — zero erros de console. `npm
+run lint`, `npx tsc --noEmit`, `npm run test` (13/13) e `npm run build`
+(`.next` limpo) passaram limpos.
+
+**Pendente**: rodar `scripts/seed-full-material-catalog.sql` no Supabase
+real quando o usuário quiser popular o catálogo de verdade — nenhuma
+migração nova nesta rodada (só o script de seed e mudanças de
+componente/UI).
+
 ## Preferências do usuário (importante)
 
 - **Evitar rodar localmente** o que puder rodar em outro lugar — máquina com

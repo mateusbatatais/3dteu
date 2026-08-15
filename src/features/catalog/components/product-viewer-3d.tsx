@@ -368,6 +368,14 @@ export function ProductViewer3D({
         // galeria/lightbox do produto. 3x é mais que suficiente mesmo pra
         // uma prévia pequena virar uma foto razoável.
         dpr={onCanvasReady ? [1, 3] : [1, 2]}
+        // "demand" só redesenha quando algo muda de verdade (interação do
+        // OrbitControls, troca de cor/peça) em vez de todo frame, sempre —
+        // sem isso, cada preview roda um loop de render contínuo pra sempre,
+        // e o admin de produto pode ter vários abertos ao mesmo tempo (um
+        // por peça + o controle de ângulo), o que pesava a página inteira
+        // mesmo parado. `makeDefault` no OrbitControls (abaixo) já garante
+        // que arrastar a câmera invalida/redesenha sozinho nesse modo.
+        frameloop="demand"
       >
         <ambientLight intensity={0.7} />
         <directionalLight position={[3, 5, 2]} intensity={1} />
